@@ -1,0 +1,4 @@
+*.tmp
+*.private
+.lock
+consolidation.log.old

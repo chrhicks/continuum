@@ -1,0 +1,10 @@
+.DS_Store
+node_modules/
+dist/
+.env
+
+.continuum/memory/
+.continuum/loop/
+.continuum/continuum.db
+*.tmp
+*.lock

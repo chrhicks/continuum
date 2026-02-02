@@ -1,0 +1,13 @@
+{
+  "name": "continuum-memory-mvp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "continuum": "bin/continuum"
+  },
+  "scripts": {
+    "continuum": "bun run bin/continuum",
+    "lint": "bun lint"
+  }
+}
