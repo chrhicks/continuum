@@ -20,6 +20,22 @@ continuum memory consolidate
 continuum memory status
 ```
 
+## Tasks (MVP)
+
+```bash
+# Initialize task database in your project
+continuum task init
+
+# List tasks
+continuum task list
+continuum task list --status=open
+continuum task list --type=feature
+
+# View task details
+continuum task view tkt-abc12345
+continuum task view tkt-abc12345 --tree
+```
+
 ## Architecture
 
 ### Three Memory Tiers

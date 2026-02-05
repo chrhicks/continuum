@@ -4,6 +4,16 @@
 
 A file-based memory system for OpenCode agents that provides context persistence across sessions through three tiers: NOW (current), RECENT (last few sessions), and MEMORY (long-term consolidated knowledge).
 
+## Task CLI (MVP)
+
+Task metadata lives in `.continuum/continuum.db` and is available via the CLI.
+
+```bash
+continuum task init
+continuum task list [--status=<status>] [--type=<type>]
+continuum task view <task_id> [--tree]
+```
+
 ## Architecture
 
 ### Three Memory Tiers

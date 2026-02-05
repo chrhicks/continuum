@@ -9,6 +9,17 @@ import { readConsolidationLog } from "./memory/log.ts";
 import { recoverStaleNowFiles } from "./memory/recover.ts";
 import { writeLoopRequest } from "./loop/request.ts";
 import { runLoopRequest } from "./loop/runner.ts";
+import { init_project as initTaskProject, init_status as getTaskInitStatus } from "./task/util.ts";
+import {
+  get_db as getTaskDb,
+  list_tasks as listTasks,
+  get_task as getTask,
+  is_valid_task_type,
+  type Task,
+  type TaskStatus,
+  type TaskType
+} from "./task/db.ts";
+import { isContinuumError } from "./task/error.ts";
 
 let exitHandlersInstalled = false;
 
@@ -22,6 +33,11 @@ export async function main(): Promise<void> {
 
   if (args[0] === "loop") {
     await handleLoop(args.slice(1));
+    return;
+  }
+
+  if (args[0] === "task") {
+    await handleTask(args.slice(1));
     return;
   }
 
@@ -413,6 +429,7 @@ function printRootHelp(): void {
   console.log("Usage:");
   console.log("  continuum loop -n <count>");
   console.log("  continuum memory <command>");
+  console.log("  continuum task <command>");
   console.log("");
   console.log("Memory commands:");
   console.log("  continuum memory init");
@@ -427,6 +444,11 @@ function printRootHelp(): void {
   console.log("  continuum memory validate");
   console.log("  continuum memory append <user|agent|tool> <text>");
   console.log("  continuum memory loop -n <count>");
+  console.log("");
+  console.log("Task commands:");
+  console.log("  continuum task init");
+  console.log("  continuum task list [--status=<status>] [--type=<type>]");
+  console.log("  continuum task view <task_id> [--tree]");
   console.log("");
   console.log("Markers:");
   console.log("  Use @decision, @discovery, @pattern in NOW to extract highlights.");
@@ -449,6 +471,425 @@ function printMemoryHelp(): void {
   console.log("");
   console.log("Markers:");
   console.log("  Use @decision, @discovery, @pattern in NOW to extract highlights.");
+}
+
+function printTaskHelp(): void {
+  console.log("Usage:");
+  console.log("  continuum task init");
+  console.log("  continuum task list [--status=<status>] [--type=<type>]");
+  console.log("  continuum task view <task_id> [--tree]");
+  console.log("");
+  console.log("List options:");
+  console.log("  --status=<status>   Filter by status (open, in_progress, completed, cancelled)");
+  console.log("  --type=<type>       Filter by type (epic, feature, bug, investigation, chore)");
+  console.log("");
+  console.log("View options:");
+  console.log("  --tree              Include all child tasks (useful for epics)");
+}
+
+async function handleTask(args: string[]): Promise<void> {
+  const action = args[0];
+  if (!action || isHelp(action)) {
+    printTaskHelp();
+    return;
+  }
+
+  switch (action) {
+    case "init":
+      await handleTaskInit();
+      return;
+    case "list":
+      await handleTaskList(args.slice(1));
+      return;
+    case "view":
+    case "get":
+      await handleTaskView(args.slice(1));
+      return;
+    default:
+      throw new Error(`Unknown task action: ${action}`);
+  }
+}
+
+async function handleTaskInit(): Promise<void> {
+  const directory = process.cwd();
+  const status = await getTaskInitStatus({ directory });
+
+  if (status.dbFileExists) {
+    console.log("Continuum is already initialized in this directory.");
+    console.log(`Database: ${directory}/.continuum/continuum.db`);
+    return;
+  }
+
+  await initTaskProject({ directory });
+
+  console.log("Initialized continuum in current directory.");
+  console.log(`Database: ${directory}/.continuum/continuum.db`);
+  console.log("");
+  console.log("Next steps:");
+  console.log("  continuum task list              List tasks");
+  console.log("  continuum task view <task_id>    View task details");
+}
+
+async function handleTaskList(args: string[]): Promise<void> {
+  if (args.length > 0 && isHelp(args[0])) {
+    printTaskHelp();
+    return;
+  }
+
+  const options = parseTaskListOptions(args);
+  await listTaskOverview(options);
+}
+
+async function handleTaskView(args: string[]): Promise<void> {
+  if (args.length === 0 || isHelp(args[0])) {
+    printTaskViewHelp();
+    return;
+  }
+
+  const taskId = args[0];
+  const options = parseTaskViewOptions(args.slice(1));
+  await viewTaskDetails(taskId, options);
+}
+
+function printTaskViewHelp(): void {
+  console.log("Usage:");
+  console.log("  continuum task view <task_id> [--tree]");
+}
+
+function parseTaskListOptions(args: string[]): { status?: TaskStatus; type?: TaskType } {
+  let status: TaskStatus | undefined;
+  let type: TaskType | undefined;
+
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if (isHelp(arg)) {
+      printTaskHelp();
+      process.exit(0);
+    }
+    if (arg.startsWith("--status=")) {
+      const value = arg.slice("--status=".length);
+      status = parseTaskStatus(value);
+      continue;
+    }
+    if (arg === "--status" || arg === "-s") {
+      const value = args[i + 1];
+      if (!value) {
+        throw new Error("Missing status. Use: continuum task list --status <status>");
+      }
+      status = parseTaskStatus(value);
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith("--type=")) {
+      const value = arg.slice("--type=".length);
+      type = parseTaskType(value);
+      continue;
+    }
+    if (arg === "--type" || arg === "-t") {
+      const value = args[i + 1];
+      if (!value) {
+        throw new Error("Missing type. Use: continuum task list --type <type>");
+      }
+      type = parseTaskType(value);
+      i += 1;
+      continue;
+    }
+    throw new Error(`Unknown list option: ${arg}`);
+  }
+
+  return { status, type };
+}
+
+function parseTaskViewOptions(args: string[]): { tree: boolean } {
+  let tree = false;
+  for (const arg of args) {
+    if (isHelp(arg)) {
+      printTaskViewHelp();
+      process.exit(0);
+    }
+    if (arg === "--tree") {
+      tree = true;
+      continue;
+    }
+    throw new Error(`Unknown view option: ${arg}`);
+  }
+  return { tree };
+}
+
+function parseTaskStatus(value: string): TaskStatus {
+  const normalized = value.trim();
+  const allowed: TaskStatus[] = ["open", "in_progress", "completed", "cancelled"];
+  if (allowed.includes(normalized as TaskStatus)) {
+    return normalized as TaskStatus;
+  }
+  throw new Error("Invalid status. Use: open, in_progress, completed, cancelled.");
+}
+
+function parseTaskType(value: string): TaskType {
+  const normalized = value.trim();
+  if (is_valid_task_type(normalized)) {
+    return normalized as TaskType;
+  }
+  throw new Error("Invalid type. Use: epic, feature, bug, investigation, chore.");
+}
+
+async function listTaskOverview(options: { status?: TaskStatus; type?: TaskType }): Promise<void> {
+  const directory = process.cwd();
+
+  try {
+    const db = await getTaskDb(directory);
+    const tasks = await listTasks(db, {
+      status: options.status
+    });
+
+    const filtered = options.type ? tasks.filter((task) => task.type === options.type) : tasks;
+
+    if (filtered.length === 0) {
+      console.log("No tasks found.");
+      return;
+    }
+
+    const idWidth = Math.max(12, ...filtered.map((task) => task.id.length));
+    const typeWidth = Math.max(6, ...filtered.map((task) => task.type.length));
+    const statusWidth = Math.max(11, ...filtered.map((task) => task.status.length));
+
+    console.log(
+      "ID".padEnd(idWidth) + "  " +
+        "Type".padEnd(typeWidth) + "  " +
+        "Status".padEnd(statusWidth) + "  " +
+        "Title"
+    );
+    console.log("-".repeat(idWidth + typeWidth + statusWidth + 40));
+
+    for (const task of filtered) {
+      const id = task.id.padEnd(idWidth);
+      const type = task.type.padEnd(typeWidth);
+      const status = task.status.padEnd(statusWidth);
+      const title = task.title.length > 50 ? `${task.title.slice(0, 47)}...` : task.title;
+
+      console.log(`${id}  ${type}  ${status}  ${title}`);
+    }
+
+    console.log(`\n${filtered.length} task(s)`);
+  } catch (error) {
+    if (isContinuumError(error) && error.code === "NOT_INITIALIZED") {
+      console.error("Error: No .continuum directory found. Run continuum task init first.");
+      process.exit(1);
+    }
+    throw error;
+  }
+}
+
+function formatTaskCompact(task: Task, indent: string = ""): string {
+  const lines: string[] = [];
+
+  const header = `${indent}[${task.id}] ${task.type}/${task.status} ${task.title}`;
+  lines.push(header);
+
+  if (task.intent) {
+    lines.push(`${indent}  Intent: ${task.intent}`);
+  }
+
+  if (task.blocked_by.length > 0) {
+    lines.push(`${indent}  Blocked by: ${task.blocked_by.join(", ")}`);
+  }
+
+  if (task.steps.length > 0) {
+    const stepMarkers = task.steps
+      .map((step) => {
+        if (step.status === "completed") return "x";
+        if (step.status === "in_progress") return ">";
+        if (step.status === "skipped") return "~";
+        return ".";
+      })
+      .join("");
+    const stepNames = task.steps.map((step) => step.title || `Step ${step.id}`).join(" -> ");
+    lines.push(`${indent}  Steps: [${stepMarkers}] ${stepNames}`);
+  }
+
+  if (task.discoveries.length > 0) {
+    lines.push(`${indent}  Discoveries: ${task.discoveries.length}`);
+  }
+
+  if (task.decisions.length > 0) {
+    lines.push(`${indent}  Decisions: ${task.decisions.length}`);
+  }
+
+  if (task.outcome) {
+    const truncated = task.outcome.length > 80 ? `${task.outcome.slice(0, 77)}...` : task.outcome;
+    lines.push(`${indent}  Outcome: ${truncated}`);
+  }
+
+  return lines.join("\n");
+}
+
+async function viewTaskDetails(taskId: string, options: { tree: boolean }): Promise<void> {
+  const directory = process.cwd();
+
+  try {
+    const db = await getTaskDb(directory);
+    const task = await getTask(db, taskId);
+
+    if (!task) {
+      console.error(`Error: Task '${taskId}' not found.`);
+      process.exit(1);
+    }
+
+    if (options.tree) {
+      console.log("=".repeat(70));
+      console.log(`${task.type.toUpperCase()}: ${task.title} [${task.id}] (${task.status})`);
+      console.log("=".repeat(70));
+
+      if (task.intent) {
+        console.log(`Intent: ${task.intent}`);
+      }
+
+      if (task.description) {
+        console.log(`Description: ${task.description}`);
+      }
+
+      if (task.plan) {
+        console.log("");
+        console.log("Plan:");
+        console.log(task.plan);
+      }
+
+      const children = await listTasks(db, { parent_id: task.id });
+
+      if (children.length > 0) {
+        console.log("");
+        console.log(`CHILDREN (${children.length}):`);
+        console.log("");
+
+        for (let i = 0; i < children.length; i += 1) {
+          const child = children[i];
+          console.log(`[${i + 1}] ${formatTaskCompact(child, "    ").trim()}`);
+          console.log("");
+        }
+      }
+
+      const completed = children.filter((child) => child.status === "completed").length;
+      const inProgress = children.filter((child) => child.status === "in_progress").length;
+      const open = children.filter((child) => child.status === "open").length;
+      const blocked = children.filter((child) => child.blocked_by.length > 0 && child.status !== "completed").length;
+
+      if (children.length > 0) {
+        console.log("-".repeat(70));
+        console.log(
+          `Summary: ${completed}/${children.length} completed, ${inProgress} in progress, ${open} open${
+            blocked > 0 ? `, ${blocked} blocked` : ""
+          }`
+        );
+      }
+
+      console.log("");
+      return;
+    }
+
+    console.log("=".repeat(60));
+    console.log(task.title);
+    console.log("=".repeat(60));
+    console.log("");
+
+    console.log(`ID:      ${task.id}`);
+    console.log(`Type:    ${task.type}`);
+    console.log(`Status:  ${task.status}`);
+    console.log(`Created: ${formatTaskDate(task.created_at)}`);
+    console.log(`Updated: ${formatTaskDate(task.updated_at)}`);
+
+    if (task.parent_id) {
+      console.log(`Parent:  ${task.parent_id}`);
+    }
+
+    if (task.blocked_by.length > 0) {
+      console.log(`Blocked by: ${task.blocked_by.join(", ")}`);
+    }
+
+    if (task.intent) {
+      console.log("");
+      console.log("Intent:");
+      console.log(task.intent);
+    }
+
+    if (task.description) {
+      console.log("");
+      console.log("Description:");
+      console.log(task.description);
+    }
+
+    if (task.plan) {
+      console.log("");
+      console.log("Plan:");
+      console.log(task.plan);
+    }
+
+    if (task.steps.length > 0) {
+      console.log("");
+      console.log("Steps:");
+      for (const step of task.steps) {
+        const marker = step.status === "completed"
+          ? "[x]"
+          : step.status === "in_progress"
+            ? "[>]"
+            : step.status === "skipped"
+              ? "[~]"
+              : "[ ]";
+        const current = task.current_step === step.id ? " (current)" : "";
+        console.log(`  ${marker} ${step.title || `Step ${step.id}`}${current}`);
+        if (step.summary) {
+          console.log(`      ${step.summary}`);
+        }
+        if (step.notes) {
+          console.log(`      Notes: ${step.notes}`);
+        }
+      }
+    }
+
+    if (task.discoveries.length > 0) {
+      console.log("");
+      console.log("Discoveries:");
+      for (const discovery of task.discoveries) {
+        console.log(`  - ${discovery.content}`);
+        console.log(`    ${formatTaskDate(discovery.created_at)}`);
+      }
+    }
+
+    if (task.decisions.length > 0) {
+      console.log("");
+      console.log("Decisions:");
+      for (const decision of task.decisions) {
+        console.log(`  - ${decision.content}`);
+        if (decision.rationale) {
+          console.log(`    Rationale: ${decision.rationale}`);
+        }
+        console.log(`    ${formatTaskDate(decision.created_at)}`);
+      }
+    }
+
+    if (task.outcome) {
+      console.log("");
+      console.log("Outcome:");
+      console.log(task.outcome);
+    }
+
+    console.log("");
+  } catch (error) {
+    if (isContinuumError(error) && error.code === "NOT_INITIALIZED") {
+      console.error("Error: No .continuum directory found. Run continuum task init first.");
+      process.exit(1);
+    }
+    throw error;
+  }
+}
+
+function formatTaskDate(isoDate: string): string {
+  const date = new Date(isoDate);
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
 }
 
 async function handleLoop(args: string[]): Promise<void> {
