@@ -6,39 +6,40 @@
 - [x] Example files (NOW, RECENT, MEMORY, consolidation.log)
 - [x] Memory Manager SKILL.md
 - [x] Main README.md
-- [ ] YAML schema definitions for validation
-- [ ] Memory file format validators
+- [x] YAML schema definitions for validation
+- [x] Memory file format validators
 
 ## Continuum CLI Implementation
 
 ### Phase 1: Foundation (v0.1)
-- [ ] `continuum memory init` - Initialize memory directory structure
-  - Create `.continuum/memory/`  
-  - Create `.gitignore`
-  - Create stub consolidation.log
-- [ ] `continuum memory session start` - Create new NOW file
-  - Generate timestamped filename
-  - Write YAML frontmatter
-  - Handle session linking (parent_session)
-- [ ] `continuum memory session end` - Mark session complete
-  - Update timestamp_end in NOW.md
-  - Calculate duration
-  - Optionally trigger consolidation
-- [ ] `continuum memory status` - Show memory statistics
-  - Current NOW file age, size
-  - RECENT.md size, session count
-  - Last consolidation time
-  - Total memory size
+- [x] `continuum memory init` - Initialize memory directory structure
+  - [x] Create `.continuum/memory/`  
+  - [x] Create `.gitignore`
+  - [x] Create stub consolidation.log
+- [x] `continuum memory session start` - Create new NOW file
+  - [x] Generate timestamped filename
+  - [x] Write YAML frontmatter
+  - [x] Handle session linking (parent_session)
+- [x] `continuum memory session end` - Mark session complete
+  - [x] Update timestamp_end in NOW.md
+  - [x] Calculate duration
+  - [x] Optionally trigger consolidation
+- [x] `continuum memory status` - Show memory statistics
+  - [x] Current NOW file age, line count
+  - [x] RECENT.md line count
+  - [x] Last consolidation time
+  - [x] Total memory size
 
 ### Phase 2: Consolidation (v0.2)
-- [ ] `continuum memory consolidate` - Core consolidation logic
-  - Read NOW.md with frontmatter parsing
-  - Append to RECENT.md with proper formatting
-  - Enforce 3-session limit in RECENT
-  - Create/update MEMORY-{date}.md
-  - Update MEMORY.md index
-  - Write consolidation.log
-  - Clear NOW.md (atomic operation)
+- [x] `continuum memory consolidate` - Core consolidation logic
+  - [x] Read NOW.md with frontmatter parsing
+  - [x] Append to RECENT.md with proper formatting
+  - [x] Enforce 3-session limit in RECENT
+  - [x] Create/update MEMORY-{date}.md
+  - [x] Update MEMORY.md index
+  - [x] Write consolidation.log
+  - [x] Support dry-run mode (`--dry-run`)
+  - [ ] Clear NOW.md (atomic operation)
 - [ ] Error handling for file operations
   - Lock files for concurrency
   - Atomic writes (temp + rename)
@@ -70,23 +71,23 @@
   - File paths → link to code locations
 
 ### Phase 4: Query & Debug (v0.4)
-- [ ] `continuum memory search <query>`
-  - Search across NOW, RECENT, MEMORY
-  - Tier-specific search (`--tier=MEMORY`)
-  - Tag-based search (`--tags=auth,security`)
-  - Date-range search (`--after=2026-01-01`)
-- [ ] `continuum memory log`
-  - Show consolidation history
-  - Filter by action type
-  - Show diffs of what changed
-- [ ] `continuum memory recover`
-  - Check for stale NOW files (>24 hours)
-  - Offer consolidation of stale sessions
-  - Handle interrupted consolidations
-- [ ] `continuum memory validate`
-  - Check file integrity
-  - Validate YAML frontmatter
-  - Verify internal links
+- [x] `continuum memory search <query>`
+  - [x] Search across NOW, RECENT, MEMORY
+  - [x] Tier-specific search (`--tier=MEMORY`)
+  - [ ] Tag-based search (`--tags=auth,security`)
+  - [ ] Date-range search (`--after=2026-01-01`)
+- [x] `continuum memory log`
+  - [x] Show consolidation history
+  - [ ] Filter by action type
+  - [ ] Show diffs of what changed
+- [x] `continuum memory recover`
+  - [x] Check for stale NOW files (configurable threshold)
+  - [x] Offer consolidation of stale sessions
+  - [x] Handle interrupted consolidations
+- [x] `continuum memory validate`
+  - [x] Check file integrity
+  - [x] Validate YAML frontmatter
+  - [x] Verify internal links
 
 ### Phase 5: Advanced (v1.0)
 - [ ] Configuration file support

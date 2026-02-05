@@ -9,7 +9,7 @@ A file-based memory system for OpenCode agents that provides context persistence
 ### Three Memory Tiers
 
 #### **NOW - Current Session Context**
-- **Location**: `.continuum/memory/NOW-{ISO-date}T{HH-MM}.md`
+- **Location**: `.continuum/memory/NOW-{ISO-date}T{HH-MM}[ -{suffix}].md`
 - **Purpose**: Live capture of current working session
 - **Lifetime**: Created at session start, consolidated when session ends or when size/time limits reached
 - **Max Size**: 200 lines or 6 hours (whichever comes first)
@@ -30,13 +30,24 @@ memory_type: NOW
 ---
 ```
 
-**Content**: Full conversation transcript, agent actions, tool calls and results
+**Content**: Conversation transcript, agent actions, and tool calls (results optional)
+
+### Configuration (Optional)
+
+**Location**: `.continuum/memory/config.yml`
+
+Supported keys:
+- `now_max_lines`
+- `now_max_hours`
+- `recent_session_count`
+- `recent_max_lines`
+- `memory_sections`
 
 #### **RECENT - Last 3 Sessions Summary**
 - **Location**: `.continuum/memory/RECENT.md`
 - **Purpose**: Distilled summary of recent work for quick context retrieval
 - **Lifetime**: Rolling window of last 3 sessions (not time-based)
-- **Max Size**: ~500 lines
+- **Max Size**: ~500 lines (configurable)
 - **Format**: Structured sections with links to full MEMORY files
 
 **Structure**:
@@ -45,15 +56,20 @@ memory_type: NOW
 
 ## Session 2026-02-01 morning (2.5h)
 **Focus**: Authentication bugfix
-**Key decisions**:
-- [x] Switched from JWT to cookie-based auth
-- [x] Created middleware in `src/middleware/auth.ts`
+
+**Key Decisions**:
+- Switched from JWT to cookie-based auth
+- Created middleware in `src/middleware/auth.ts`
 
 **Discoveries**:
 - Session regeneration bug in v5.2.0
 - Workaround: Disable concurrent requests
 
+**Patterns**:
+- Add middleware for cross-cutting concerns
+
 **Tasks**: tkt_456, tkt_789
+**Files**: `src/middleware/auth.ts`
 **Link**: [Full details](MEMORY-2026-02-01.md#session-2026-02-01)
 
 ## Session 2026-01-31 afternoon (1.5h)
@@ -81,7 +97,7 @@ memory_type: NOW
 ## Development Patterns
 - [Error Handling](MEMORY-2026-01-20.md#patterns) - Custom error classes approach
 
-## Project Timeline
+## Sessions
 - [Phase 1 Completion](MEMORY-2026-02-01.md#milestones) - Auth + API foundation ready
 ```
 
@@ -90,27 +106,29 @@ memory_type: NOW
 ---
 consolidation_date: 2026-01-15T02:00:00Z
 source_sessions: [sess_abc120, sess_abc121, sess_abc122]
-total_sessions: 3
+total_sessions_consolidated: 3
 tags: [auth, architecture, decisions]
+consolidated_by: continuum-cli-v0.1
 ---
 
-# January 2026 Consolidated Memory
+# Consolidated Memory
 
-## Auth Architecture Decision
-**Date Range**: 2026-01-10 to 2026-01-15
-**Summary**: After investigating JWT vs cookie authentication...
+## Session 2026-01-15 02:00 UTC (sess_abc120)
+<a name="session-2026-01-15-02-00-sess_abc120"></a>
 
-**Key Points**:
-1. JWT has token refresh complexity
-2. Cookies simpler for our SSR setup
-3. Decided: Cookie-based with httpOnly, secure flags
+**Focus**: Auth architecture decision
 
-**Related Files**: `src/middleware/auth.ts`, `docs/auth.md`
+**Decisions**:
+- JWT vs cookie: selected cookies with httpOnly/secure flags
+
+**Discoveries**:
+- Session regeneration bug in v5.2.0
+
+**Patterns**:
+- Use middleware for cross-cutting concerns
+
 **Tasks**: tkt_456, tkt_789
-
-## API Rate Limiting Pattern
-**Summary**: Implemented sliding window rate limiter...
-**Code**: See `src/middleware/rate-limit.ts`
+**Files**: `src/middleware/auth.ts`, `docs/auth.md`
 ```
 
 ### **Consolidation Log**
@@ -120,13 +138,12 @@ tags: [auth, architecture, decisions]
 
 **Log Entry Format**:
 ```
-[2026-02-01 11:45:00 UTC] ACTION: Rollover NOW → RECENT
-  Files: NOW-2026-02-01T10-30.md (145 lines)
-  Changes:
-    - Added 1 session summary to RECENT.md (now 3 total)
-    - RECENT.md: 450 lines → 480 lines
-    - Extracted 2 insights to MEMORY index
-    - Deleted old NOW-2026-01-30T14-00.md (GC)
+[2026-02-01 11:45:00 UTC] ACTION: Consolidate NOW→RECENT→MEMORY (Marker-based)
+  Files:
+    - .continuum/memory/NOW-2026-02-01T10-30.md
+    - .continuum/memory/RECENT.md
+    - .continuum/memory/MEMORY-2026-02-01.md
+  Extracted: 2 decisions, 1 discoveries, 0 patterns
 
 [2026-02-01 02:00:00 UTC] ACTION: Scheduled consolidation
   Files: NOW-2026-01-31T*.md, NOW-2026-02-01T*.md
@@ -196,36 +213,38 @@ Ctrl+C
 ## Implementation Roadmap
 
 ### **Phase 1: Foundation (v0.1)**
-- [ ] Create memory directory structure
-- [ ] Implement continuum CLI commands:
+- [x] Create memory directory structure
+- [x] Implement continuum CLI commands:
   - `continuum memory init`
   - `continuum memory session start`
   - `continuum memory session end`
-- [ ] Working agent writes to NOW.md
-- [ ] Basic YAML frontmatter support
+- [x] Working agent writes to NOW.md
+- [x] Basic YAML frontmatter support
 
 ### **Phase 2: Consolidation (v0.2)**
-- [ ] Memory manager skill skeleton
-- [ ] Read NOW.md → append to RECENT.md
-- [ ] Basic summarization heuristics
-- [ ] Create consolidation.log
-- [ ] Implement `continuum memory consolidate`
+- [x] Memory manager skill skeleton
+- [x] Read NOW.md → append to RECENT.md
+- [x] Basic summarization heuristics
+- [x] Create consolidation.log
+- [x] Implement `continuum memory consolidate`
 
 ### **Phase 3: Intelligence (v0.3)**
-- [ ] Pattern extraction: decisions, discoveries, bugs
-- [ ] MEMORY.md index generation
+- [x] Pattern extraction: decisions, discoveries, bugs
+- [x] MEMORY.md index generation
 - [ ] Tag extraction and organization
-- [ ] Link generation between memory files
+- [x] Link generation between memory files
 
 ### **Phase 4: Polish (v0.4)**
-- [ ] Add `continuum memory search`
-- [ ] Add `continuum memory status`
-- [ ] Add recovery commands
-- [ ] Add dry-run mode
-- [ ] Documentation and examples
+- [x] Add `continuum memory search`
+- [x] Add `continuum memory status`
+- [x] Add recovery commands
+- [x] Add dry-run mode
+- [x] Add `continuum memory validate`
+- [x] Add `continuum memory log`
+- [x] Documentation and examples
 
 ### **Phase 5: Advanced (v1.0)**
-- [ ] Automated size/time triggers
+- [x] Automated size/time triggers
 - [ ] Scheduled consolidation via cron
 - [ ] Security: PII scrubbing
 - [ ] Git integration options
@@ -240,8 +259,8 @@ Ctrl+C
 
 ### **Corrupted Files**
 - Validate YAML frontmatter
-- Backup before consolidation: `.continuum/memory/backup/`
-- Atomic writes: write to temp file, then rename
+- Backup before consolidation: `.continuum/memory/backup/` (planned)
+- Atomic writes: write to temp file, then rename (planned)
 
 ### **Git Conflicts**
 - `.continuum/memory/` in `.gitignore` by default

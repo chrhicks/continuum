@@ -6,5 +6,8 @@ dist/
 .continuum/memory/
 .continuum/loop/
 .continuum/continuum.db
+
+.opencode/plugins/
+
 *.tmp
 *.lock

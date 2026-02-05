@@ -31,6 +31,7 @@ Expected fields:
 - `qa_policy`
 - `resume_behavior`
 
+If the file is known by path, use a direct read rather than globbing (glob may skip dot-directories).
 After loading the request, delete the file to avoid reprocessing.
 
 ## Task Selection Rule (Locked)
@@ -67,11 +68,12 @@ Use the local memory CLI for session lifecycle:
    - Append a 1-3 step plan to NOW using `@decision` markers.
 
 3) **Work**
-   - Implement the task.
-   - Log markers during the work:
-     - `@decision: ...`
-     - `@discovery: ...`
-     - `@pattern: ...`
+    - Implement the task.
+    - Log markers during the work:
+      - `@decision: ...`
+      - `@discovery: ...`
+      - `@pattern: ...`
+    - Ensure at least one marker is recorded per task and avoid placeholder text.
 
 4) **QA (Locked Policy)**
    - Always run `bun test`.
@@ -80,14 +82,23 @@ Use the local memory CLI for session lifecycle:
      - Example smoke checks: `bun run bin/continuum --help` or `bun run bin/continuum memory status`.
 
 5) **Finalize**
-   - If successful: mark the task completed and add a short summary to the task description.
-   - If blocked: mark the task blocked and append an **Unblock Plan** (1-3 steps).
-   - End the session and consolidate:
-     - `bun run bin/continuum memory session end`
-     - `bun run bin/continuum memory consolidate`
+    - If successful: mark the task completed and add a short summary to the task description.
+    - If blocked: mark the task blocked and append an **Unblock Plan** (1-3 steps).
+    - If no markers were recorded, append a brief `@decision` summary before ending the session.
+    - End the session and consolidate:
+      - `bun run bin/continuum memory session end`
+      - `bun run bin/continuum memory consolidate`
 
 6) **Repeat**
    - Continue until the request `count` is satisfied or no ready tasks remain.
+
+7) **Plan Next Work (On Exit)**
+   - When the loop completes a batch or finds no ready tasks, plan next work by reviewing current docs and code.
+   - Read `.continuum/memory/RECENT.md` and `.continuum/memory/MEMORY.md` for context.
+   - Inspect relevant documentation and code paths to identify 3-5 highest priority gaps or improvements.
+   - Scan open tasks to avoid duplicates; only create missing tasks.
+   - Create each task in Continuum with a clear title, intent, description, and 1-3 step plan, including priority.
+   - If 3-5 suitable tasks already exist, do not create new ones; note this in NOW with an `@decision` marker.
 
 ## Exit Conditions
 - No ready/open tasks available

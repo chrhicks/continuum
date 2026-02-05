@@ -9,5 +9,8 @@
   "scripts": {
     "continuum": "bun run bin/continuum",
     "lint": "bun lint"
+  },
+  "dependencies": {
+    "yaml": "^2.8.1"
   }
 }

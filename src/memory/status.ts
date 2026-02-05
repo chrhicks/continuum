@@ -1,25 +1,30 @@
-import { existsSync, readFileSync, statSync } from "node:fs";
-import { memoryPath } from "./paths.ts";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
+import { MEMORY_DIR, memoryPath } from "./paths.ts";
 import { getCurrentSessionPath } from "./session.ts";
 
 export type MemoryStatus = {
   nowPath: string | null;
   nowLines: number;
   nowAgeMinutes: number | null;
+  nowBytes: number | null;
   recentLines: number;
   lastConsolidation: string | null;
+  memoryBytes: number | null;
 };
 
 export function getStatus(): MemoryStatus {
   const nowPath = getCurrentSessionPath();
   let nowLines = 0;
   let nowAgeMinutes: number | null = null;
+  let nowBytes: number | null = null;
 
   if (nowPath && existsSync(nowPath)) {
     const content = readFileSync(nowPath, "utf-8");
     nowLines = content.split("\n").length;
     const stats = statSync(nowPath);
     nowAgeMinutes = Math.round((Date.now() - stats.mtimeMs) / 60000);
+    nowBytes = stats.size;
   }
 
   const recentPath = memoryPath("RECENT.md");
@@ -30,7 +35,9 @@ export function getStatus(): MemoryStatus {
   const logPath = memoryPath("consolidation.log");
   const lastConsolidation = existsSync(logPath) ? extractLastTimestamp(logPath) : null;
 
-  return { nowPath, nowLines, nowAgeMinutes, recentLines, lastConsolidation };
+  const memoryBytes = getDirectorySize(MEMORY_DIR);
+
+  return { nowPath, nowLines, nowAgeMinutes, nowBytes, recentLines, lastConsolidation, memoryBytes };
 }
 
 function extractLastTimestamp(path: string): string | null {
@@ -42,4 +49,19 @@ function extractLastTimestamp(path: string): string | null {
     }
   }
   return null;
+}
+
+function getDirectorySize(path: string): number | null {
+  if (!existsSync(path)) {
+    return null;
+  }
+  let total = 0;
+  for (const name of readdirSync(path)) {
+    const entryPath = join(path, name);
+    const stats = statSync(entryPath);
+    if (stats.isFile()) {
+      total += stats.size;
+    }
+  }
+  return total;
 }

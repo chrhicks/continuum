@@ -10,6 +10,7 @@ import { randomUUID } from "node:crypto";
 import { initMemory } from "./init.ts";
 import { memoryPath } from "./paths.ts";
 import { parseFrontmatter, replaceFrontmatter } from "../utils/frontmatter.ts";
+import { withMemoryLock } from "./lock.ts";
 
 const CURRENT_SESSION_FILE = memoryPath(".current");
 
@@ -19,60 +20,71 @@ export type SessionInfo = {
 };
 
 export function startSession(): SessionInfo {
-  initMemory();
+  return withMemoryLock(() => {
+    initMemory();
 
-  const now = new Date();
-  const sessionId = `sess_${randomUUID().replace(/-/g, "")}`;
-  const timestampStart = now.toISOString();
-  const filename = `NOW-${formatTimestampForFilename(now)}.md`;
-  const filePath = memoryPath(filename);
+    const now = new Date();
+    const parentSession = resolveParentSessionId();
+    const sessionId = `sess_${randomUUID().replace(/-/g, "")}`;
+    const timestampStart = now.toISOString();
+    const filename = `NOW-${formatTimestampForFilename(now)}-${formatSessionSuffix(sessionId)}.md`;
+    const filePath = memoryPath(filename);
 
-  const frontmatter = {
-    session_id: sessionId,
-    timestamp_start: timestampStart,
-    timestamp_end: null,
-    duration_minutes: null,
-    project_path: process.cwd(),
-    tags: [],
-    parent_session: null,
-    related_tasks: [],
-    memory_type: "NOW"
-  };
+    const frontmatter = {
+      session_id: sessionId,
+      timestamp_start: timestampStart,
+      timestamp_end: null,
+      duration_minutes: null,
+      project_path: process.cwd(),
+      tags: [],
+      parent_session: parentSession,
+      related_tasks: [],
+      memory_type: "NOW"
+    };
 
-  const header = `# Session: ${sessionId} - ${formatTimestampForHeader(now)}`;
-  const content = `${buildFrontmatter(frontmatter)}\n\n${header}\n\n`;
-  writeFileSync(filePath, content, "utf-8");
-  writeFileSync(CURRENT_SESSION_FILE, filename, "utf-8");
+    const header = `# Session: ${sessionId} - ${formatTimestampForHeader(now)}`;
+    const content = `${buildFrontmatter(frontmatter)}\n\n${header}\n\n`;
+    writeFileSync(filePath, content, "utf-8");
+    writeFileSync(CURRENT_SESSION_FILE, filename, "utf-8");
 
-  return { filePath, sessionId };
+    return { filePath, sessionId };
+  });
 }
 
 export function endSession(): string {
-  const filePath = resolveCurrentSessionPath({ allowFallback: true });
-  if (!filePath) {
-    throw new Error("No active NOW session found.");
-  }
+  return withMemoryLock(() => {
+    const filePath = resolveCurrentSessionPath({ allowFallback: true });
+    if (!filePath) {
+      throw new Error("No active NOW session found.");
+    }
 
-  const content = readFileSync(filePath, "utf-8");
-  const { frontmatter, keys } = parseFrontmatter(content);
-  const timestampStart = frontmatter.timestamp_start ? String(frontmatter.timestamp_start) : null;
-  const timestampEnd = new Date().toISOString();
-  const durationMinutes = timestampStart
-    ? Math.round((Date.parse(timestampEnd) - Date.parse(timestampStart)) / 60000)
-    : null;
+    const content = readFileSync(filePath, "utf-8");
+    const { frontmatter, keys } = parseFrontmatter(content);
+    const timestampStart = frontmatter.timestamp_start ? String(frontmatter.timestamp_start) : null;
+    const timestampEnd = new Date().toISOString();
+    let durationMinutes: number | null = null;
+    if (timestampStart) {
+      const parsedStart = Date.parse(timestampStart);
+      if (Number.isNaN(parsedStart)) {
+        console.warn("Invalid timestamp_start in NOW frontmatter. Duration set to null.");
+      } else {
+        durationMinutes = Math.round((Date.parse(timestampEnd) - parsedStart) / 60000);
+      }
+    }
 
-  const updated = {
-    ...frontmatter,
-    timestamp_end: timestampEnd,
-    duration_minutes: durationMinutes
-  };
+    const updated = {
+      ...frontmatter,
+      timestamp_end: timestampEnd,
+      duration_minutes: durationMinutes
+    };
 
-  const replaced = replaceFrontmatter(content, updated, keys.length ? keys : undefined);
-  writeFileSync(filePath, replaced, "utf-8");
-  if (existsSync(CURRENT_SESSION_FILE)) {
-    unlinkSync(CURRENT_SESSION_FILE);
-  }
-  return filePath;
+    const replaced = replaceFrontmatter(content, updated, keys.length ? keys : undefined);
+    writeFileSync(filePath, replaced, "utf-8");
+    if (existsSync(CURRENT_SESSION_FILE)) {
+      unlinkSync(CURRENT_SESSION_FILE);
+    }
+    return filePath;
+  });
 }
 
 export function getCurrentSessionPath(): string | null {
@@ -112,9 +124,28 @@ export function resolveCurrentSessionPath(options: { allowFallback: boolean } = 
   return candidates[0].path;
 }
 
+function resolveParentSessionId(): string | null {
+  const previousPath = resolveCurrentSessionPath({ allowFallback: true });
+  if (!previousPath || !existsSync(previousPath)) {
+    return null;
+  }
+  try {
+    const content = readFileSync(previousPath, "utf-8");
+    const { frontmatter } = parseFrontmatter(content);
+    const sessionId = frontmatter.session_id ? String(frontmatter.session_id) : null;
+    return sessionId && sessionId.length > 0 ? sessionId : null;
+  } catch {
+    return null;
+  }
+}
+
 function formatTimestampForFilename(date: Date): string {
   const iso = date.toISOString();
-  return iso.replace(/:/g, "-").slice(0, 16);
+  return iso.replace(/:/g, "-").slice(0, 19);
+}
+
+function formatSessionSuffix(sessionId: string): string {
+  return sessionId.replace("sess_", "").slice(0, 6);
 }
 
 function formatTimestampForHeader(date: Date): string {

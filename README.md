@@ -73,6 +73,9 @@ continuum memory session start
 # End session and consolidate (usually auto-triggered)
 continuum memory session end
 
+# End session and immediately consolidate
+continuum memory session end --consolidate
+
 # Check session status
 continuum memory status
 ```
@@ -83,11 +86,8 @@ continuum memory status
 # Consolidate NOW → RECENT → MEMORY
 continuum memory consolidate
 
-# See what would be consolidated (dry run)
+# Preview without writing files
 continuum memory consolidate --dry-run
-
-# Verbose output
-continuum memory consolidate --verbose
 ```
 
 ### Querying Memory
@@ -99,24 +99,31 @@ continuum memory search "authentication"
 # Search specific tier
 continuum memory search "auth" --tier=MEMORY
 
-# View recent sessions (human-readable)
-continuum memory show --tier=RECENT
-
-# Show memory index
-continuum memory show --tier=MEMORY
+# Search by tags
+continuum memory search "auth" --tags auth,security
 ```
 
-### Recovery & Debug
+### Diagnostics
 
 ```bash
-# Check for stale sessions
-continuum memory recover
-
-# View consolidation history
-continuum memory log --tail 30
-
 # Show memory statistics
-continuum memory status --verbose
+continuum memory status
+
+# Inspect consolidation log
+continuum memory log --tail 20
+
+# Validate memory frontmatter/anchors
+continuum memory validate
+```
+
+### Recovery
+
+```bash
+# Scan for stale NOW sessions
+continuum memory recover --hours 24
+
+# Recover stale sessions by consolidating
+continuum memory recover --hours 24 --consolidate
 ```
 
 ## Agent Loop (Batch Mode)
@@ -196,7 +203,7 @@ See `memory/examples/` for complete example files:
 
 The memory manager is implemented as an OpenCode skill:
 
-**Location**: `.continuum/skills/memory-manager/SKILL.md`
+**Location**: `skills/memory-manager/SKILL.md`
 
 **Trigger**: Automatically loaded when you say:
 - "consolidate my memory"
@@ -234,27 +241,27 @@ memory_sections:
 - [x] YAML frontmatter specification
 - [x] Memory Manager Skill template
 - [x] Example files
-- [ ] CLI commands (TODO)
+- [x] CLI commands
 - [ ] Working agent integration (TODO)
-- [ ] Consolidation logic (TODO)
+- [x] Consolidation logic
 
 ### v0.2 (Next)
-- [ ] `continuum memory consolidate` command
-- [ ] Basic NOW → RECENT rollover
-- [ ] Memory log generation
-- [ ] Session start/end hooks
+- [x] `continuum memory consolidate` command
+- [x] Basic NOW → RECENT rollover
+- [x] Memory log generation
+- [x] Session start/end hooks
 
 ### v0.3
-- [ ] Pattern extraction (decisions, discoveries)
-- [ ] MEMORY.md index generation
-- [ ] Tag extraction
-- [ ] Search functionality
+- [x] Pattern extraction (decisions, discoveries)
+- [x] MEMORY.md index generation
+- [x] Tag extraction
+- [x] Search functionality
 
 ### v0.4
-- [ ] Recovery commands
-- [ ] Dry-run mode
-- [ ] Status and statistics
-- [ ] Documentation
+- [x] Recovery commands
+- [x] Dry-run mode
+- [x] Status and statistics
+- [x] Documentation
 
 ### v1.0
 - [ ] Scheduled consolidation (cron)
@@ -288,9 +295,14 @@ memory_sections:
 - Try dry-run: `continuum memory consolidate --dry-run`
 - View log: `continuum memory log --tail 20`
 
+### NOW file is locked
+- The writer retries and clears stale locks after about 60 seconds
+- If needed, remove `.continuum/memory/.now.lock` and retry
+
 ### Memory seems wrong/incomplete
 - Edit files directly: `vim .continuum/memory/RECENT.md`
 - Run manual consolidation: `continuum memory consolidate`
+- Check for stale NOW files: `continuum memory recover --hours 24`
 - Provide feedback: Note issues in chat, memory manager will learn
 
 ## Contributing
