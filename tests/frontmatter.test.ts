@@ -1,39 +1,39 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from 'bun:test'
 
-import { parseFrontmatter } from "../src/utils/frontmatter";
+import { parseFrontmatter } from '../src/utils/frontmatter'
 
-describe("parseFrontmatter", () => {
-  test("returns no frontmatter when missing", () => {
-    const input = "Hello world\nSecond line";
-    const result = parseFrontmatter(input);
+describe('parseFrontmatter', () => {
+  test('returns no frontmatter when missing', () => {
+    const input = 'Hello world\nSecond line'
+    const result = parseFrontmatter(input)
 
-    expect(result.hasFrontmatter).toBe(false);
-    expect(result.frontmatter).toEqual({});
-    expect(result.keys).toEqual([]);
-    expect(result.body).toBe(input);
-  });
+    expect(result.hasFrontmatter).toBe(false)
+    expect(result.frontmatter).toEqual({})
+    expect(result.keys).toEqual([])
+    expect(result.body).toBe(input)
+  })
 
-  test("parses simple frontmatter values", () => {
+  test('parses simple frontmatter values', () => {
     const input = [
-      "---",
-      "title: Hello",
-      "count: 2",
-      "flag: true",
-      "list: [a, b]",
-      "---",
-      "",
-      "Body text",
-    ].join("\n");
+      '---',
+      'title: Hello',
+      'count: 2',
+      'flag: true',
+      'list: [a, b]',
+      '---',
+      '',
+      'Body text',
+    ].join('\n')
 
-    const result = parseFrontmatter(input);
+    const result = parseFrontmatter(input)
 
-    expect(result.hasFrontmatter).toBe(true);
+    expect(result.hasFrontmatter).toBe(true)
     expect(result.frontmatter).toEqual({
-      title: "Hello",
+      title: 'Hello',
       count: 2,
       flag: true,
-      list: ["a", "b"],
-    });
-    expect(result.body).toBe("\nBody text");
-  });
-});
+      list: ['a', 'b'],
+    })
+    expect(result.body).toBe('\nBody text')
+  })
+})

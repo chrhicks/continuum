@@ -6,29 +6,35 @@
  */
 
 export interface Migration {
-  version: number;
-  sql: string;
+  version: number
+  sql: string
 }
 
-let cachedMigrations: Migration[] | null = null;
+let cachedMigrations: Migration[] | null = null
 
 export async function getMigrations(): Promise<Migration[]> {
-  if (cachedMigrations) return cachedMigrations;
+  if (cachedMigrations) return cachedMigrations
 
-  const migrations: Migration[] = [];
+  const migrations: Migration[] = []
 
-  const migration001Path = new URL("./migrations/001_initial.sql", import.meta.url).pathname;
+  const migration001Path = new URL(
+    './migrations/001_initial.sql',
+    import.meta.url,
+  ).pathname
   migrations.push({
     version: 1,
-    sql: await Bun.file(migration001Path).text()
-  });
+    sql: await Bun.file(migration001Path).text(),
+  })
 
-  const migration002Path = new URL("./migrations/002_execution_model.sql", import.meta.url).pathname;
+  const migration002Path = new URL(
+    './migrations/002_execution_model.sql',
+    import.meta.url,
+  ).pathname
   migrations.push({
     version: 2,
-    sql: await Bun.file(migration002Path).text()
-  });
+    sql: await Bun.file(migration002Path).text(),
+  })
 
-  cachedMigrations = migrations;
-  return migrations;
+  cachedMigrations = migrations
+  return migrations
 }

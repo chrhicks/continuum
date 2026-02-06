@@ -49,16 +49,19 @@ NOW ──→ RECENT ──→ MEMORY
 ```
 
 **NOW** (`.continuum/memory/NOW-{date}T{time}.md`)
+
 - Current session transcript
 - Live-updated as you work
 - Auto-rollover at 200 lines or 6 hours
 
 **RECENT** (`.continuum/memory/RECENT.md`)
+
 - Summary of last 3 sessions
 - Key decisions, discoveries, patterns
 - Quick context refresh
 
 **MEMORY** (`.continuum/memory/MEMORY.md` + `MEMORY-{date}.md`)
+
 - Long-term consolidated knowledge
 - Index + detailed content files
 - Organized by theme, searchable
@@ -152,6 +155,7 @@ bun run bin/continuum loop -n 5
 ```
 
 How it works:
+
 - Writes a loop request to `.continuum/loop/request.json`
 - The Agent Loop Skill (`skills/agent-loop/SKILL.md`) consumes the request
 - Each task runs in a fresh NOW session with consolidation after completion
@@ -195,12 +199,14 @@ When triggered, the Memory Manager Skill:
 ### Important vs. Routine
 
 **Extracted as important:**
+
 - Decisions: "Switched from JWT to cookies"
 - Discoveries: "Library v3.2 has timezone bug"
 - Patterns: "Middleware should validate before auth"
 - Failures: "Rate limiter memory leak under load"
 
 **Condensed or discarded:**
+
 - Routine: "ls -la src/auth"
 - Boilerplate: Standard tool output
 - Dead ends: Experiments that taught nothing
@@ -222,6 +228,7 @@ The memory manager is implemented as an OpenCode skill:
 **Location**: `skills/memory-manager/SKILL.md`
 
 **Trigger**: Automatically loaded when you say:
+
 - "consolidate my memory"
 - "reflect on recent work"
 - "/exit" (session end)
@@ -241,7 +248,7 @@ recent_max_lines: 500
 
 # Auto-consolidation
 auto_consolidate_on_exit: true
-auto_consolidate_schedule: null  # Future: "0 2 * * *"
+auto_consolidate_schedule: null # Future: "0 2 * * *"
 
 # Memory sections
 memory_sections:
@@ -253,6 +260,7 @@ memory_sections:
 ## Implementation Status
 
 ### v0.1 (Current)
+
 - [x] Directory structure and file formats
 - [x] YAML frontmatter specification
 - [x] Memory Manager Skill template
@@ -262,24 +270,28 @@ memory_sections:
 - [x] Consolidation logic
 
 ### v0.2 (Next)
+
 - [x] `continuum memory consolidate` command
 - [x] Basic NOW → RECENT rollover
 - [x] Memory log generation
 - [x] Session start/end hooks
 
 ### v0.3
+
 - [x] Pattern extraction (decisions, discoveries)
 - [x] MEMORY.md index generation
 - [x] Tag extraction
 - [x] Search functionality
 
 ### v0.4
+
 - [x] Recovery commands
 - [x] Dry-run mode
 - [x] Status and statistics
 - [x] Documentation
 
 ### v1.0
+
 - [ ] Scheduled consolidation (cron)
 - [ ] Security scrubbing (PII detection)
 - [ ] Performance optimization
@@ -302,20 +314,24 @@ memory_sections:
 ## Troubleshooting
 
 ### Nothing is being written to NOW.md
+
 - Check that working agent loaded the memory plugin
 - Verify `.continuum/memory/` directory exists and is writable
 - Look for errors in agent logs: `opencode log`
 
 ### Consolidation fails
+
 - Check permissions: `ls -la .continuum/memory/`
 - Try dry-run: `continuum memory consolidate --dry-run`
 - View log: `continuum memory log --tail 20`
 
 ### NOW file is locked
+
 - The writer retries and clears stale locks after about 60 seconds
 - If needed, remove `.continuum/memory/.now.lock` and retry
 
 ### Memory seems wrong/incomplete
+
 - Edit files directly: `vim .continuum/memory/RECENT.md`
 - Run manual consolidation: `continuum memory consolidate`
 - Check for stale NOW files: `continuum memory recover --hours 24`

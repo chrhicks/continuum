@@ -19,6 +19,7 @@ continuum task view <task_id> [--tree]
 ### Three Memory Tiers
 
 #### **NOW - Current Session Context**
+
 - **Location**: `.continuum/memory/NOW-{ISO-date}T{HH-MM}[ -{suffix}].md`
 - **Purpose**: Live capture of current working session
 - **Lifetime**: Created at session start, consolidated when session ends or when size/time limits reached
@@ -26,11 +27,12 @@ continuum task view <task_id> [--tree]
 - **Format**: Plain markdown with optional YAML frontmatter
 
 **Frontmatter**:
+
 ```yaml
 ---
 session_id: sess_abc123
 timestamp_start: 2026-02-01T10:30:00Z
-timestamp_end: null  # Set when session ends
+timestamp_end: null # Set when session ends
 duration_minutes: null
 project_path: /home/user/projects/continuum
 tags: [auth, bugfix]
@@ -47,6 +49,7 @@ memory_type: NOW
 **Location**: `.continuum/memory/config.yml`
 
 Supported keys:
+
 - `now_max_lines`
 - `now_max_hours`
 - `recent_session_count`
@@ -54,6 +57,7 @@ Supported keys:
 - `memory_sections`
 
 #### **RECENT - Last 3 Sessions Summary**
+
 - **Location**: `.continuum/memory/RECENT.md`
 - **Purpose**: Distilled summary of recent work for quick context retrieval
 - **Lifetime**: Rolling window of last 3 sessions (not time-based)
@@ -61,21 +65,26 @@ Supported keys:
 - **Format**: Structured sections with links to full MEMORY files
 
 **Structure**:
+
 ```markdown
 # RECENT - Last 3 Sessions
 
 ## Session 2026-02-01 morning (2.5h)
+
 **Focus**: Authentication bugfix
 
 **Key Decisions**:
+
 - Switched from JWT to cookie-based auth
 - Created middleware in `src/middleware/auth.ts`
 
 **Discoveries**:
+
 - Session regeneration bug in v5.2.0
 - Workaround: Disable concurrent requests
 
 **Patterns**:
+
 - Add middleware for cross-cutting concerns
 
 **Tasks**: tkt_456, tkt_789
@@ -83,35 +92,43 @@ Supported keys:
 **Link**: [Full details](MEMORY-2026-02-01.md#session-2026-02-01)
 
 ## Session 2026-01-31 afternoon (1.5h)
+
 **Focus**: API rate limiting
 ...
 ```
 
 #### **MEMORY - Long-term Consolidated Knowledge**
+
 - **Location**: `.continuum/memory/MEMORY.md` (index) + `.continuum/memory/MEMORY-{date}.md` (content files)
 - **Purpose**: Curated, organized knowledge that persists across weeks/months
 - **Lifetime**: Permanent (but can be archived)
 - **Format**: Index file linking to consolidated content by theme
 
 **Index Structure (MEMORY.md)**:
+
 ```markdown
 # Long-term Memory Index
 
 ## Architecture Decisions
+
 - [Auth Approach](MEMORY-2026-01-15.md#auth) - Cookie vs JWT decision, Jan 2025
 - [API Design](MEMORY-2026-02-01.md#api) - REST vs GraphQL discussion, Feb 2025
 
 ## Technical Discoveries
+
 - [Session Regeneration Bug](MEMORY-2026-01-31.md#bugs) - Affects v5.2.0, workaround documented
 
 ## Development Patterns
+
 - [Error Handling](MEMORY-2026-01-20.md#patterns) - Custom error classes approach
 
 ## Sessions
+
 - [Phase 1 Completion](MEMORY-2026-02-01.md#milestones) - Auth + API foundation ready
 ```
 
 **Content File Structure (MEMORY-2026-01-15.md)**:
+
 ```markdown
 ---
 consolidation_date: 2026-01-15T02:00:00Z
@@ -124,17 +141,21 @@ consolidated_by: continuum-cli-v0.1
 # Consolidated Memory
 
 ## Session 2026-01-15 02:00 UTC (sess_abc120)
+
 <a name="session-2026-01-15-02-00-sess_abc120"></a>
 
 **Focus**: Auth architecture decision
 
 **Decisions**:
+
 - JWT vs cookie: selected cookies with httpOnly/secure flags
 
 **Discoveries**:
+
 - Session regeneration bug in v5.2.0
 
 **Patterns**:
+
 - Use middleware for cross-cutting concerns
 
 **Tasks**: tkt_456, tkt_789
@@ -142,11 +163,13 @@ consolidated_by: continuum-cli-v0.1
 ```
 
 ### **Consolidation Log**
+
 - **Location**: `.continuum/memory/consolidation.log`
 - **Purpose**: Audit trail of all consolidation operations
 - **Format**: Chronological entries with action, files, and changes
 
 **Log Entry Format**:
+
 ```
 [2026-02-01 11:45:00 UTC] ACTION: Consolidate NOW→RECENT→MEMORY (Marker-based)
   Files:
@@ -166,18 +189,21 @@ consolidated_by: continuum-cli-v0.1
 ## Actors & Responsibilities
 
 ### **User**
+
 - Manually triggers consolidation via CLI or natural language
 - Reviews and edits MEMORY.md
 - Provides feedback on memory quality
 - Decides what gets committed (if at all)
 
 ### **Working Agent**
+
 - Writes session transcripts to NOW.md in real-time
 - Appends YAML frontmatter with context
 - Can suggest consolidation when appropriate
 - Queries MEMORY.md and RECENT.md for context
 
 ### **Memory Manager Skill**
+
 - Triggered manually, on session end, or via cron
 - Reads NOW.md and RECENT.md
 - Applies heuristics: extracts decisions, patterns, discoveries
@@ -189,6 +215,7 @@ consolidated_by: continuum-cli-v0.1
 ## Trigger Mechanisms
 
 ### **Manual User Trigger**
+
 ```bash
 # CLI
 continuum memory consolidate
@@ -199,6 +226,7 @@ User: "reflect on recent work"
 ```
 
 ### **Manual Agent Trigger**
+
 ```
 Working Agent: "This session is getting long. Should I consolidate memory?"
 User: "yes"
@@ -206,6 +234,7 @@ User: "yes"
 ```
 
 ### **Session End Trigger**
+
 ```bash
 # User exits
 /exit
@@ -215,6 +244,7 @@ Ctrl+C
 ```
 
 ### **Scheduled Trigger (Future)**
+
 ```bash
 # In user's crontab
 0 2 * * * cd /path/to/project && continuum memory consolidate --scheduled
@@ -223,6 +253,7 @@ Ctrl+C
 ## Implementation Roadmap
 
 ### **Phase 1: Foundation (v0.1)**
+
 - [x] Create memory directory structure
 - [x] Implement continuum CLI commands:
   - `continuum memory init`
@@ -232,6 +263,7 @@ Ctrl+C
 - [x] Basic YAML frontmatter support
 
 ### **Phase 2: Consolidation (v0.2)**
+
 - [x] Memory manager skill skeleton
 - [x] Read NOW.md → append to RECENT.md
 - [x] Basic summarization heuristics
@@ -239,12 +271,14 @@ Ctrl+C
 - [x] Implement `continuum memory consolidate`
 
 ### **Phase 3: Intelligence (v0.3)**
+
 - [x] Pattern extraction: decisions, discoveries, bugs
 - [x] MEMORY.md index generation
 - [ ] Tag extraction and organization
 - [x] Link generation between memory files
 
 ### **Phase 4: Polish (v0.4)**
+
 - [x] Add `continuum memory search`
 - [x] Add `continuum memory status`
 - [x] Add recovery commands
@@ -254,6 +288,7 @@ Ctrl+C
 - [x] Documentation and examples
 
 ### **Phase 5: Advanced (v1.0)**
+
 - [x] Automated size/time triggers
 - [ ] Scheduled consolidation via cron
 - [ ] Security: PII scrubbing
@@ -263,16 +298,19 @@ Ctrl+C
 ## Error Handling & Recovery
 
 ### **Stale NOW Files**
+
 - Check for NOW files older than 24 hours
 - On next session start: prompt to consolidate
 - Recovery command: `continuum memory recover`
 
 ### **Corrupted Files**
+
 - Validate YAML frontmatter
 - Backup before consolidation: `.continuum/memory/backup/` (planned)
 - Atomic writes: write to temp file, then rename (planned)
 
 ### **Git Conflicts**
+
 - `.continuum/memory/` in `.gitignore` by default
 - For team-shared memory: opt-in via `continuum memory git track`
 - Manual conflict resolution: show diffs, allow user to choose

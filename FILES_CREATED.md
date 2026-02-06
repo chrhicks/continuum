@@ -1,15 +1,18 @@
 # Files Created - 3-Tier Memory System
 
 ## Overview
+
 This document lists all files created for the 3-tier memory system specification.
 
 ## Root Directory
+
 - `SPEC.md` - Comprehensive technical specification (8KB)
 - `README.md` - User-facing documentation and quick start (6KB)
 - `TODO.md` - Implementation roadmap and checklist (8KB)
 - `FILES_CREATED.md` - This file
 
 ## Memory Directory Structure
+
 ```
 memory/
 ├── .gitignore
@@ -26,37 +29,44 @@ memory/
 ### Files:
 
 #### `memory/.gitignore`
+
 ```
 *.tmp
 *.private
 .lock
 consolidation.log.old
 ```
+
 - Ignores temporary files, lock files, and old logs
 - Keeps memory directory clean in git
 
 #### `memory/consolidation.log`
+
 - Audit trail of all consolidation operations
 - Chronological entries with timestamps
 - Used for debugging and recovery
 
 #### `memory/examples/NOW-2026-02-01T10-30.md` (2KB)
+
 - Sample session transcript
 - Shows YAML frontmatter format
 - Demonstrates conversation capture style
 
 **Key sections**:
+
 - YAML frontmatter with session metadata
 - Timestamp, tags, related tasks
 - User/Agent conversation transcript
 - Tool calls and results
 
 #### `memory/examples/RECENT.md` (3KB)
+
 - Sample recent sessions summary
 - Shows 3-session rolling window format
 - Demonstrates summary structure
 
 **Key sections**:
+
 - Session header with focus, duration
 - Key decisions (bulleted checklist)
 - Discoveries with context
@@ -64,11 +74,13 @@ consolidation.log.old
 - Links to full memory
 
 #### `memory/examples/MEMORY.md` (2KB)
+
 - Sample long-term memory index
 - Shows categorized, searchable structure
 - Demonstrates organizational themes
 
 **Categories**:
+
 - Architecture Decisions
 - Technical Discoveries
 - Development Patterns
@@ -77,11 +89,13 @@ consolidation.log.old
 - Cross-Cutting Concerns
 
 #### `memory/examples/MEMORY-2026-02-01.md` (6KB)
+
 - Sample consolidated content file
 - Detailed technical write-up
 - Shows comprehensive documentation style
 
 **Sections**:
+
 - Auth Architecture Decision (detailed)
 - Technical Discovery: JWT Timezone Bug
 - Rate Limiting Pattern
@@ -90,11 +104,13 @@ consolidation.log.old
 - Related tasks and follow-ups
 
 #### `memory/examples/consolidation.log` (1KB)
+
 - Sample consolidation history
 - Shows 3 consolidation events
 - Demonstrates log format and content
 
 **Entries demonstrate**:
+
 - User-triggered consolidation
 - Session-end automatic rollover
 - GC of old files
@@ -102,6 +118,7 @@ consolidation.log.old
 - Tag generation
 
 ## Skills Directory
+
 ```
 skills/
 └── memory-manager/
@@ -109,12 +126,14 @@ skills/
 ```
 
 ### `skills/memory-manager/SKILL.md` (12KB)
+
 - OpenCode skill for memory management
 - Defines triggers, actions, priorities
 - Contains consolidation heuristics
 - Documents what to extract vs. discard
 
 **Key sections**:
+
 - Purpose and architecture overview
 - Trigger mechanisms (manual, session end, scheduled)
 - Detailed action specification
@@ -149,6 +168,7 @@ cat memory/examples/MEMORY-2026-02-01.md
 ### Building Understanding
 
 **Learning path**:
+
 1. Start with `README.md` - Get overview and quick start
 2. Read `SPEC.md` - Understand technical details
 3. Study `skills/memory-manager/SKILL.md` - See how it works
@@ -156,6 +176,7 @@ cat memory/examples/MEMORY-2026-02-01.md
 5. Check `TODO.md` - Understand implementation plan
 
 **Example file sizes**:
+
 - NOW (raw): 2KB (typical session: 1-5KB)
 - RECENT (summary): 3KB (grows to ~5KB max)
 - MEMORY index: 2KB (scales slowly)

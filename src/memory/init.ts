@@ -1,18 +1,18 @@
-import { existsSync, writeFileSync } from "node:fs";
-import { ensureMemoryDir, memoryPath } from "./paths";
+import { existsSync, writeFileSync } from 'node:fs'
+import { ensureMemoryDir, memoryPath } from './paths'
 
-const GITIGNORE_CONTENT = "*.tmp\n*.private\n.lock\nconsolidation.log.old\n";
+const GITIGNORE_CONTENT = '*.tmp\n*.private\n.lock\nconsolidation.log.old\n'
 
 export function initMemory(): void {
-  ensureMemoryDir();
+  ensureMemoryDir()
 
-  const gitignorePath = memoryPath(".gitignore");
+  const gitignorePath = memoryPath('.gitignore')
   if (!existsSync(gitignorePath)) {
-    writeFileSync(gitignorePath, GITIGNORE_CONTENT, "utf-8");
+    writeFileSync(gitignorePath, GITIGNORE_CONTENT, 'utf-8')
   }
 
-  const logPath = memoryPath("consolidation.log");
+  const logPath = memoryPath('consolidation.log')
   if (!existsSync(logPath)) {
-    writeFileSync(logPath, "", "utf-8");
+    writeFileSync(logPath, '', 'utf-8')
   }
 }

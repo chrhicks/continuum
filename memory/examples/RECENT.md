@@ -5,11 +5,13 @@
 **Focus**: Authentication bugfix and test coverage
 
 **Key Decisions**:
+
 - Fixed JWT timezone validation bug in `src/auth/middleware.ts:45`
 - Created new rate limiting task (tkt_rate_890) for API protection
 - Established pattern: Comprehensive tests for auth changes
 
 **Discoveries**:
+
 - JWT library v3.2 has known timezone handling issues
 - Workaround implemented using UTC normalization
 - Rate limiting should be applied at middleware level, not route level
@@ -25,11 +27,13 @@
 **Focus**: API rate limiting implementation
 
 **Key Decisions**:
+
 - Implemented sliding window rate limiter (60 req/min)
 - Added Redis backend for distributed rate limiting
 - Created reusable middleware pattern
 
 **Discoveries**:
+
 - Express rate-limit package has memory leak under load
 - Custom implementation performs 40% better in benchmarks
 - Need to add rate limiting to WebSocket connections (future)
@@ -45,11 +49,13 @@
 **Focus**: Database migration strategy
 
 **Key Decisions**:
+
 - Adopted incremental migration approach (not big-bang)
 - Created rollback procedures for each migration
 - Documented migration patterns in `docs/migrations.md`
 
 **Discoveries**:
+
 - Production migration takes 30% longer than expected
 - Need to add migration performance benchmarks
 - Foreign key constraints cause deadlocks under load

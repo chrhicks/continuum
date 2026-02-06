@@ -1,8 +1,8 @@
 #!/usr/bin/env bun
-import { main } from "../src/cli.ts";
+import { main } from '../src/cli.ts'
 
 main().catch((error) => {
-  const message = error instanceof Error ? error.message : String(error);
-  console.error(message);
-  process.exitCode = 1;
-});
+  const message = error instanceof Error ? error.message : String(error)
+  console.error(message)
+  process.exitCode = 1
+})

@@ -12,8 +12,9 @@
 ## Continuum CLI Implementation
 
 ### Phase 1: Foundation (v0.1)
+
 - [x] `continuum memory init` - Initialize memory directory structure
-  - [x] Create `.continuum/memory/`  
+  - [x] Create `.continuum/memory/`
   - [x] Create `.gitignore`
   - [x] Create stub consolidation.log
 - [x] `continuum memory session start` - Create new NOW file
@@ -31,6 +32,7 @@
   - [x] Total memory size
 
 ### Phase 2: Consolidation (v0.2)
+
 - [x] `continuum memory consolidate` - Core consolidation logic
   - [x] Read NOW.md with frontmatter parsing
   - [x] Append to RECENT.md with proper formatting
@@ -50,6 +52,7 @@
   - Hook into OpenCode lifecycle
 
 ### Phase 3: Intelligence (v0.3)
+
 - [ ] Pattern extraction engine
   - Decision detection: "Decided:", "Chose:", "We agreed:", etc.
   - Discovery detection: "Found:", "Discovered:", "Realized:", etc.
@@ -71,6 +74,7 @@
   - File paths → link to code locations
 
 ### Phase 4: Query & Debug (v0.4)
+
 - [x] `continuum memory search <query>`
   - [x] Search across NOW, RECENT, MEMORY
   - [x] Tier-specific search (`--tier=MEMORY`)
@@ -90,6 +94,7 @@
   - [x] Verify internal links
 
 ### Phase 5: Advanced (v1.0)
+
 - [ ] Configuration file support
   - `.continuum/memory/config.yml`
   - Override defaults (sizes, limits, triggers)
@@ -131,6 +136,7 @@
 ## Testing
 
 ### Unit Tests
+
 - [ ] YAML frontmatter parsing
 - [ ] Timestamp generation and formatting
 - [ ] File locking mechanism
@@ -141,6 +147,7 @@
 - [ ] Search functionality
 
 ### Integration Tests
+
 - [ ] End-to-end consolidation cycle
   - Create NOW.md → consolidate → verify RECENT.md → verify MEMORY.md
 - [ ] Session rollover (auto at 200 lines)
@@ -149,6 +156,7 @@
 - [ ] Working agent integration (real OpenCode session)
 
 ### Example Data
+
 - [ ] Sample NOW files (various sizes)
 - [ ] Sample conversation transcripts
 - [ ] Known patterns for testing extraction
@@ -182,6 +190,7 @@
 ## Release Checklist
 
 ### v0.1 (MVP)
+
 - [ ] All core CLI commands working
 - [ ] Basic consolidation NOW→RECENT
 - [ ] Working agent can write to NOW.md
@@ -189,6 +198,7 @@
 - [ ] Example files included
 
 ### v0.2 (Usable)
+
 - [ ] Pattern extraction working
 - [ ] MEMORY.md index generation
 - [ ] Search functionality
@@ -196,6 +206,7 @@
 - [ ] Performance acceptable (<5s consolidation)
 
 ### v0.3 (Polished)
+
 - [ ] Importance scoring heuristic
 - [ ] Auto-consolidation triggers
 - [ ] Configuration file support
@@ -203,6 +214,7 @@
 - [ ] User feedback incorporated
 
 ### v1.0 (Production Ready)
+
 - [ ] Security features (PII scrubbing, encryption)
 - [ ] Performance optimized
 - [ ] Team/shared memory features
