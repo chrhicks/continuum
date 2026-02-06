@@ -9,23 +9,13 @@ export interface Task {
 	 * @description The description of the task. This should be a short description of the task.
 	 * - This should be used to provide a high-level overview of the task and its purpose.
 	 * - This should include any relevant context for the task.
-	 * - This should include the full plan for how to accomplish the goals of the task.
-	 * - This should include the expected outcomes of the task.
-	 * - This should include verification steps for the task.
 	 * Format: Markdown
 	 */
 	description: string
+	intent?: string | null
+	plan?: string | null
 	status: TaskStatus
 	type: TaskType
-	/**
-	 * @name comments
-	 * @description The comments made while working on the task. Comments are useful to
-	 * track the progress of the task and to provide context for the task. This should be useful
-	 * for resuming tasks or longer explanations of aspects of the task.
-	 * 
-	 * It also serves as a place for the User or other Agents to provide context for the task.
-	 */
-	comments: TaskComment[]
 	parentId: string | null
 	blockedBy: string[]
 	/**
@@ -53,20 +43,20 @@ export interface Task {
 	steps: TaskStep[]
 	createdAt: string
 	updatedAt: string
-	deletedAt: string | null
 }
-export interface TaskComment {
+
+export interface TaskNote {
 	id: string
 	content: string
+	rationale?: string | null
+	impact?: string | null
+	source?: 'user' | 'agent' | 'system' | null
 	createdAt: string
 	updatedAt: string
 }
-export interface TaskDiscovery {
-	id: string
-	content: string
-	createdAt: string
-	updatedAt: string
-}
+
+export type TaskDiscovery = TaskNote
+export type TaskDecision = TaskNote
 
 export type TaskStepStatus = 'pending' | 'in_progress' | 'completed' | 'skipped'
 
@@ -77,6 +67,11 @@ export interface TaskStep {
 	 * @description The status of the step.
 	 */
 	status: TaskStepStatus
+	/**
+	 * @name position
+	 * @description Optional ordering position for the step.
+	 */
+	position?: number | null
 	/**
 	 * @name title
 	 * @description Short description of the step.	
@@ -99,6 +94,10 @@ export interface InitStatus {
 export interface ListTasksOptions {
 	status?: TaskStatus
 	type?: TaskType
+	cursor?: string
+	limit?: number
+	sort?: 'createdAt' | 'updatedAt'
+	order?: 'asc' | 'desc'
 }
 
 export interface CreateTaskInput {
@@ -106,10 +105,30 @@ export interface CreateTaskInput {
 	type: TaskType
 	status?: TaskStatus
 	intent?: string | null
-	description?: string | null
+	description: string
 	plan?: string | null
 	parentId?: string | null
 	blockedBy?: string[] | null
+}
+
+export interface TaskStepInput {
+	title: string
+	description: string
+	status?: TaskStepStatus
+	position?: number | null
+}
+
+export interface TaskNoteInput {
+	content: string
+	rationale?: string | null
+	impact?: string | null
+	source?: 'user' | 'agent' | 'system' | null
+}
+
+export interface CollectionPatch<TAdd, TUpdate> {
+	add?: TAdd[]
+	update?: (TUpdate & { id: string })[]
+	delete?: string[]
 }
 
 export interface ContinuumSDK {
@@ -118,7 +137,19 @@ export interface ContinuumSDK {
 		search: (options: ListTasksOptions = {}) => Promise<Task[]>
 		get: (id: string) => Promise<Task | null>
 		create: (input: CreateTaskInput) => Promise<Task>
-		update: (id: string, input: { title?: string, description?: string, status?: 'open' | 'ready' | 'blocked' | 'completed' | 'cancelled' | 'deleted' } = {}) => void
-		delete: (id: string) => void
+		update: (id: string, input: {
+			title?: string
+			description?: string
+			intent?: string | null
+			plan?: string | null
+			status?: TaskStatus
+			type?: TaskType
+			parentId?: string | null
+			blockedBy?: string[] | null
+			steps?: CollectionPatch<TaskStepInput, Partial<TaskStep>>
+			discoveries?: CollectionPatch<TaskNoteInput, Partial<TaskDiscovery>>
+			decisions?: CollectionPatch<TaskNoteInput, Partial<TaskDecision>>
+		} = {}) => Promise<Task>
+		delete: (id: string) => Promise<void>
 	}
 }
