@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { parse } from "yaml";
-import { memoryPath } from "./paths.ts";
+import { memoryPath } from "./paths";
 
 export type MemoryConfig = {
   now_max_lines: number;

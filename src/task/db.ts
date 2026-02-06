@@ -1,8 +1,8 @@
 import { Database } from "bun:sqlite";
-import { randomId } from "./db.utils.ts";
-import { init_status } from "./util.ts";
-import { ContinuumError } from "./error.ts";
-import { getMigrations } from "./migration.ts";
+import { randomId } from "./db.utils";
+import { init_status } from "./util";
+import { ContinuumError } from "./error";
+import { getMigrations } from "./migration";
 
 export type TaskStatus = "open" | "in_progress" | "completed" | "cancelled";
 export type TaskType = "epic" | "feature" | "bug" | "investigation" | "chore";

@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { MEMORY_DIR } from "./paths.ts";
-import { parseFrontmatter } from "../utils/frontmatter.ts";
+import { MEMORY_DIR } from "./paths";
+import { parseFrontmatter } from "../utils/frontmatter";
 
 export type MemoryValidationError = {
   filePath: string;

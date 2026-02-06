@@ -7,10 +7,10 @@ import {
   writeFileSync
 } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { initMemory } from "./init.ts";
-import { memoryPath } from "./paths.ts";
-import { parseFrontmatter, replaceFrontmatter } from "../utils/frontmatter.ts";
-import { withMemoryLock } from "./lock.ts";
+import { initMemory } from "./init";
+import { memoryPath } from "./paths";
+import { parseFrontmatter, replaceFrontmatter } from "../utils/frontmatter";
+import { withMemoryLock } from "./lock";
 
 const CURRENT_SESSION_FILE = memoryPath(".current");
 

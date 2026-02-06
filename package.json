@@ -8,9 +8,14 @@
   },
   "scripts": {
     "continuum": "bun run bin/continuum",
-    "lint": "bun lint"
+    "lint": "bun lint",
+    "format": "prettier --write ."
   },
   "dependencies": {
     "yaml": "^2.8.1"
+  },
+  "devDependencies": {
+    "bun-types": "^1.3.8",
+    "prettier": "^3.8.1"
   }
 }

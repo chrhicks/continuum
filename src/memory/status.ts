@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { MEMORY_DIR, memoryPath } from "./paths.ts";
-import { getCurrentSessionPath } from "./session.ts";
+import { MEMORY_DIR, memoryPath } from "./paths";
+import { getCurrentSessionPath } from "./session";
 
 export type MemoryStatus = {
   nowPath: string | null;

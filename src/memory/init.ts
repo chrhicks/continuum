@@ -1,5 +1,5 @@
 import { existsSync, writeFileSync } from "node:fs";
-import { ensureMemoryDir, memoryPath } from "./paths.ts";
+import { ensureMemoryDir, memoryPath } from "./paths";
 
 const GITIGNORE_CONTENT = "*.tmp\n*.private\n.lock\nconsolidation.log.old\n";
 

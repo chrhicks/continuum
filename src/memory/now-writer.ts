@@ -1,9 +1,9 @@
 import { closeSync, existsSync, openSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
-import { memoryPath } from "./paths.ts";
-import { parseFrontmatter, replaceFrontmatter } from "../utils/frontmatter.ts";
-import { resolveCurrentSessionPath, startSession, endSession } from "./session.ts";
-import { consolidateNow } from "./consolidate.ts";
-import { getMemoryConfig } from "./config.ts";
+import { memoryPath } from "./paths";
+import { parseFrontmatter, replaceFrontmatter } from "../utils/frontmatter";
+import { resolveCurrentSessionPath, startSession, endSession } from "./session";
+import { consolidateNow } from "./consolidate";
+import { getMemoryConfig } from "./config";
 
 const LOCK_FILE = memoryPath(".now.lock");
 const MAX_LOCK_RETRIES = 3;

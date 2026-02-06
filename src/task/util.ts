@@ -1,5 +1,5 @@
 import { mkdir, stat } from "node:fs/promises";
-import { init_db } from "./db.ts";
+import { init_db } from "./db";
 
 interface InitStatus {
   pluginDirExists: boolean;

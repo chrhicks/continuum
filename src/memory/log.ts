@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { MEMORY_DIR } from "./paths.ts";
+import { MEMORY_DIR } from "./paths";
 
 export type ConsolidationLogResult = {
   filePath: string;

@@ -1,10 +1,10 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { MEMORY_DIR } from "./paths.ts";
-import { getCurrentSessionPath } from "./session.ts";
-import { getMemoryConfig } from "./config.ts";
-import { parseFrontmatter } from "../utils/frontmatter.ts";
-import { consolidateNow } from "./consolidate.ts";
+import { MEMORY_DIR } from "./paths";
+import { getCurrentSessionPath } from "./session";
+import { getMemoryConfig } from "./config";
+import { parseFrontmatter } from "../utils/frontmatter";
+import { consolidateNow } from "./consolidate";
 
 export type StaleNowFile = {
   filePath: string;

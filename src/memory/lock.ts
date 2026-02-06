@@ -1,5 +1,5 @@
 import { closeSync, existsSync, openSync, statSync, unlinkSync, writeFileSync } from "node:fs";
-import { ensureMemoryDir, memoryPath } from "./paths.ts";
+import { ensureMemoryDir, memoryPath } from "./paths";
 
 export type MemoryLockOptions = {
   retries?: number;

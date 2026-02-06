@@ -1,15 +1,15 @@
-import { initMemory } from "./memory/init.ts";
-import { getCurrentSessionPath, startSession, endSession } from "./memory/session.ts";
-import { consolidateNow } from "./memory/consolidate.ts";
-import { getStatus } from "./memory/status.ts";
-import { appendAgentMessage, appendToolCall, appendUserMessage } from "./memory/now-writer.ts";
-import { searchMemory, type MemorySearchTier } from "./memory/search.ts";
-import { validateMemory } from "./memory/validate.ts";
-import { readConsolidationLog } from "./memory/log.ts";
-import { recoverStaleNowFiles } from "./memory/recover.ts";
-import { writeLoopRequest } from "./loop/request.ts";
-import { runLoopRequest } from "./loop/runner.ts";
-import { init_project as initTaskProject, init_status as getTaskInitStatus } from "./task/util.ts";
+import { initMemory } from "./memory/init"
+import { getCurrentSessionPath, startSession, endSession } from "./memory/session"
+import { consolidateNow } from "./memory/consolidate"
+import { getStatus } from "./memory/status"
+import { appendAgentMessage, appendToolCall, appendUserMessage } from "./memory/now-writer"
+import { searchMemory, type MemorySearchTier } from "./memory/search"
+import { validateMemory } from "./memory/validate"
+import { readConsolidationLog } from "./memory/log"
+import { recoverStaleNowFiles } from "./memory/recover"
+import { writeLoopRequest } from "./loop/request"
+import { runLoopRequest } from "./loop/runner"
+import { init_project as initTaskProject, init_status as getTaskInitStatus } from "./task/util"
 import {
   get_db as getTaskDb,
   list_tasks as listTasks,
@@ -18,8 +18,8 @@ import {
   type Task,
   type TaskStatus,
   type TaskType
-} from "./task/db.ts";
-import { isContinuumError } from "./task/error.ts";
+} from "./task/db"
+import { isContinuumError } from "./task/error"
 
 let exitHandlersInstalled = false;
 

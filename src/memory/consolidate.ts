@@ -1,11 +1,11 @@
 import { existsSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { initMemory } from "./init.ts";
-import { MEMORY_DIR, memoryPath } from "./paths.ts";
-import { getMemoryConfig } from "./config.ts";
-import { parseFrontmatter, replaceFrontmatter } from "../utils/frontmatter.ts";
-import { resolveCurrentSessionPath } from "./session.ts";
-import { withMemoryLock } from "./lock.ts";
+import { initMemory } from "./init";
+import { MEMORY_DIR, memoryPath } from "./paths";
+import { getMemoryConfig } from "./config";
+import { parseFrontmatter, replaceFrontmatter } from "../utils/frontmatter";
+import { resolveCurrentSessionPath } from "./session";
+import { withMemoryLock } from "./lock";
 
 type ConsolidationPreview = {
   recentLines: number;
