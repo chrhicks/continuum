@@ -11,104 +11,23 @@ import {
   type Step,
   type Task,
   type TaskStatus,
-  type TaskType,
 } from '../task/db'
-
-type TaskNoteSource = 'user' | 'agent' | 'system'
-
-type SdkTaskStatus =
-  | 'open'
-  | 'ready'
-  | 'blocked'
-  | 'completed'
-  | 'cancelled'
-  | 'deleted'
-
-type SdkTaskType = TaskType
-
-type SdkTaskStepStatus = 'pending' | 'in_progress' | 'completed' | 'skipped'
-
-type SdkTaskNote = {
-  id: string
-  content: string
-  source: TaskNoteSource
-  rationale?: string | null
-  impact?: string | null
-  createdAt: string
-  updatedAt: string
-}
-
-type SdkTaskStep = {
-  id: string
-  status: SdkTaskStepStatus
-  position?: number | null
-  title: string
-  description: string
-}
-
-type SdkTask = {
-  id: string
-  title: string
-  description: string
-  intent?: string | null
-  plan?: string | null
-  status: SdkTaskStatus
-  type: SdkTaskType
-  parentId: string | null
-  blockedBy: string[]
-  discoveries: SdkTaskNote[]
-  decisions: SdkTaskNote[]
-  steps: SdkTaskStep[]
-  createdAt: string
-  updatedAt: string
-  outcome?: string | null
-  completedAt?: string | null
-}
-
-type SdkListTasksOptions = {
-  status?: SdkTaskStatus
-  type?: SdkTaskType
-  cursor?: string
-  limit?: number
-  sort?: 'createdAt' | 'updatedAt'
-  order?: 'asc' | 'desc'
-}
-
-type SdkListTasksResult = {
-  tasks: SdkTask[]
-  nextCursor?: string
-}
-
-type SdkCreateTaskInput = {
-  title: string
-  type: SdkTaskType
-  status?: SdkTaskStatus
-  intent?: string | null
-  description: string
-  plan?: string | null
-  parentId?: string | null
-  blockedBy?: string[] | null
-}
-
-type SdkTaskStepInput = {
-  title: string
-  description: string
-  status?: SdkTaskStepStatus
-  position?: number | null
-}
-
-type SdkTaskNoteInput = {
-  content: string
-  source: TaskNoteSource
-  rationale?: string | null
-  impact?: string | null
-}
-
-type SdkCollectionPatch<TAdd, TUpdate> = {
-  add?: TAdd[]
-  update?: (TUpdate & { id: string })[]
-  delete?: string[]
-}
+import type {
+  CollectionPatch as SdkCollectionPatch,
+  CreateTaskInput as SdkCreateTaskInput,
+  InitStatus as SdkInitStatus,
+  ListTasksOptions as SdkListTasksOptions,
+  ListTasksResult as SdkListTasksResult,
+  Task as SdkTask,
+  TaskDecision as SdkTaskDecision,
+  TaskDiscovery as SdkTaskDiscovery,
+  TaskNote as SdkTaskNote,
+  TaskNoteInput as SdkTaskNoteInput,
+  TaskStatus as SdkTaskStatus,
+  TaskStep as SdkTaskStep,
+  TaskStepInput as SdkTaskStepInput,
+  TaskType as SdkTaskType,
+} from './types'
 
 type SdkUpdateTaskInput = {
   title?: string
@@ -120,12 +39,8 @@ type SdkUpdateTaskInput = {
   parentId?: string | null
   blockedBy?: string[] | null
   steps?: SdkCollectionPatch<SdkTaskStepInput, Partial<SdkTaskStep>>
-  discoveries?: SdkCollectionPatch<SdkTaskNoteInput, Partial<SdkTaskNote>>
-  decisions?: SdkCollectionPatch<SdkTaskNoteInput, Partial<SdkTaskNote>>
-}
-
-type SdkInitStatus = {
-  success: boolean
+  discoveries?: SdkCollectionPatch<SdkTaskNoteInput, Partial<SdkTaskDiscovery>>
+  decisions?: SdkCollectionPatch<SdkTaskNoteInput, Partial<SdkTaskDecision>>
 }
 
 function map_step(step: Step): SdkTaskStep {

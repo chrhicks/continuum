@@ -15,7 +15,6 @@
   },
   "scripts": {
     "continuum": "bun run bin/continuum",
-    "lint": "bun lint",
     "format": "prettier --write .",
     "typecheck": "tsc --noEmit"
   },
