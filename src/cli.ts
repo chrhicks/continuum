@@ -536,7 +536,7 @@ function printTaskHelp(): void {
   console.log('')
   console.log('List options:')
   console.log(
-    '  --status=<status>   Filter by status (open, in_progress, completed, cancelled)',
+    '  --status=<status>   Filter by status (open, ready, blocked, completed, cancelled)',
   )
   console.log(
     '  --type=<type>       Filter by type (epic, feature, bug, investigation, chore)',
@@ -686,7 +686,8 @@ function parseTaskStatus(value: string): TaskStatus {
   const normalized = value.trim()
   const allowed: TaskStatus[] = [
     'open',
-    'in_progress',
+    'ready',
+    'blocked',
     'completed',
     'cancelled',
   ]
@@ -694,7 +695,7 @@ function parseTaskStatus(value: string): TaskStatus {
     return normalized as TaskStatus
   }
   throw new Error(
-    'Invalid status. Use: open, in_progress, completed, cancelled.',
+    'Invalid status. Use: open, ready, blocked, completed, cancelled.',
   )
 }
 
@@ -716,9 +717,11 @@ async function listTaskOverview(options: {
 
   try {
     const db = await getTaskDb(directory)
-    const tasks = await listTasks(db, {
+    const result = await listTasks(db, {
       status: options.status,
+      limit: 1000,
     })
+    const tasks = result.tasks
 
     const filtered = options.type
       ? tasks.filter((task) => task.type === options.type)
@@ -853,7 +856,11 @@ async function viewTaskDetails(
         console.log(task.plan)
       }
 
-      const children = await listTasks(db, { parent_id: task.id })
+      const childrenResult = await listTasks(db, {
+        parent_id: task.id,
+        limit: 1000,
+      })
+      const children = childrenResult.tasks
 
       if (children.length > 0) {
         console.log('')
@@ -870,9 +877,7 @@ async function viewTaskDetails(
       const completed = children.filter(
         (child) => child.status === 'completed',
       ).length
-      const inProgress = children.filter(
-        (child) => child.status === 'in_progress',
-      ).length
+      const ready = children.filter((child) => child.status === 'ready').length
       const open = children.filter((child) => child.status === 'open').length
       const blocked = children.filter(
         (child) => child.blocked_by.length > 0 && child.status !== 'completed',
@@ -881,7 +886,7 @@ async function viewTaskDetails(
       if (children.length > 0) {
         console.log('-'.repeat(70))
         console.log(
-          `Summary: ${completed}/${children.length} completed, ${inProgress} in progress, ${open} open${
+          `Summary: ${completed}/${children.length} completed, ${ready} ready, ${open} open${
             blocked > 0 ? `, ${blocked} blocked` : ''
           }`,
         )
