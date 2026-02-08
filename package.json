@@ -6,16 +6,25 @@
   "bin": {
     "continuum": "bin/continuum"
   },
+  "types": "src/sdk.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/sdk.d.ts",
+      "default": "./src/sdk/index.ts"
+    }
+  },
   "scripts": {
     "continuum": "bun run bin/continuum",
     "lint": "bun lint",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "yaml": "^2.8.1"
   },
   "devDependencies": {
     "bun-types": "^1.3.8",
-    "prettier": "^3.8.1"
+    "prettier": "^3.8.1",
+    "typescript": "^5.8.2"
   }
 }

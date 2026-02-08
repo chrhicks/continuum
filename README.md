@@ -36,6 +36,50 @@ continuum task view tkt-abc12345
 continuum task view tkt-abc12345 --tree
 ```
 
+## SDK Usage
+
+The SDK is designed for programmatic access and follows the contract in `src/sdk.d.ts`.
+
+```ts
+import continuum from 'continuum'
+
+await continuum.task.init()
+
+const { tasks, nextCursor } = await continuum.task.list({
+  status: 'ready',
+  sort: 'updatedAt',
+  order: 'desc',
+  limit: 20,
+})
+
+const task = await continuum.task.create({
+  title: 'Fix login redirect',
+  type: 'bug',
+  description: 'Users are sent to / instead of /dashboard.',
+  intent: 'Restore expected post-login flow',
+  plan: 'Plan: update redirect logic and add regression test',
+})
+
+await continuum.task.update(task.id, {
+  steps: {
+    add: [
+      {
+        title: 'Update handler',
+        description: 'Fix redirect + tests',
+        position: 1,
+      },
+    ],
+  },
+  discoveries: {
+    add: [
+      { content: 'Redirect bug tied to missing role claim', source: 'agent' },
+    ],
+  },
+})
+```
+
+For full types and documentation, point your agent at `src/sdk.d.ts`.
+
 ## Architecture
 
 ### Three Memory Tiers

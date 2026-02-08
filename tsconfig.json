@@ -7,7 +7,11 @@
     "noEmit": true,
     "skipLibCheck": true,
     "types": ["bun-types"],
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "baseUrl": ".",
+    "paths": {
+      "continuum": ["src/sdk/index.ts"]
+    }
   },
-  "include": ["src/**/*.ts", "bin/continuum"]
+  "include": ["src/**/*.ts", "bin/continuum", "tests/sdk-contract.ts"]
 }

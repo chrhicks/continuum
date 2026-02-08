@@ -12,28 +12,23 @@ export interface Migration {
 
 let cachedMigrations: Migration[] | null = null
 
+const migrationFiles = [
+  '001_initial.sql',
+  '002_execution_model.sql',
+  '003_sdk_alignment.sql',
+]
+
 export async function getMigrations(): Promise<Migration[]> {
   if (cachedMigrations) return cachedMigrations
 
-  const migrations: Migration[] = []
-
-  const migration001Path = new URL(
-    './migrations/001_initial.sql',
-    import.meta.url,
-  ).pathname
-  migrations.push({
-    version: 1,
-    sql: await Bun.file(migration001Path).text(),
-  })
-
-  const migration002Path = new URL(
-    './migrations/002_execution_model.sql',
-    import.meta.url,
-  ).pathname
-  migrations.push({
-    version: 2,
-    sql: await Bun.file(migration002Path).text(),
-  })
+  const migrations = await Promise.all(
+    migrationFiles.map(async (file, index) => ({
+      version: index + 1,
+      sql: await Bun.file(
+        new URL(`./migrations/${file}`, import.meta.url).pathname,
+      ).text(),
+    })),
+  )
 
   cachedMigrations = migrations
   return migrations

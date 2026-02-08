@@ -4,13 +4,20 @@ import { init_status } from './util'
 import { ContinuumError } from './error'
 import { getMigrations } from './migration'
 
-export type TaskStatus = 'open' | 'in_progress' | 'completed' | 'cancelled'
+export type TaskStatus =
+  | 'open'
+  | 'ready'
+  | 'blocked'
+  | 'completed'
+  | 'cancelled'
 export type TaskType = 'epic' | 'feature' | 'bug' | 'investigation' | 'chore'
 export type StepStatus = 'pending' | 'in_progress' | 'completed' | 'skipped'
 
 export interface Step {
   id: number
   title?: string
+  description?: string
+  position?: number | null
   summary?: string
   details?: string
   status: StepStatus
@@ -20,6 +27,8 @@ export interface Step {
 export interface Discovery {
   id: number
   content: string
+  source: 'user' | 'agent' | 'system'
+  impact: string | null
   created_at: string
 }
 
@@ -27,6 +36,8 @@ export interface Decision {
   id: number
   content: string
   rationale: string | null
+  source: 'user' | 'agent' | 'system'
+  impact: string | null
   created_at: string
 }
 
@@ -45,6 +56,7 @@ export interface Task {
   discoveries: Discovery[]
   decisions: Decision[]
   outcome: string | null
+  completed_at: string | null
   // Relationships
   parent_id: string | null
   blocked_by: string[]
@@ -72,11 +84,79 @@ export interface UpdateTaskInput {
   plan?: string | null
   parent_id?: string | null
   blocked_by?: string[] | null
+  steps?: CollectionPatch<StepInput, StepPatch>
+  discoveries?: CollectionPatch<DiscoveryInput, DiscoveryPatch>
+  decisions?: CollectionPatch<DecisionInput, DecisionPatch>
+}
+
+export interface StepInput {
+  title: string
+  description: string
+  status?: StepStatus
+  position?: number | null
+  summary?: string
+  details?: string
+  notes?: string | null
+}
+
+export interface StepPatch {
+  id: number | string
+  title?: string
+  description?: string
+  status?: StepStatus
+  position?: number | null
+  summary?: string
+  details?: string
+  notes?: string | null
+}
+
+export interface DiscoveryInput {
+  content: string
+  source?: 'user' | 'agent' | 'system'
+  impact?: string | null
+}
+
+export interface DiscoveryPatch {
+  id: number | string
+  content?: string
+  source?: 'user' | 'agent' | 'system'
+  impact?: string | null
+}
+
+export interface DecisionInput {
+  content: string
+  rationale?: string | null
+  source?: 'user' | 'agent' | 'system'
+  impact?: string | null
+}
+
+export interface DecisionPatch {
+  id: number | string
+  content?: string
+  rationale?: string | null
+  source?: 'user' | 'agent' | 'system'
+  impact?: string | null
+}
+
+export interface CollectionPatch<TAdd, TUpdate> {
+  add?: TAdd[]
+  update?: TUpdate[]
+  delete?: Array<number | string>
 }
 
 export interface ListTaskFilters {
   status?: TaskStatus
+  type?: TaskType
   parent_id?: string | null
+  cursor?: string
+  limit?: number
+  sort?: 'createdAt' | 'updatedAt'
+  order?: 'asc' | 'desc'
+}
+
+export interface ListTasksResult {
+  tasks: Task[]
+  nextCursor?: string
 }
 
 const TASK_TYPES: TaskType[] = [
@@ -152,6 +232,7 @@ interface TaskRow {
   discoveries: string
   decisions: string
   outcome: string | null
+  completed_at: string | null
   parent_id: string | null
   blocked_by: string
   created_at: string
@@ -182,15 +263,68 @@ function parse_blocked_by(value: string | null): string[] {
 }
 
 function parse_steps(value: string | null): Step[] {
-  return parse_json_array<Step>(value)
+  const steps = parse_json_array<Step>(value)
+  return steps.map((step) => ({
+    id: step.id,
+    title: step.title,
+    description: step.description ?? step.details ?? '',
+    position: step.position ?? 0,
+    summary: step.summary,
+    details: step.details,
+    status: step.status ?? 'pending',
+    notes: step.notes ?? null,
+  }))
 }
 
 function parse_discoveries(value: string | null): Discovery[] {
-  return parse_json_array<Discovery>(value)
+  const discoveries = parse_json_array<Discovery>(value)
+  return discoveries.map((discovery) => ({
+    id: discovery.id,
+    content: discovery.content,
+    source: discovery.source ?? 'system',
+    impact: discovery.impact ?? null,
+    created_at: discovery.created_at,
+  }))
 }
 
 function parse_decisions(value: string | null): Decision[] {
-  return parse_json_array<Decision>(value)
+  const decisions = parse_json_array<Decision>(value)
+  return decisions.map((decision) => ({
+    id: decision.id,
+    content: decision.content,
+    rationale: decision.rationale ?? null,
+    source: decision.source ?? 'system',
+    impact: decision.impact ?? null,
+    created_at: decision.created_at,
+  }))
+}
+
+function encode_cursor(sortValue: string, id: string): string {
+  return Buffer.from(JSON.stringify({ sortValue, id }), 'utf-8').toString(
+    'base64',
+  )
+}
+
+function decode_cursor(
+  cursor: string | undefined,
+): { sortValue: string; id: string } | null {
+  if (!cursor) return null
+  try {
+    const raw = Buffer.from(cursor, 'base64').toString('utf-8')
+    const parsed = JSON.parse(raw) as { sortValue?: string; id?: string }
+    if (!parsed.sortValue || !parsed.id) return null
+    return { sortValue: parsed.sortValue, id: parsed.id }
+  } catch {
+    return null
+  }
+}
+
+function normalize_id(id: number | string, label: string): number {
+  const value = typeof id === 'string' ? Number(id) : id
+  if (!Number.isFinite(value)) {
+    throw new ContinuumError('ITEM_NOT_FOUND', `${label} ${id} not found`)
+  }
+  return value
 }
 
 function row_to_task(row: TaskRow): Task {
@@ -207,6 +341,7 @@ function row_to_task(row: TaskRow): Task {
     discoveries: parse_discoveries(row.discoveries),
     decisions: parse_decisions(row.decisions),
     outcome: row.outcome,
+    completed_at: row.completed_at,
     parent_id: row.parent_id,
     blocked_by: parse_blocked_by(row.blocked_by),
     created_at: row.created_at,
@@ -214,7 +349,7 @@ function row_to_task(row: TaskRow): Task {
   }
 }
 
-const TASK_COLUMNS = `id, title, type, status, intent, description, plan, steps, current_step, discoveries, decisions, outcome, parent_id, blocked_by, created_at, updated_at`
+const TASK_COLUMNS = `id, title, type, status, intent, description, plan, steps, current_step, discoveries, decisions, outcome, completed_at, parent_id, blocked_by, created_at, updated_at`
 
 export async function get_db(directory: string): Promise<Database> {
   const status = await init_status({ directory })
@@ -330,7 +465,7 @@ export function validate_status_transition(
   nextStatus: TaskStatus,
 ): string[] {
   const missing: string[] = []
-  if (nextStatus === 'in_progress') {
+  if (nextStatus === 'ready') {
     if (['feature', 'bug', 'investigation', 'chore'].includes(task.type)) {
       if (!task.plan?.trim()) missing.push('plan')
     }
@@ -359,7 +494,7 @@ export async function has_open_blockers(
     >(`SELECT id, status FROM tasks WHERE id IN (${placeholders}) AND status != 'deleted'`)
     .all(...task.blocked_by)
 
-  const open = new Set(['open', 'in_progress'])
+  const open = new Set(['open', 'ready', 'blocked'])
   return rows.filter((row) => open.has(row.status)).map((row) => row.id)
 }
 
@@ -418,6 +553,7 @@ export async function create_task(
   const id = randomId('tkt')
   const created_at = new Date().toISOString()
   const updated_at = created_at
+  const completed_at = input.status === 'completed' ? created_at : null
   const blocked_by = input.blocked_by ?? []
 
   validate_blocker_list(id, blocked_by)
@@ -441,8 +577,8 @@ export async function create_task(
   }
 
   const result = db.run(
-    `INSERT INTO tasks (id, title, type, status, intent, description, plan, parent_id, blocked_by, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO tasks (id, title, type, status, intent, description, plan, parent_id, blocked_by, created_at, updated_at, completed_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       input.title,
@@ -455,6 +591,7 @@ export async function create_task(
       JSON.stringify(blocked_by),
       created_at,
       updated_at,
+      completed_at,
     ],
   )
 
@@ -479,7 +616,18 @@ export async function update_task(
   input: UpdateTaskInput,
 ): Promise<Task> {
   const updates: string[] = []
-  const params: Array<string | null> = []
+  const params: Array<string | number | null> = []
+  let task: Task | null = null
+
+  const ensure_task = async (): Promise<Task> => {
+    if (!task) {
+      task = await get_task(db, task_id)
+    }
+    if (!task) {
+      throw new ContinuumError('TASK_NOT_FOUND', 'Task not found')
+    }
+    return task
+  }
 
   if (input.parent_id !== undefined) {
     if (input.parent_id) {
@@ -504,8 +652,6 @@ export async function update_task(
     }
   }
 
-  // null values allowed here to remove fields
-
   if (input.title !== undefined) {
     updates.push('title = ?')
     params.push(input.title)
@@ -517,6 +663,13 @@ export async function update_task(
   if (input.status !== undefined) {
     updates.push('status = ?')
     params.push(input.status)
+    if (input.status === 'completed') {
+      updates.push('completed_at = ?')
+      params.push(new Date().toISOString())
+    } else {
+      updates.push('completed_at = ?')
+      params.push(null)
+    }
   }
   if (input.intent !== undefined) {
     updates.push('intent = ?')
@@ -537,6 +690,225 @@ export async function update_task(
   if (input.blocked_by !== undefined) {
     updates.push('blocked_by = ?')
     params.push(JSON.stringify(input.blocked_by ?? []))
+  }
+
+  if (input.steps) {
+    const currentTask = await ensure_task()
+    const existingSteps = [...currentTask.steps]
+    let currentStep = currentTask.current_step
+
+    if (input.steps.delete && input.steps.delete.length > 0) {
+      const deleteIds = new Set(
+        input.steps.delete.map((id) => normalize_id(id, 'Step')),
+      )
+      for (const stepId of deleteIds) {
+        const exists = existingSteps.some((step) => step.id === stepId)
+        if (!exists) {
+          throw new ContinuumError('ITEM_NOT_FOUND', `Step ${stepId} not found`)
+        }
+      }
+      const filtered = existingSteps.filter((step) => !deleteIds.has(step.id))
+      existingSteps.length = 0
+      existingSteps.push(...filtered)
+      if (currentStep !== null && deleteIds.has(currentStep)) {
+        currentStep = null
+      }
+    }
+
+    if (input.steps.update && input.steps.update.length > 0) {
+      for (const patch of input.steps.update) {
+        const stepId = normalize_id(patch.id, 'Step')
+        const index = existingSteps.findIndex((step) => step.id === stepId)
+        if (index === -1) {
+          throw new ContinuumError('ITEM_NOT_FOUND', `Step ${stepId} not found`)
+        }
+        const existing = existingSteps[index]!
+        const description =
+          patch.description !== undefined
+            ? patch.description
+            : patch.details !== undefined
+              ? patch.details
+              : (existing.description ?? existing.details ?? '')
+        const details =
+          patch.details !== undefined ? patch.details : existing.details
+        existingSteps[index] = {
+          id: existing.id,
+          title: patch.title ?? existing.title,
+          description,
+          position:
+            patch.position !== undefined ? patch.position : existing.position,
+          summary: patch.summary ?? existing.summary,
+          details,
+          status: patch.status ?? existing.status,
+          notes: patch.notes !== undefined ? patch.notes : existing.notes,
+        }
+      }
+    }
+
+    if (input.steps.add && input.steps.add.length > 0) {
+      const maxId = existingSteps.reduce((max, s) => Math.max(max, s.id), 0)
+      const newSteps: Step[] = input.steps.add.map((step, index) => ({
+        id: maxId + index + 1,
+        title: step.title,
+        description: step.description ?? step.details ?? '',
+        position: step.position ?? 0,
+        summary: step.summary,
+        details: step.details,
+        status: step.status ?? 'pending',
+        notes: step.notes ?? null,
+      }))
+      existingSteps.push(...newSteps)
+    }
+
+    const normalized = existingSteps.map((step) => ({
+      id: step.id,
+      title: step.title,
+      description: step.description ?? step.details ?? '',
+      position: step.position ?? 0,
+      summary: step.summary,
+      details: step.details,
+      status: step.status ?? 'pending',
+      notes: step.notes ?? null,
+    }))
+
+    if (currentStep === null && normalized.length > 0) {
+      const firstPending = normalized.find((step) => step.status === 'pending')
+      currentStep = firstPending?.id ?? null
+    }
+
+    updates.push('steps = ?')
+    params.push(JSON.stringify(normalized))
+    updates.push('current_step = ?')
+    params.push(currentStep)
+  }
+
+  if (input.discoveries) {
+    const currentTask = await ensure_task()
+    const existing = [...currentTask.discoveries]
+
+    if (input.discoveries.delete && input.discoveries.delete.length > 0) {
+      const deleteIds = new Set(
+        input.discoveries.delete.map((id) => normalize_id(id, 'Discovery')),
+      )
+      for (const discoveryId of deleteIds) {
+        const exists = existing.some((item) => item.id === discoveryId)
+        if (!exists) {
+          throw new ContinuumError(
+            'ITEM_NOT_FOUND',
+            `Discovery ${discoveryId} not found`,
+          )
+        }
+      }
+      const filtered = existing.filter((item) => !deleteIds.has(item.id))
+      existing.length = 0
+      existing.push(...filtered)
+    }
+
+    if (input.discoveries.update && input.discoveries.update.length > 0) {
+      for (const patch of input.discoveries.update) {
+        const discoveryId = normalize_id(patch.id, 'Discovery')
+        const index = existing.findIndex((item) => item.id === discoveryId)
+        if (index === -1) {
+          throw new ContinuumError(
+            'ITEM_NOT_FOUND',
+            `Discovery ${discoveryId} not found`,
+          )
+        }
+        const current = existing[index]!
+        existing[index] = {
+          id: current.id,
+          content: patch.content ?? current.content,
+          source: patch.source ?? current.source ?? 'system',
+          impact:
+            patch.impact !== undefined
+              ? patch.impact
+              : (current.impact ?? null),
+          created_at: current.created_at,
+        }
+      }
+    }
+
+    if (input.discoveries.add && input.discoveries.add.length > 0) {
+      const maxId = existing.reduce((max, item) => Math.max(max, item.id), 0)
+      const newItems: Discovery[] = input.discoveries.add.map(
+        (item, index) => ({
+          id: maxId + index + 1,
+          content: item.content,
+          source: item.source ?? 'system',
+          impact: item.impact ?? null,
+          created_at: new Date().toISOString(),
+        }),
+      )
+      existing.push(...newItems)
+    }
+
+    updates.push('discoveries = ?')
+    params.push(JSON.stringify(existing))
+  }
+
+  if (input.decisions) {
+    const currentTask = await ensure_task()
+    const existing = [...currentTask.decisions]
+
+    if (input.decisions.delete && input.decisions.delete.length > 0) {
+      const deleteIds = new Set(
+        input.decisions.delete.map((id) => normalize_id(id, 'Decision')),
+      )
+      for (const decisionId of deleteIds) {
+        const exists = existing.some((item) => item.id === decisionId)
+        if (!exists) {
+          throw new ContinuumError(
+            'ITEM_NOT_FOUND',
+            `Decision ${decisionId} not found`,
+          )
+        }
+      }
+      const filtered = existing.filter((item) => !deleteIds.has(item.id))
+      existing.length = 0
+      existing.push(...filtered)
+    }
+
+    if (input.decisions.update && input.decisions.update.length > 0) {
+      for (const patch of input.decisions.update) {
+        const decisionId = normalize_id(patch.id, 'Decision')
+        const index = existing.findIndex((item) => item.id === decisionId)
+        if (index === -1) {
+          throw new ContinuumError(
+            'ITEM_NOT_FOUND',
+            `Decision ${decisionId} not found`,
+          )
+        }
+        const current = existing[index]!
+        existing[index] = {
+          id: current.id,
+          content: patch.content ?? current.content,
+          rationale:
+            patch.rationale !== undefined ? patch.rationale : current.rationale,
+          source: patch.source ?? current.source ?? 'system',
+          impact:
+            patch.impact !== undefined
+              ? patch.impact
+              : (current.impact ?? null),
+          created_at: current.created_at,
+        }
+      }
+    }
+
+    if (input.decisions.add && input.decisions.add.length > 0) {
+      const maxId = existing.reduce((max, item) => Math.max(max, item.id), 0)
+      const newItems: Decision[] = input.decisions.add.map((item, index) => ({
+        id: maxId + index + 1,
+        content: item.content,
+        rationale: item.rationale ?? null,
+        source: item.source ?? 'system',
+        impact: item.impact ?? null,
+        created_at: new Date().toISOString(),
+      }))
+      existing.push(...newItems)
+    }
+
+    updates.push('decisions = ?')
+    params.push(JSON.stringify(existing))
   }
 
   if (updates.length === 0) {
@@ -581,13 +953,18 @@ export async function get_task(
 export async function list_tasks(
   db: Database,
   filters: ListTaskFilters = {},
-): Promise<Task[]> {
+): Promise<ListTasksResult> {
   const where: string[] = ['status != ?']
   const params: Array<string | null> = ['deleted']
 
   if (filters.status) {
     where.push('status = ?')
     params.push(filters.status)
+  }
+
+  if (filters.type) {
+    where.push('type = ?')
+    params.push(filters.type)
   }
 
   if (filters.parent_id !== undefined) {
@@ -599,15 +976,45 @@ export async function list_tasks(
     }
   }
 
+  const sortColumn = filters.sort === 'updatedAt' ? 'updated_at' : 'created_at'
+  const sortOrder = filters.order === 'desc' ? 'DESC' : 'ASC'
+  const limit = filters.limit && filters.limit > 0 ? filters.limit : 50
+  const cursor = decode_cursor(filters.cursor)
+
+  if (cursor) {
+    const comparator = sortOrder === 'DESC' ? '<' : '>'
+    where.push(`(${sortColumn}, id) ${comparator} (?, ?)`)
+    params.push(cursor.sortValue, cursor.id)
+  }
+
   const sql = `
     SELECT ${TASK_COLUMNS}
     FROM tasks
     WHERE ${where.join(' AND ')}
-    ORDER BY created_at ASC
+    ORDER BY ${sortColumn} ${sortOrder}, id ${sortOrder}
+    LIMIT ?
   `
 
-  const rows = db.query<TaskRow, Array<string | null>>(sql).all(...params)
-  return rows.map(row_to_task)
+  const rows = db
+    .query<TaskRow, Array<string | null | number>>(sql)
+    .all(...params, limit + 1)
+
+  const hasMore = rows.length > limit
+  const slice = hasMore ? rows.slice(0, limit) : rows
+  const tasks = slice.map(row_to_task)
+
+  if (!hasMore) {
+    return { tasks }
+  }
+
+  const last = slice[slice.length - 1]!
+  const sortValue =
+    sortColumn === 'updated_at' ? last.updated_at : last.created_at
+
+  return {
+    tasks,
+    nextCursor: encode_cursor(sortValue, last.id),
+  }
 }
 
 export async function list_tasks_by_statuses(
@@ -643,6 +1050,21 @@ export async function list_tasks_by_statuses(
   return rows.map(row_to_task)
 }
 
+export async function delete_task(
+  db: Database,
+  task_id: string,
+): Promise<void> {
+  const now = new Date().toISOString()
+  const result = db.run(
+    `UPDATE tasks SET status = 'deleted', updated_at = ? WHERE id = ?`,
+    [now, task_id],
+  )
+
+  if (result.changes === 0) {
+    throw new ContinuumError('TASK_NOT_FOUND', 'Task not found')
+  }
+}
+
 // =============================================================================
 // Execution Model Functions
 // =============================================================================
@@ -651,8 +1073,12 @@ export interface AddStepsInput {
   task_id: string
   steps: Array<{
     title?: string
+    description?: string
+    position?: number | null
+    status?: StepStatus
     summary?: string
     details?: string
+    notes?: string | null
   }>
 }
 
@@ -671,10 +1097,12 @@ export async function add_steps(
   const newSteps: Step[] = input.steps.map((s, i) => ({
     id: maxId + i + 1,
     title: s.title,
+    description: s.description ?? s.details ?? '',
+    position: s.position ?? 0,
     summary: s.summary,
     details: s.details,
-    status: 'pending' as StepStatus,
-    notes: null,
+    status: s.status ?? 'pending',
+    notes: s.notes ?? null,
   }))
 
   const allSteps = [...existingSteps, ...newSteps]
@@ -737,6 +1165,8 @@ export async function complete_step(
   updatedSteps[stepIndex] = {
     id: existingStep.id,
     title: existingStep.title,
+    description: existingStep.description ?? existingStep.details ?? '',
+    position: existingStep.position ?? 0,
     summary: existingStep.summary,
     details: existingStep.details,
     status: 'completed',
@@ -773,6 +1203,8 @@ export interface UpdateStepInput {
   task_id: string
   step_id: number
   title?: string
+  description?: string
+  position?: number | null
   summary?: string
   details?: string
   status?: StepStatus
@@ -798,11 +1230,22 @@ export async function update_step(
 
   const existingStep = task.steps[stepIndex]!
   const updatedSteps = [...task.steps]
+  const description =
+    input.description !== undefined
+      ? input.description
+      : input.details !== undefined
+        ? input.details
+        : (existingStep.description ?? existingStep.details ?? '')
+  const details =
+    input.details !== undefined ? input.details : existingStep.details
   updatedSteps[stepIndex] = {
     id: existingStep.id,
     title: input.title ?? existingStep.title,
+    description,
+    position:
+      input.position !== undefined ? input.position : existingStep.position,
     summary: input.summary ?? existingStep.summary,
-    details: input.details ?? existingStep.details,
+    details,
     status: input.status ?? existingStep.status,
     notes: input.notes !== undefined ? input.notes : existingStep.notes,
   }
@@ -822,6 +1265,8 @@ export async function update_step(
 export interface AddDiscoveryInput {
   task_id: string
   content: string
+  source?: 'user' | 'agent' | 'system'
+  impact?: string | null
 }
 
 export async function add_discovery(
@@ -837,6 +1282,8 @@ export async function add_discovery(
   const discovery: Discovery = {
     id: maxId + 1,
     content: input.content,
+    source: input.source ?? 'system',
+    impact: input.impact ?? null,
     created_at: new Date().toISOString(),
   }
 
@@ -858,6 +1305,8 @@ export interface AddDecisionInput {
   task_id: string
   content: string
   rationale?: string
+  source?: 'user' | 'agent' | 'system'
+  impact?: string | null
 }
 
 export async function add_decision(
@@ -874,6 +1323,8 @@ export async function add_decision(
     id: maxId + 1,
     content: input.content,
     rationale: input.rationale ?? null,
+    source: input.source ?? 'system',
+    impact: input.impact ?? null,
     created_at: new Date().toISOString(),
   }
 
@@ -915,9 +1366,10 @@ export async function complete_task(
     )
   }
 
+  const now = new Date().toISOString()
   const result = db.run(
-    `UPDATE tasks SET status = 'completed', outcome = ?, updated_at = ? WHERE id = ?`,
-    [input.outcome, new Date().toISOString(), input.task_id],
+    `UPDATE tasks SET status = 'completed', outcome = ?, completed_at = ?, updated_at = ? WHERE id = ?`,
+    [input.outcome, now, now, input.task_id],
   )
 
   if (result.changes === 0) {
