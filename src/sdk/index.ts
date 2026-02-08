@@ -2,6 +2,7 @@ import { init_project, init_status } from '../task/util'
 import {
   create_task,
   delete_task,
+  complete_task,
   get_db,
   get_task,
   list_tasks,
@@ -14,6 +15,7 @@ import {
 } from '../task/db'
 import type {
   CollectionPatch as SdkCollectionPatch,
+  CompleteTaskInput as SdkCompleteTaskInput,
   CreateTaskInput as SdkCreateTaskInput,
   InitStatus as SdkInitStatus,
   ListTasksOptions as SdkListTasksOptions,
@@ -89,6 +91,12 @@ function map_task(task: Task): SdkTask {
 function map_status(value?: SdkTaskStatus): TaskStatus | undefined {
   if (!value || value === 'deleted') return undefined
   return value as TaskStatus
+}
+
+function map_list_status(
+  value?: SdkTaskStatus,
+): TaskStatus | 'deleted' | undefined {
+  return value as TaskStatus | 'deleted' | undefined
 }
 
 function map_create_input(input: SdkCreateTaskInput) {
@@ -179,19 +187,31 @@ const continuum = {
   task: {
     init: async (): Promise<SdkInitStatus> => {
       const directory = process.cwd()
-      const status = await init_status({ directory })
-      if (!status.dbFileExists) {
+      const initial = await init_status({ directory })
+      let created = false
+      if (!initial.dbFileExists) {
         await init_project({ directory })
+        created = true
       }
-      return { success: true }
+      const finalStatus = await init_status({ directory })
+      return {
+        success: true,
+        pluginDirExists: finalStatus.pluginDirExists,
+        dbFileExists: finalStatus.dbFileExists,
+        initialized: finalStatus.pluginDirExists && finalStatus.dbFileExists,
+        created,
+      }
     },
     list: async (
       options: SdkListTasksOptions = {},
     ): Promise<SdkListTasksResult> => {
       const db = await get_db_for_cwd()
+      const includeDeleted =
+        options.includeDeleted === true || options.status === 'deleted'
       const result = await list_tasks(db, {
-        status: map_status(options.status),
+        status: map_list_status(options.status),
         type: options.type,
+        includeDeleted,
         cursor: options.cursor,
         limit: options.limit,
         sort: options.sort,
@@ -218,6 +238,17 @@ const continuum = {
     ): Promise<SdkTask> => {
       const db = await get_db_for_cwd()
       const task = await update_task(db, id, map_update_input(input))
+      return map_task(task)
+    },
+    complete: async (
+      id: string,
+      input: SdkCompleteTaskInput,
+    ): Promise<SdkTask> => {
+      const db = await get_db_for_cwd()
+      const task = await complete_task(db, {
+        task_id: id,
+        outcome: input.outcome,
+      })
       return map_task(task)
     },
     delete: async (id: string): Promise<void> => {

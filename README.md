@@ -43,7 +43,7 @@ The SDK is designed for programmatic access and follows the contract in `src/sdk
 ```ts
 import continuum from 'continuum'
 
-await continuum.task.init()
+const initStatus = await continuum.task.init()
 
 const { tasks, nextCursor } = await continuum.task.list({
   status: 'ready',
@@ -76,7 +76,17 @@ await continuum.task.update(task.id, {
     ],
   },
 })
+
+await continuum.task.complete(task.id, {
+  outcome: 'Redirect fixed, regression test added.',
+})
 ```
+
+Notes:
+
+- `task.delete(id)` is the only way to mark a task deleted.
+- Use `task.list({ includeDeleted: true })` to include deleted tasks.
+- `init()` returns `initialized` and `created` flags in `initStatus`.
 
 For full types and documentation, point your agent at `src/sdk.d.ts`.
 

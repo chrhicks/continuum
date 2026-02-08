@@ -145,9 +145,10 @@ export interface CollectionPatch<TAdd, TUpdate> {
 }
 
 export interface ListTaskFilters {
-  status?: TaskStatus
+  status?: TaskStatus | 'deleted'
   type?: TaskType
   parent_id?: string | null
+  includeDeleted?: boolean
   cursor?: string
   limit?: number
   sort?: 'createdAt' | 'updatedAt'
@@ -954,8 +955,16 @@ export async function list_tasks(
   db: Database,
   filters: ListTaskFilters = {},
 ): Promise<ListTasksResult> {
-  const where: string[] = ['status != ?']
-  const params: Array<string | null> = ['deleted']
+  const where: string[] = []
+  const params: Array<string | null> = []
+
+  const includeDeleted =
+    filters.includeDeleted === true || filters.status === 'deleted'
+
+  if (!includeDeleted) {
+    where.push('status != ?')
+    params.push('deleted')
+  }
 
   if (filters.status) {
     where.push('status = ?')
@@ -990,7 +999,7 @@ export async function list_tasks(
   const sql = `
     SELECT ${TASK_COLUMNS}
     FROM tasks
-    WHERE ${where.join(' AND ')}
+    ${where.length > 0 ? `WHERE ${where.join(' AND ')}` : ''}
     ORDER BY ${sortColumn} ${sortOrder}, id ${sortOrder}
     LIMIT ?
   `

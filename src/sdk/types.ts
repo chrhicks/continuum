@@ -12,6 +12,10 @@
  * ```ts
  * status: 'blocked'
  * ```
+ *
+ * Note:
+ * - 'deleted' is returned by get() after delete()
+ * - use task.delete(id) to remove a task from lists
  */
 export type TaskStatus =
   | 'open'
@@ -256,6 +260,10 @@ export interface TaskStep {
 
 export interface InitStatus {
   success: boolean
+  pluginDirExists: boolean
+  dbFileExists: boolean
+  initialized: boolean
+  created: boolean
 }
 
 /**
@@ -280,6 +288,7 @@ export interface InitStatus {
 export interface ListTasksOptions {
   status?: TaskStatus
   type?: TaskType
+  includeDeleted?: boolean
   cursor?: string
   limit?: number
   sort?: 'createdAt' | 'updatedAt'
@@ -357,6 +366,10 @@ export interface TaskNoteInput {
   source: 'user' | 'agent' | 'system'
   rationale?: string | null
   impact?: string | null
+}
+
+export interface CompleteTaskInput {
+  outcome: string
 }
 
 /**
@@ -454,6 +467,13 @@ export interface ContinuumSDK {
         decisions?: CollectionPatch<TaskNoteInput, Partial<TaskDecision>>
       },
     ) => Promise<Task>
+    /**
+     * Complete a task with an outcome.
+     *
+     * Use when:
+     * - finalizing a task and capturing what happened
+     */
+    complete: (id: string, input: CompleteTaskInput) => Promise<Task>
     /**
      * Delete a task.
      *
