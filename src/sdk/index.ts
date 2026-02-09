@@ -8,9 +8,12 @@ import {
   update_task_for_directory,
 } from '../task/tasks.service'
 import type { Decision, Discovery, Step, Task, TaskStatus } from '../task/types'
+import { isContinuumError } from '../task/error'
+import { is_valid_task_type, TASK_TYPES } from '../task/templates'
 import type {
   CollectionPatch as SdkCollectionPatch,
   CompleteTaskInput as SdkCompleteTaskInput,
+  ContinuumSDK,
   CreateTaskInput as SdkCreateTaskInput,
   InitStatus as SdkInitStatus,
   ListTasksOptions as SdkListTasksOptions,
@@ -47,6 +50,8 @@ function map_step(step: Step): SdkTaskStep {
     position: step.position ?? null,
     title: step.title ?? '',
     description: step.description ?? step.details ?? '',
+    summary: step.summary ?? null,
+    notes: step.notes ?? null,
   }
 }
 
@@ -178,7 +183,7 @@ function get_directory(): string {
   return process.cwd()
 }
 
-const continuum = {
+const continuum: ContinuumSDK = {
   task: {
     init: async (): Promise<SdkInitStatus> => {
       const directory = process.cwd()
@@ -205,6 +210,7 @@ const continuum = {
       const result = await list_tasks_for_directory(get_directory(), {
         status: map_list_status(options.status),
         type: options.type,
+        parent_id: options.parentId,
         includeDeleted,
         cursor: options.cursor,
         limit: options.limit,
@@ -253,5 +259,7 @@ const continuum = {
     },
   },
 }
+
+export { isContinuumError, is_valid_task_type as isValidTaskType, TASK_TYPES }
 
 export default continuum

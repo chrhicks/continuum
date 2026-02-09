@@ -256,6 +256,16 @@ export interface TaskStep {
    * Format: Markdown
    */
   description: string
+  /**
+   * @name summary
+   * @description Brief summary of what was done in this step.
+   */
+  summary?: string | null
+  /**
+   * @name notes
+   * @description Additional notes about this step.
+   */
+  notes?: string | null
 }
 
 export interface InitStatus {
@@ -288,6 +298,7 @@ export interface InitStatus {
 export interface ListTasksOptions {
   status?: TaskStatus
   type?: TaskType
+  parentId?: string | null
   includeDeleted?: boolean
   cursor?: string
   limit?: number
