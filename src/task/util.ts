@@ -1,5 +1,6 @@
 import { mkdir, stat } from 'node:fs/promises'
-import { init_db } from './db'
+import { dbFilePath, continuumDir } from '../db/paths'
+import { migrateDb } from '../db/migrate'
 
 interface InitStatus {
   pluginDirExists: boolean
@@ -29,8 +30,8 @@ export async function init_status({
 }: {
   directory: string
 }): Promise<InitStatus> {
-  const pluginDirExists = await dir_exists(`${directory}/.continuum`)
-  const dbFileExists = await file_exists(`${directory}/.continuum/continuum.db`)
+  const pluginDirExists = await dir_exists(continuumDir(directory))
+  const dbFileExists = await file_exists(dbFilePath(directory))
 
   return {
     pluginDirExists,
@@ -42,9 +43,9 @@ export async function init_project({ directory }: { directory: string }) {
   const { pluginDirExists, dbFileExists } = await init_status({ directory })
 
   if (!pluginDirExists) {
-    await mkdir(`${directory}/.continuum`, { recursive: true })
+    await mkdir(continuumDir(directory), { recursive: true })
   }
   if (!dbFileExists) {
-    await init_db(directory)
+    await migrateDb(dbFilePath(directory))
   }
 }

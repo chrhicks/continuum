@@ -22,14 +22,11 @@ import {
   init_status as getTaskInitStatus,
 } from './task/util'
 import {
-  get_db as getTaskDb,
-  list_tasks as listTasks,
-  get_task as getTask,
-  is_valid_task_type,
-  type Task,
-  type TaskStatus,
-  type TaskType,
-} from './task/db'
+  get_task_for_directory as getTask,
+  list_tasks_for_directory as listTasks,
+} from './task/tasks.service'
+import { is_valid_task_type } from './task/templates'
+import type { Task, TaskStatus, TaskType } from './task/types'
 import { isContinuumError } from './task/error'
 
 let exitHandlersInstalled = false
@@ -716,8 +713,7 @@ async function listTaskOverview(options: {
   const directory = process.cwd()
 
   try {
-    const db = await getTaskDb(directory)
-    const result = await listTasks(db, {
+    const result = await listTasks(directory, {
       status: options.status,
       limit: 1000,
     })
@@ -827,8 +823,7 @@ async function viewTaskDetails(
   const directory = process.cwd()
 
   try {
-    const db = await getTaskDb(directory)
-    const task = await getTask(db, taskId)
+    const task = await getTask(directory, taskId)
 
     if (!task) {
       console.error(`Error: Task '${taskId}' not found.`)
@@ -856,7 +851,7 @@ async function viewTaskDetails(
         console.log(task.plan)
       }
 
-      const childrenResult = await listTasks(db, {
+      const childrenResult = await listTasks(directory, {
         parent_id: task.id,
         limit: 1000,
       })
