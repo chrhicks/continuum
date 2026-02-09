@@ -17,17 +17,8 @@ import { readConsolidationLog } from './memory/log'
 import { recoverStaleNowFiles } from './memory/recover'
 import { writeLoopRequest } from './loop/request'
 import { runLoopRequest } from './loop/runner'
-import {
-  init_project as initTaskProject,
-  init_status as getTaskInitStatus,
-} from './task/util'
-import {
-  get_task_for_directory as getTask,
-  list_tasks_for_directory as listTasks,
-} from './task/tasks.service'
-import { is_valid_task_type } from './task/templates'
-import type { Task, TaskStatus, TaskType } from './task/types'
-import { isContinuumError } from './task/error'
+import continuum, { isContinuumError, isValidTaskType } from './sdk'
+import type { Task, TaskStatus, TaskType } from './sdk/types'
 
 let exitHandlersInstalled = false
 
@@ -569,19 +560,16 @@ async function handleTask(args: string[]): Promise<void> {
 }
 
 async function handleTaskInit(): Promise<void> {
-  const directory = process.cwd()
-  const status = await getTaskInitStatus({ directory })
+  const status = await continuum.task.init()
 
-  if (status.dbFileExists) {
+  if (!status.created) {
     console.log('Continuum is already initialized in this directory.')
-    console.log(`Database: ${directory}/.continuum/continuum.db`)
+    console.log(`Database: ${process.cwd()}/.continuum/continuum.db`)
     return
   }
 
-  await initTaskProject({ directory })
-
   console.log('Initialized continuum in current directory.')
-  console.log(`Database: ${directory}/.continuum/continuum.db`)
+  console.log(`Database: ${process.cwd()}/.continuum/continuum.db`)
   console.log('')
   console.log('Next steps:')
   console.log('  continuum task list              List tasks')
@@ -698,7 +686,7 @@ function parseTaskStatus(value: string): TaskStatus {
 
 function parseTaskType(value: string): TaskType {
   const normalized = value.trim()
-  if (is_valid_task_type(normalized)) {
+  if (isValidTaskType(normalized)) {
     return normalized as TaskType
   }
   throw new Error(
@@ -710,10 +698,8 @@ async function listTaskOverview(options: {
   status?: TaskStatus
   type?: TaskType
 }): Promise<void> {
-  const directory = process.cwd()
-
   try {
-    const result = await listTasks(directory, {
+    const result = await continuum.task.list({
       status: options.status,
       limit: 1000,
     })
@@ -778,8 +764,8 @@ function formatTaskCompact(task: Task, indent: string = ''): string {
     lines.push(`${indent}  Intent: ${task.intent}`)
   }
 
-  if (task.blocked_by.length > 0) {
-    lines.push(`${indent}  Blocked by: ${task.blocked_by.join(', ')}`)
+  if (task.blockedBy.length > 0) {
+    lines.push(`${indent}  Blocked by: ${task.blockedBy.join(', ')}`)
   }
 
   if (task.steps.length > 0) {
@@ -823,7 +809,7 @@ async function viewTaskDetails(
   const directory = process.cwd()
 
   try {
-    const task = await getTask(directory, taskId)
+    const task = await continuum.task.get(taskId)
 
     if (!task) {
       console.error(`Error: Task '${taskId}' not found.`)
@@ -851,8 +837,8 @@ async function viewTaskDetails(
         console.log(task.plan)
       }
 
-      const childrenResult = await listTasks(directory, {
-        parent_id: task.id,
+      const childrenResult = await continuum.task.list({
+        parentId: task.id,
         limit: 1000,
       })
       const children = childrenResult.tasks
@@ -875,7 +861,7 @@ async function viewTaskDetails(
       const ready = children.filter((child) => child.status === 'ready').length
       const open = children.filter((child) => child.status === 'open').length
       const blocked = children.filter(
-        (child) => child.blocked_by.length > 0 && child.status !== 'completed',
+        (child) => child.blockedBy.length > 0 && child.status !== 'completed',
       ).length
 
       if (children.length > 0) {
@@ -899,15 +885,15 @@ async function viewTaskDetails(
     console.log(`ID:      ${task.id}`)
     console.log(`Type:    ${task.type}`)
     console.log(`Status:  ${task.status}`)
-    console.log(`Created: ${formatTaskDate(task.created_at)}`)
-    console.log(`Updated: ${formatTaskDate(task.updated_at)}`)
+    console.log(`Created: ${formatTaskDate(task.createdAt)}`)
+    console.log(`Updated: ${formatTaskDate(task.updatedAt)}`)
 
-    if (task.parent_id) {
-      console.log(`Parent:  ${task.parent_id}`)
+    if (task.parentId) {
+      console.log(`Parent:  ${task.parentId}`)
     }
 
-    if (task.blocked_by.length > 0) {
-      console.log(`Blocked by: ${task.blocked_by.join(', ')}`)
+    if (task.blockedBy.length > 0) {
+      console.log(`Blocked by: ${task.blockedBy.join(', ')}`)
     }
 
     if (task.intent) {
@@ -940,8 +926,7 @@ async function viewTaskDetails(
               : step.status === 'skipped'
                 ? '[~]'
                 : '[ ]'
-        const current = task.current_step === step.id ? ' (current)' : ''
-        console.log(`  ${marker} ${step.title || `Step ${step.id}`}${current}`)
+        console.log(`  ${marker} ${step.title || `Step ${step.id}`}`)
         if (step.summary) {
           console.log(`      ${step.summary}`)
         }
@@ -956,7 +941,7 @@ async function viewTaskDetails(
       console.log('Discoveries:')
       for (const discovery of task.discoveries) {
         console.log(`  - ${discovery.content}`)
-        console.log(`    ${formatTaskDate(discovery.created_at)}`)
+        console.log(`    ${formatTaskDate(discovery.createdAt)}`)
       }
     }
 
@@ -968,7 +953,7 @@ async function viewTaskDetails(
         if (decision.rationale) {
           console.log(`    Rationale: ${decision.rationale}`)
         }
-        console.log(`    ${formatTaskDate(decision.created_at)}`)
+        console.log(`    ${formatTaskDate(decision.createdAt)}`)
       }
     }
 
