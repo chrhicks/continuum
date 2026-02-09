@@ -1,248 +1,29 @@
-import { Database } from 'bun:sqlite'
+import { and, asc, desc, eq, inArray, isNull, ne, sql } from 'drizzle-orm'
+import type { DbClient } from '../db/client'
+import { tasks } from '../db/schema'
 import { randomId } from './db.utils'
-import { init_status } from './util'
 import { ContinuumError } from './error'
-import { getMigrations } from './migration'
+import { validate_blocker_list } from './validation'
+import type {
+  AddDecisionInput,
+  AddDiscoveryInput,
+  AddStepsInput,
+  CompleteStepInput,
+  CompleteTaskInput,
+  CreateTaskInput,
+  Decision,
+  Discovery,
+  ListTaskFilters,
+  ListTasksResult,
+  Step,
+  Task,
+  TaskStatus,
+  TaskType,
+  UpdateStepInput,
+  UpdateTaskInput,
+} from './types'
 
-export type TaskStatus =
-  | 'open'
-  | 'ready'
-  | 'blocked'
-  | 'completed'
-  | 'cancelled'
-export type TaskType = 'epic' | 'feature' | 'bug' | 'investigation' | 'chore'
-export type StepStatus = 'pending' | 'in_progress' | 'completed' | 'skipped'
-
-export interface Step {
-  id: number
-  title?: string
-  description?: string
-  position?: number | null
-  summary?: string
-  details?: string
-  status: StepStatus
-  notes: string | null
-}
-
-export interface Discovery {
-  id: number
-  content: string
-  source: 'user' | 'agent' | 'system'
-  impact: string | null
-  created_at: string
-}
-
-export interface Decision {
-  id: number
-  content: string
-  rationale: string | null
-  source: 'user' | 'agent' | 'system'
-  impact: string | null
-  created_at: string
-}
-
-export interface Task {
-  id: string
-  title: string
-  type: TaskType
-  status: TaskStatus | 'deleted'
-  intent: string | null
-  description: string | null
-  plan: string | null
-  // Execution
-  steps: Step[]
-  current_step: number | null
-  // Memory
-  discoveries: Discovery[]
-  decisions: Decision[]
-  outcome: string | null
-  completed_at: string | null
-  // Relationships
-  parent_id: string | null
-  blocked_by: string[]
-  created_at: string
-  updated_at: string
-}
-
-export interface CreateTaskInput {
-  title: string
-  type: TaskType
-  status?: TaskStatus
-  intent?: string | null
-  description?: string | null
-  plan?: string | null
-  parent_id?: string | null
-  blocked_by?: string[] | null
-}
-
-export interface UpdateTaskInput {
-  title?: string
-  type?: TaskType
-  status?: TaskStatus
-  intent?: string | null
-  description?: string | null
-  plan?: string | null
-  parent_id?: string | null
-  blocked_by?: string[] | null
-  steps?: CollectionPatch<StepInput, StepPatch>
-  discoveries?: CollectionPatch<DiscoveryInput, DiscoveryPatch>
-  decisions?: CollectionPatch<DecisionInput, DecisionPatch>
-}
-
-export interface StepInput {
-  title: string
-  description: string
-  status?: StepStatus
-  position?: number | null
-  summary?: string
-  details?: string
-  notes?: string | null
-}
-
-export interface StepPatch {
-  id: number | string
-  title?: string
-  description?: string
-  status?: StepStatus
-  position?: number | null
-  summary?: string
-  details?: string
-  notes?: string | null
-}
-
-export interface DiscoveryInput {
-  content: string
-  source?: 'user' | 'agent' | 'system'
-  impact?: string | null
-}
-
-export interface DiscoveryPatch {
-  id: number | string
-  content?: string
-  source?: 'user' | 'agent' | 'system'
-  impact?: string | null
-}
-
-export interface DecisionInput {
-  content: string
-  rationale?: string | null
-  source?: 'user' | 'agent' | 'system'
-  impact?: string | null
-}
-
-export interface DecisionPatch {
-  id: number | string
-  content?: string
-  rationale?: string | null
-  source?: 'user' | 'agent' | 'system'
-  impact?: string | null
-}
-
-export interface CollectionPatch<TAdd, TUpdate> {
-  add?: TAdd[]
-  update?: TUpdate[]
-  delete?: Array<number | string>
-}
-
-export interface ListTaskFilters {
-  status?: TaskStatus | 'deleted'
-  type?: TaskType
-  parent_id?: string | null
-  includeDeleted?: boolean
-  cursor?: string
-  limit?: number
-  sort?: 'createdAt' | 'updatedAt'
-  order?: 'asc' | 'desc'
-}
-
-export interface ListTasksResult {
-  tasks: Task[]
-  nextCursor?: string
-}
-
-const TASK_TYPES: TaskType[] = [
-  'epic',
-  'feature',
-  'bug',
-  'investigation',
-  'chore',
-]
-
-const TEMPLATE_TYPE_MAP: Record<TemplateName, TaskType> = {
-  epic: 'epic',
-  feature: 'feature',
-  bug: 'bug',
-  investigation: 'investigation',
-  chore: 'chore',
-}
-
-export type TemplateName =
-  | 'epic'
-  | 'feature'
-  | 'bug'
-  | 'investigation'
-  | 'chore'
-
-export interface TemplateRecommendation {
-  name: TemplateName
-  type: TaskType
-  plan_template: string
-}
-
-export const TEMPLATE_RECOMMENDATIONS: Record<
-  TemplateName,
-  TemplateRecommendation
-> = {
-  epic: {
-    name: 'epic',
-    type: 'epic',
-    plan_template: `Plan:\n- Goals:\n  - <outcomes to deliver>\n- Milestones:\n  - <major phases/modules>\n- Dependencies:\n  - <blocking work>\n`,
-  },
-  feature: {
-    name: 'feature',
-    type: 'feature',
-    plan_template: `Plan:\n- Changes:\n  - <steps>\n- Files:\n  - <files or areas>\n- Tests:\n  - <tests to run/add>\n- Risks:\n  - <edge cases>\n`,
-  },
-  bug: {
-    name: 'bug',
-    type: 'bug',
-    plan_template: `Plan:\n- Repro:\n  - <steps>\n- Fix:\n  - <approach>\n- Tests:\n  - <coverage>\n- Verify:\n  - <validation steps>\n`,
-  },
-  investigation: {
-    name: 'investigation',
-    type: 'investigation',
-    plan_template: `Plan:\n- Questions:\n  - <what to answer>\n- Sources:\n  - <files/docs/experiments>\n- Output:\n  - <decision + recommendation>\n`,
-  },
-  chore: {
-    name: 'chore',
-    type: 'chore',
-    plan_template: `Plan:\n- Changes:\n  - <steps>\n- Files:\n  - <files or areas>\n- Tests:\n  - <tests to run>\n- Safety:\n  - <backups/rollback>\n`,
-  },
-}
-
-interface TaskRow {
-  id: string
-  title: string
-  type: TaskType
-  status: TaskStatus | 'deleted'
-  intent: string | null
-  description: string | null
-  plan: string | null
-  steps: string
-  current_step: number | null
-  discoveries: string
-  decisions: string
-  outcome: string | null
-  completed_at: string | null
-  parent_id: string | null
-  blocked_by: string
-  created_at: string
-  updated_at: string
-}
-
-const dbFilePath = (directory: string) => `${directory}/.continuum/continuum.db`
-
-const dbCache = new Map<string, Database>()
+type TaskRow = typeof tasks.$inferSelect
 
 function parse_json_array<T>(
   value: string | null,
@@ -332,223 +113,63 @@ function row_to_task(row: TaskRow): Task {
   return {
     id: row.id,
     title: row.title,
-    type: row.type,
-    status: row.status,
-    intent: row.intent,
-    description: row.description,
-    plan: row.plan,
+    type: row.type as TaskType,
+    status: row.status as TaskStatus | 'deleted',
+    intent: row.intent ?? null,
+    description: row.description ?? null,
+    plan: row.plan ?? null,
     steps: parse_steps(row.steps),
-    current_step: row.current_step,
+    current_step: row.current_step ?? null,
     discoveries: parse_discoveries(row.discoveries),
     decisions: parse_decisions(row.decisions),
-    outcome: row.outcome,
-    completed_at: row.completed_at,
-    parent_id: row.parent_id,
+    outcome: row.outcome ?? null,
+    completed_at: row.completed_at ?? null,
+    parent_id: row.parent_id ?? null,
     blocked_by: parse_blocked_by(row.blocked_by),
     created_at: row.created_at,
     updated_at: row.updated_at,
   }
 }
 
-const TASK_COLUMNS = `id, title, type, status, intent, description, plan, steps, current_step, discoveries, decisions, outcome, completed_at, parent_id, blocked_by, created_at, updated_at`
-
-export async function get_db(directory: string): Promise<Database> {
-  const status = await init_status({ directory })
-
-  if (!status.pluginDirExists) {
-    throw new ContinuumError(
-      'NOT_INITIALIZED',
-      'Continuum is not initialized in this directory',
-      ['Run `continuum_init()` to initialize continuum in this directory'],
-    )
-  }
-  if (!status.dbFileExists) {
-    throw new ContinuumError(
-      'NOT_INITIALIZED',
-      'Continuum database file does not exist',
-      ['Run `continuum_init()` to initialize continuum in this directory'],
-    )
-  }
-
-  if (dbCache.has(directory)) {
-    return dbCache.get(directory)!
-  }
-
-  const db = new Database(dbFilePath(directory))
-
-  // Auto-migrate on first access
-  const migrations = await getMigrations()
-  const currentVersion = get_db_version(db)
-  const latestVersion = migrations[migrations.length - 1]?.version ?? 0
-
-  if (currentVersion < latestVersion) {
-    for (const migration of migrations) {
-      if (migration.version > currentVersion) {
-        db.run(migration.sql.trim())
-        set_db_version(db, migration.version)
-      }
-    }
-  }
-
-  dbCache.set(directory, db)
-  return db
-}
-
-function get_db_version(db: Database): number {
-  try {
-    const result = db
-      .query<{ user_version: number }, []>('PRAGMA user_version')
-      .get()
-    return result?.user_version ?? 0
-  } catch {
-    return 0
-  }
-}
-
-function set_db_version(db: Database, version: number): void {
-  db.run(`PRAGMA user_version = ${version}`)
-}
-
-export async function init_db(directory: string): Promise<void> {
-  const db = new Database(dbFilePath(directory))
-  const migrations = await getMigrations()
-
-  // Run initial migration for new databases
-  const initialMigration = migrations[0]
-  if (initialMigration) {
-    db.run(initialMigration.sql.trim())
-    set_db_version(db, initialMigration.version)
-  }
-
-  db.close()
-}
-
-export function is_valid_task_type(type: string): type is TaskType {
-  return TASK_TYPES.includes(type as TaskType)
-}
-
-export function resolve_template_type(template?: string): TaskType | null {
-  if (!template) return null
-  return TEMPLATE_TYPE_MAP[template as TemplateName] ?? null
-}
-
-export function list_template_recommendations(): TemplateRecommendation[] {
-  return Object.values(TEMPLATE_RECOMMENDATIONS)
-}
-
-export function validate_task_input(input: CreateTaskInput): string[] {
-  const missing: string[] = []
-  if (!input.title?.trim()) missing.push('title')
-
-  switch (input.type) {
-    case 'epic':
-      if (!input.intent?.trim()) missing.push('intent')
-      if (!input.description?.trim()) missing.push('description')
-      break
-    case 'feature':
-    case 'bug':
-      if (!input.intent?.trim()) missing.push('intent')
-      if (!input.description?.trim()) missing.push('description')
-      if (!input.plan?.trim()) missing.push('plan')
-      break
-    case 'investigation':
-    case 'chore':
-      if (!input.description?.trim()) missing.push('description')
-      if (!input.plan?.trim()) missing.push('plan')
-      break
-  }
-
-  return missing
-}
-
-export function validate_status_transition(
-  task: Task,
-  nextStatus: TaskStatus,
-): string[] {
-  const missing: string[] = []
-  if (nextStatus === 'ready') {
-    if (['feature', 'bug', 'investigation', 'chore'].includes(task.type)) {
-      if (!task.plan?.trim()) missing.push('plan')
-    }
-  }
-
-  if (nextStatus === 'completed') {
-    if (!task.description?.trim()) missing.push('description')
-    if (['feature', 'bug', 'investigation', 'chore'].includes(task.type)) {
-      if (!task.plan?.trim()) missing.push('plan')
-    }
-  }
-
-  return missing
-}
-
-export async function has_open_blockers(
-  db: Database,
-  task: Task,
-): Promise<string[]> {
-  if (task.blocked_by.length === 0) return []
-  const placeholders = task.blocked_by.map(() => '?').join(', ')
-  const rows = db
-    .query<
-      { id: string; status: string },
-      string[]
-    >(`SELECT id, status FROM tasks WHERE id IN (${placeholders}) AND status != 'deleted'`)
-    .all(...task.blocked_by)
-
-  const open = new Set(['open', 'ready', 'blocked'])
-  return rows.filter((row) => open.has(row.status)).map((row) => row.id)
-}
-
-async function task_exists(db: Database, task_id: string): Promise<boolean> {
-  const row = db
-    .query<
-      { count: number },
-      [string]
-    >(`SELECT COUNT(1) AS count FROM tasks WHERE id = ? AND status != 'deleted'`)
-    .get(task_id)
+async function task_exists(db: DbClient, task_id: string): Promise<boolean> {
+  const row = await db
+    .select({ count: sql<number>`count(1)` })
+    .from(tasks)
+    .where(and(eq(tasks.id, task_id), ne(tasks.status, 'deleted')))
+    .get()
   return (row?.count ?? 0) > 0
 }
 
-function validate_blocker_list(task_id: string, blockers: string[]) {
-  if (blockers.length === 0) return
-  const seen = new Set<string>()
-  for (const blocker of blockers) {
-    if (blocker === task_id) {
-      throw new ContinuumError('INVALID_BLOCKER', 'Task cannot block itself', [
-        'Remove the task id from blocked_by.',
-      ])
-    }
-    if (seen.has(blocker)) {
-      throw new ContinuumError(
-        'DUPLICATE_BLOCKERS',
-        'blocked_by contains duplicate task ids',
-        ['Remove duplicate ids from blocked_by.'],
-      )
-    }
-    seen.add(blocker)
-  }
-}
-
 async function validate_blockers(
-  db: Database,
+  db: DbClient,
   blockers: string[],
 ): Promise<string[]> {
   if (blockers.length === 0) return []
   const unique = Array.from(new Set(blockers))
-  const placeholders = unique.map(() => '?').join(', ')
-  const rows = db
-    .query<
-      { id: string },
-      string[]
-    >(`SELECT id FROM tasks WHERE id IN (${placeholders}) AND status != 'deleted'`)
-    .all(...unique)
+  const rows = await db
+    .select({ id: tasks.id })
+    .from(tasks)
+    .where(and(inArray(tasks.id, unique), ne(tasks.status, 'deleted')))
+    .all()
 
   const found = new Set(rows.map((row) => row.id))
   return unique.filter((id) => !found.has(id))
 }
 
+async function has_open_blockers(db: DbClient, task: Task): Promise<string[]> {
+  if (task.blocked_by.length === 0) return []
+  const rows = await db
+    .select({ id: tasks.id, status: tasks.status })
+    .from(tasks)
+    .where(and(inArray(tasks.id, task.blocked_by), ne(tasks.status, 'deleted')))
+    .all()
+
+  const open = new Set(['open', 'ready', 'blocked'])
+  return rows.filter((row) => open.has(row.status)).map((row) => row.id)
+}
+
 export async function create_task(
-  db: Database,
+  db: DbClient,
   input: CreateTaskInput,
 ): Promise<Task> {
   const id = randomId('tkt')
@@ -577,33 +198,30 @@ export async function create_task(
     )
   }
 
-  const result = db.run(
-    `INSERT INTO tasks (id, title, type, status, intent, description, plan, parent_id, blocked_by, created_at, updated_at, completed_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
+  await db
+    .insert(tasks)
+    .values({
       id,
-      input.title,
-      input.type,
-      input.status ?? 'open',
-      input.intent ?? null,
-      input.description ?? null,
-      input.plan ?? null,
-      input.parent_id ?? null,
-      JSON.stringify(blocked_by),
+      title: input.title,
+      type: input.type,
+      status: input.status ?? 'open',
+      intent: input.intent ?? null,
+      description: input.description ?? null,
+      plan: input.plan ?? null,
+      steps: '[]',
+      current_step: null,
+      discoveries: '[]',
+      decisions: '[]',
+      outcome: null,
+      completed_at,
+      parent_id: input.parent_id ?? null,
+      blocked_by: JSON.stringify(blocked_by),
       created_at,
       updated_at,
-      completed_at,
-    ],
-  )
+    })
+    .run()
 
-  if (result.changes === 0) {
-    throw new ContinuumError('TASK_CREATE_FAILED', 'Failed to create task')
-  }
-
-  const row = db
-    .query<TaskRow, [string]>(`SELECT ${TASK_COLUMNS} FROM tasks WHERE id = ?`)
-    .get(id)
-
+  const row = await db.select().from(tasks).where(eq(tasks.id, id)).get()
   if (!row) {
     throw new ContinuumError('TASK_NOT_FOUND', 'Task not found after create')
   }
@@ -612,12 +230,11 @@ export async function create_task(
 }
 
 export async function update_task(
-  db: Database,
+  db: DbClient,
   task_id: string,
   input: UpdateTaskInput,
 ): Promise<Task> {
-  const updates: string[] = []
-  const params: Array<string | number | null> = []
+  const updates: Partial<typeof tasks.$inferInsert> = {}
   let task: Task | null = null
 
   const ensure_task = async (): Promise<Task> => {
@@ -653,44 +270,19 @@ export async function update_task(
     }
   }
 
-  if (input.title !== undefined) {
-    updates.push('title = ?')
-    params.push(input.title)
-  }
-  if (input.type !== undefined) {
-    updates.push('type = ?')
-    params.push(input.type)
-  }
+  if (input.title !== undefined) updates.title = input.title
+  if (input.type !== undefined) updates.type = input.type
   if (input.status !== undefined) {
-    updates.push('status = ?')
-    params.push(input.status)
-    if (input.status === 'completed') {
-      updates.push('completed_at = ?')
-      params.push(new Date().toISOString())
-    } else {
-      updates.push('completed_at = ?')
-      params.push(null)
-    }
+    updates.status = input.status
+    updates.completed_at =
+      input.status === 'completed' ? new Date().toISOString() : null
   }
-  if (input.intent !== undefined) {
-    updates.push('intent = ?')
-    params.push(input.intent)
-  }
-  if (input.description !== undefined) {
-    updates.push('description = ?')
-    params.push(input.description)
-  }
-  if (input.plan !== undefined) {
-    updates.push('plan = ?')
-    params.push(input.plan)
-  }
-  if (input.parent_id !== undefined) {
-    updates.push('parent_id = ?')
-    params.push(input.parent_id)
-  }
+  if (input.intent !== undefined) updates.intent = input.intent
+  if (input.description !== undefined) updates.description = input.description
+  if (input.plan !== undefined) updates.plan = input.plan
+  if (input.parent_id !== undefined) updates.parent_id = input.parent_id
   if (input.blocked_by !== undefined) {
-    updates.push('blocked_by = ?')
-    params.push(JSON.stringify(input.blocked_by ?? []))
+    updates.blocked_by = JSON.stringify(input.blocked_by ?? [])
   }
 
   if (input.steps) {
@@ -777,10 +369,8 @@ export async function update_task(
       currentStep = firstPending?.id ?? null
     }
 
-    updates.push('steps = ?')
-    params.push(JSON.stringify(normalized))
-    updates.push('current_step = ?')
-    params.push(currentStep)
+    updates.steps = JSON.stringify(normalized)
+    updates.current_step = currentStep
   }
 
   if (input.discoveries) {
@@ -843,8 +433,7 @@ export async function update_task(
       existing.push(...newItems)
     }
 
-    updates.push('discoveries = ?')
-    params.push(JSON.stringify(existing))
+    updates.discoveries = JSON.stringify(existing)
   }
 
   if (input.decisions) {
@@ -908,31 +497,18 @@ export async function update_task(
       existing.push(...newItems)
     }
 
-    updates.push('decisions = ?')
-    params.push(JSON.stringify(existing))
+    updates.decisions = JSON.stringify(existing)
   }
 
-  if (updates.length === 0) {
+  if (Object.keys(updates).length === 0) {
     throw new ContinuumError('NO_CHANGES_MADE', 'No fields to update')
   }
 
-  updates.push('updated_at = ?')
-  params.push(new Date().toISOString())
-  params.push(task_id)
+  updates.updated_at = new Date().toISOString()
 
-  const result = db.run(
-    `UPDATE tasks SET ${updates.join(', ')} WHERE id = ?`,
-    params,
-  )
+  await db.update(tasks).set(updates).where(eq(tasks.id, task_id)).run()
 
-  if (result.changes === 0) {
-    throw new ContinuumError('TASK_UPDATE_FAILED', 'Failed to update task')
-  }
-
-  const row = db
-    .query<TaskRow, [string]>(`SELECT ${TASK_COLUMNS} FROM tasks WHERE id = ?`)
-    .get(task_id)
-
+  const row = await db.select().from(tasks).where(eq(tasks.id, task_id)).get()
   if (!row) {
     throw new ContinuumError('TASK_NOT_FOUND', 'Task not found after update')
   }
@@ -941,158 +517,130 @@ export async function update_task(
 }
 
 export async function get_task(
-  db: Database,
+  db: DbClient,
   task_id: string,
 ): Promise<Task | null> {
-  const row = db
-    .query<TaskRow, [string]>(`SELECT ${TASK_COLUMNS} FROM tasks WHERE id = ?`)
-    .get(task_id)
-
+  const row = await db.select().from(tasks).where(eq(tasks.id, task_id)).get()
   return row ? row_to_task(row) : null
 }
 
 export async function list_tasks(
-  db: Database,
+  db: DbClient,
   filters: ListTaskFilters = {},
 ): Promise<ListTasksResult> {
-  const where: string[] = []
-  const params: Array<string | null> = []
+  const where: Array<ReturnType<typeof and> | ReturnType<typeof sql>> = []
 
   const includeDeleted =
     filters.includeDeleted === true || filters.status === 'deleted'
 
   if (!includeDeleted) {
-    where.push('status != ?')
-    params.push('deleted')
+    where.push(ne(tasks.status, 'deleted'))
   }
 
   if (filters.status) {
-    where.push('status = ?')
-    params.push(filters.status)
+    where.push(eq(tasks.status, filters.status))
   }
 
   if (filters.type) {
-    where.push('type = ?')
-    params.push(filters.type)
+    where.push(eq(tasks.type, filters.type))
   }
 
   if (filters.parent_id !== undefined) {
     if (filters.parent_id === null) {
-      where.push('parent_id IS NULL')
+      where.push(isNull(tasks.parent_id))
     } else {
-      where.push('parent_id = ?')
-      params.push(filters.parent_id)
+      where.push(eq(tasks.parent_id, filters.parent_id))
     }
   }
 
-  const sortColumn = filters.sort === 'updatedAt' ? 'updated_at' : 'created_at'
-  const sortOrder = filters.order === 'desc' ? 'DESC' : 'ASC'
+  const sortColumn =
+    filters.sort === 'updatedAt' ? tasks.updated_at : tasks.created_at
+  const sortOrder = filters.order === 'desc' ? 'desc' : 'asc'
   const limit = filters.limit && filters.limit > 0 ? filters.limit : 50
   const cursor = decode_cursor(filters.cursor)
 
   if (cursor) {
-    const comparator = sortOrder === 'DESC' ? '<' : '>'
-    where.push(`(${sortColumn}, id) ${comparator} (?, ?)`)
-    params.push(cursor.sortValue, cursor.id)
+    const comparator = sortOrder === 'desc' ? '<' : '>'
+    where.push(
+      sql`(${sortColumn}, ${tasks.id}) ${sql.raw(comparator)} (${cursor.sortValue}, ${cursor.id})`,
+    )
   }
 
-  const sql = `
-    SELECT ${TASK_COLUMNS}
-    FROM tasks
-    ${where.length > 0 ? `WHERE ${where.join(' AND ')}` : ''}
-    ORDER BY ${sortColumn} ${sortOrder}, id ${sortOrder}
-    LIMIT ?
-  `
-
-  const rows = db
-    .query<TaskRow, Array<string | null | number>>(sql)
-    .all(...params, limit + 1)
+  const orderFn = sortOrder === 'desc' ? desc : asc
+  const baseQuery = db.select().from(tasks)
+  const filteredQuery =
+    where.length > 0 ? baseQuery.where(and(...where)) : baseQuery
+  const rows = await filteredQuery
+    .orderBy(orderFn(sortColumn), orderFn(tasks.id))
+    .limit(limit + 1)
+    .all()
 
   const hasMore = rows.length > limit
   const slice = hasMore ? rows.slice(0, limit) : rows
-  const tasks = slice.map(row_to_task)
+  const mapped = slice.map(row_to_task)
 
   if (!hasMore) {
-    return { tasks }
+    return { tasks: mapped }
   }
 
   const last = slice[slice.length - 1]!
   const sortValue =
-    sortColumn === 'updated_at' ? last.updated_at : last.created_at
+    sortColumn === tasks.updated_at ? last.updated_at : last.created_at
 
   return {
-    tasks,
+    tasks: mapped,
     nextCursor: encode_cursor(sortValue, last.id),
   }
 }
 
 export async function list_tasks_by_statuses(
-  db: Database,
+  db: DbClient,
   filters: { statuses: TaskStatus[]; parent_id?: string | null },
 ): Promise<Task[]> {
-  const where: string[] = ['status != ?']
-  const params: Array<string | null> = ['deleted']
+  const where: Array<ReturnType<typeof and> | ReturnType<typeof sql>> = [
+    ne(tasks.status, 'deleted'),
+  ]
 
   if (filters.statuses.length > 0) {
-    const placeholders = filters.statuses.map(() => '?').join(', ')
-    where.push(`status IN (${placeholders})`)
-    params.push(...filters.statuses)
+    where.push(inArray(tasks.status, filters.statuses))
   }
 
   if (filters.parent_id !== undefined) {
     if (filters.parent_id === null) {
-      where.push('parent_id IS NULL')
+      where.push(isNull(tasks.parent_id))
     } else {
-      where.push('parent_id = ?')
-      params.push(filters.parent_id)
+      where.push(eq(tasks.parent_id, filters.parent_id))
     }
   }
 
-  const sql = `
-    SELECT ${TASK_COLUMNS}
-    FROM tasks
-    WHERE ${where.join(' AND ')}
-    ORDER BY created_at ASC
-  `
+  const rows = await db
+    .select()
+    .from(tasks)
+    .where(and(...where))
+    .orderBy(asc(tasks.created_at))
+    .all()
 
-  const rows = db.query<TaskRow, Array<string | null>>(sql).all(...params)
   return rows.map(row_to_task)
 }
 
 export async function delete_task(
-  db: Database,
+  db: DbClient,
   task_id: string,
 ): Promise<void> {
-  const now = new Date().toISOString()
-  const result = db.run(
-    `UPDATE tasks SET status = 'deleted', updated_at = ? WHERE id = ?`,
-    [now, task_id],
-  )
+  await db
+    .update(tasks)
+    .set({ status: 'deleted', updated_at: new Date().toISOString() })
+    .where(eq(tasks.id, task_id))
+    .run()
 
-  if (result.changes === 0) {
+  const row = await db.select().from(tasks).where(eq(tasks.id, task_id)).get()
+  if (!row) {
     throw new ContinuumError('TASK_NOT_FOUND', 'Task not found')
   }
 }
 
-// =============================================================================
-// Execution Model Functions
-// =============================================================================
-
-export interface AddStepsInput {
-  task_id: string
-  steps: Array<{
-    title?: string
-    description?: string
-    position?: number | null
-    status?: StepStatus
-    summary?: string
-    details?: string
-    notes?: string | null
-  }>
-}
-
 export async function add_steps(
-  db: Database,
+  db: DbClient,
   input: AddStepsInput,
 ): Promise<Task> {
   const task = await get_task(db, input.task_id)
@@ -1116,38 +664,27 @@ export async function add_steps(
 
   const allSteps = [...existingSteps, ...newSteps]
 
-  // If no current_step set and we have steps, set to first pending
   let currentStep = task.current_step
   if (currentStep === null && allSteps.length > 0) {
     const firstPending = allSteps.find((s) => s.status === 'pending')
     currentStep = firstPending?.id ?? null
   }
 
-  const result = db.run(
-    `UPDATE tasks SET steps = ?, current_step = ?, updated_at = ? WHERE id = ?`,
-    [
-      JSON.stringify(allSteps),
-      currentStep,
-      new Date().toISOString(),
-      input.task_id,
-    ],
-  )
-
-  if (result.changes === 0) {
-    throw new ContinuumError('TASK_UPDATE_FAILED', 'Failed to add steps')
-  }
+  await db
+    .update(tasks)
+    .set({
+      steps: JSON.stringify(allSteps),
+      current_step: currentStep,
+      updated_at: new Date().toISOString(),
+    })
+    .where(eq(tasks.id, input.task_id))
+    .run()
 
   return (await get_task(db, input.task_id))!
 }
 
-export interface CompleteStepInput {
-  task_id: string
-  step_id?: number // If not provided, completes current_step
-  notes?: string
-}
-
 export async function complete_step(
-  db: Database,
+  db: DbClient,
   input: CompleteStepInput,
 ): Promise<Task> {
   const task = await get_task(db, input.task_id)
@@ -1182,7 +719,6 @@ export async function complete_step(
     notes: input.notes ?? existingStep.notes,
   }
 
-  // Auto-advance to next pending step
   let nextStep: number | null = null
   for (const step of updatedSteps) {
     if (step.status === 'pending') {
@@ -1191,37 +727,21 @@ export async function complete_step(
     }
   }
 
-  const result = db.run(
-    `UPDATE tasks SET steps = ?, current_step = ?, updated_at = ? WHERE id = ?`,
-    [
-      JSON.stringify(updatedSteps),
-      nextStep,
-      new Date().toISOString(),
-      input.task_id,
-    ],
-  )
-
-  if (result.changes === 0) {
-    throw new ContinuumError('TASK_UPDATE_FAILED', 'Failed to complete step')
-  }
+  await db
+    .update(tasks)
+    .set({
+      steps: JSON.stringify(updatedSteps),
+      current_step: nextStep,
+      updated_at: new Date().toISOString(),
+    })
+    .where(eq(tasks.id, input.task_id))
+    .run()
 
   return (await get_task(db, input.task_id))!
 }
 
-export interface UpdateStepInput {
-  task_id: string
-  step_id: number
-  title?: string
-  description?: string
-  position?: number | null
-  summary?: string
-  details?: string
-  status?: StepStatus
-  notes?: string
-}
-
 export async function update_step(
-  db: Database,
+  db: DbClient,
   input: UpdateStepInput,
 ): Promise<Task> {
   const task = await get_task(db, input.task_id)
@@ -1259,27 +779,20 @@ export async function update_step(
     notes: input.notes !== undefined ? input.notes : existingStep.notes,
   }
 
-  const result = db.run(
-    `UPDATE tasks SET steps = ?, updated_at = ? WHERE id = ?`,
-    [JSON.stringify(updatedSteps), new Date().toISOString(), input.task_id],
-  )
-
-  if (result.changes === 0) {
-    throw new ContinuumError('TASK_UPDATE_FAILED', 'Failed to update step')
-  }
+  await db
+    .update(tasks)
+    .set({
+      steps: JSON.stringify(updatedSteps),
+      updated_at: new Date().toISOString(),
+    })
+    .where(eq(tasks.id, input.task_id))
+    .run()
 
   return (await get_task(db, input.task_id))!
 }
 
-export interface AddDiscoveryInput {
-  task_id: string
-  content: string
-  source?: 'user' | 'agent' | 'system'
-  impact?: string | null
-}
-
 export async function add_discovery(
-  db: Database,
+  db: DbClient,
   input: AddDiscoveryInput,
 ): Promise<Task> {
   const task = await get_task(db, input.task_id)
@@ -1298,28 +811,20 @@ export async function add_discovery(
 
   const discoveries = [...task.discoveries, discovery]
 
-  const result = db.run(
-    `UPDATE tasks SET discoveries = ?, updated_at = ? WHERE id = ?`,
-    [JSON.stringify(discoveries), new Date().toISOString(), input.task_id],
-  )
-
-  if (result.changes === 0) {
-    throw new ContinuumError('TASK_UPDATE_FAILED', 'Failed to add discovery')
-  }
+  await db
+    .update(tasks)
+    .set({
+      discoveries: JSON.stringify(discoveries),
+      updated_at: new Date().toISOString(),
+    })
+    .where(eq(tasks.id, input.task_id))
+    .run()
 
   return (await get_task(db, input.task_id))!
 }
 
-export interface AddDecisionInput {
-  task_id: string
-  content: string
-  rationale?: string
-  source?: 'user' | 'agent' | 'system'
-  impact?: string | null
-}
-
 export async function add_decision(
-  db: Database,
+  db: DbClient,
   input: AddDecisionInput,
 ): Promise<Task> {
   const task = await get_task(db, input.task_id)
@@ -1339,25 +844,20 @@ export async function add_decision(
 
   const decisions = [...task.decisions, decision]
 
-  const result = db.run(
-    `UPDATE tasks SET decisions = ?, updated_at = ? WHERE id = ?`,
-    [JSON.stringify(decisions), new Date().toISOString(), input.task_id],
-  )
-
-  if (result.changes === 0) {
-    throw new ContinuumError('TASK_UPDATE_FAILED', 'Failed to add decision')
-  }
+  await db
+    .update(tasks)
+    .set({
+      decisions: JSON.stringify(decisions),
+      updated_at: new Date().toISOString(),
+    })
+    .where(eq(tasks.id, input.task_id))
+    .run()
 
   return (await get_task(db, input.task_id))!
 }
 
-export interface CompleteTaskInput {
-  task_id: string
-  outcome: string
-}
-
 export async function complete_task(
-  db: Database,
+  db: DbClient,
   input: CompleteTaskInput,
 ): Promise<Task> {
   const task = await get_task(db, input.task_id)
@@ -1365,7 +865,6 @@ export async function complete_task(
     throw new ContinuumError('TASK_NOT_FOUND', 'Task not found')
   }
 
-  // Check for open blockers
   const openBlockers = await has_open_blockers(db, task)
   if (openBlockers.length > 0) {
     throw new ContinuumError(
@@ -1376,14 +875,16 @@ export async function complete_task(
   }
 
   const now = new Date().toISOString()
-  const result = db.run(
-    `UPDATE tasks SET status = 'completed', outcome = ?, completed_at = ?, updated_at = ? WHERE id = ?`,
-    [input.outcome, now, now, input.task_id],
-  )
-
-  if (result.changes === 0) {
-    throw new ContinuumError('TASK_UPDATE_FAILED', 'Failed to complete task')
-  }
+  await db
+    .update(tasks)
+    .set({
+      status: 'completed',
+      outcome: input.outcome,
+      completed_at: now,
+      updated_at: now,
+    })
+    .where(eq(tasks.id, input.task_id))
+    .run()
 
   return (await get_task(db, input.task_id))!
 }
