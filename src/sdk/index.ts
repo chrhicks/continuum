@@ -4,12 +4,19 @@ import {
   create_task_for_directory,
   delete_task_for_directory,
   get_task_for_directory,
+  get_open_blockers_for_directory,
   list_tasks_for_directory,
   update_task_for_directory,
+  add_steps_for_directory,
+  complete_step_for_directory,
+  update_step_for_directory,
+  add_discovery_for_directory,
+  add_decision_for_directory,
 } from '../task/tasks.service'
 import type { Decision, Discovery, Step, Task, TaskStatus } from '../task/types'
-import { isContinuumError } from '../task/error'
+import { ContinuumError, isContinuumError } from '../task/error'
 import { is_valid_task_type, TASK_TYPES } from '../task/templates'
+import { validate_status_transition } from '../task/validation'
 import type {
   CollectionPatch as SdkCollectionPatch,
   CompleteTaskInput as SdkCompleteTaskInput,
@@ -21,11 +28,14 @@ import type {
   Task as SdkTask,
   TaskDecision as SdkTaskDecision,
   TaskDiscovery as SdkTaskDiscovery,
+  TaskGraphQuery as SdkTaskGraphQuery,
+  TaskGraphResult as SdkTaskGraphResult,
   TaskNote as SdkTaskNote,
   TaskNoteInput as SdkTaskNoteInput,
   TaskStatus as SdkTaskStatus,
   TaskStep as SdkTaskStep,
   TaskStepInput as SdkTaskStepInput,
+  TaskValidationResult as SdkTaskValidationResult,
   TaskType as SdkTaskType,
 } from './types'
 
@@ -129,6 +139,8 @@ function map_update_input(input: SdkUpdateTaskInput) {
             description: step.description,
             status: step.status,
             position: step.position,
+            summary: step.summary ?? undefined,
+            notes: step.notes ?? undefined,
           })),
           update: input.steps.update?.map((step) => ({
             id: step.id,
@@ -136,6 +148,8 @@ function map_update_input(input: SdkUpdateTaskInput) {
             description: step.description,
             status: step.status,
             position: step.position,
+            summary: step.summary ?? undefined,
+            notes: step.notes ?? undefined,
           })),
           delete: input.steps.delete,
         }
@@ -181,6 +195,51 @@ function map_update_input(input: SdkUpdateTaskInput) {
 
 function get_directory(): string {
   return process.cwd()
+}
+
+async function list_all_tasks(): Promise<SdkTask[]> {
+  const tasks: SdkTask[] = []
+  let cursor: string | undefined
+  do {
+    const result = await list_tasks_for_directory(get_directory(), {
+      cursor,
+      limit: 1000,
+    })
+    tasks.push(...result.tasks.map(map_task))
+    cursor = result.nextCursor
+  } while (cursor)
+  return tasks
+}
+
+function collect_descendants(tasks: SdkTask[], parentId: string): string[] {
+  const byParent = new Map<string, SdkTask[]>()
+  for (const task of tasks) {
+    if (!task.parentId) continue
+    const list = byParent.get(task.parentId) ?? []
+    list.push(task)
+    byParent.set(task.parentId, list)
+  }
+
+  const result: string[] = []
+  const queue = [...(byParent.get(parentId) ?? [])]
+  while (queue.length > 0) {
+    const current = queue.shift()!
+    result.push(current.id)
+    const children = byParent.get(current.id)
+    if (children) queue.push(...children)
+  }
+  return result
+}
+
+function collect_ancestors(tasks: SdkTask[], taskId: string): string[] {
+  const byId = new Map(tasks.map((task) => [task.id, task]))
+  const result: string[] = []
+  let current = byId.get(taskId)
+  while (current?.parentId) {
+    result.push(current.parentId)
+    current = byId.get(current.parentId)
+  }
+  return result
 }
 
 const continuum: ContinuumSDK = {
@@ -256,6 +315,125 @@ const continuum: ContinuumSDK = {
     },
     delete: async (id: string): Promise<void> => {
       await delete_task_for_directory(get_directory(), id)
+    },
+    validateTransition: async (
+      id: string,
+      nextStatus: SdkTaskStatus,
+    ): Promise<SdkTaskValidationResult> => {
+      if (nextStatus === 'deleted') {
+        throw new ContinuumError(
+          'INVALID_STATUS',
+          'deleted is not a valid transition status',
+        )
+      }
+      const task = await get_task_for_directory(get_directory(), id)
+      if (!task) {
+        throw new ContinuumError('TASK_NOT_FOUND', 'Task not found')
+      }
+      const missingFields = validate_status_transition(
+        task,
+        nextStatus as TaskStatus,
+      )
+      const openBlockers =
+        nextStatus === 'completed'
+          ? await get_open_blockers_for_directory(get_directory(), id)
+          : []
+      return { missingFields, openBlockers }
+    },
+    graph: async (
+      query: SdkTaskGraphQuery,
+      taskId: string,
+    ): Promise<SdkTaskGraphResult> => {
+      if (query === 'children') {
+        const result = await list_tasks_for_directory(get_directory(), {
+          parent_id: taskId,
+          limit: 1000,
+        })
+        return { taskIds: result.tasks.map((task) => task.id) }
+      }
+
+      const tasks = await list_all_tasks()
+      if (query === 'ancestors') {
+        return { taskIds: collect_ancestors(tasks, taskId) }
+      }
+      return { taskIds: collect_descendants(tasks, taskId) }
+    },
+    steps: {
+      add: async (taskId: string, input: { steps: SdkTaskStepInput[] }) => {
+        const steps = input.steps.map((step) => ({
+          title: step.title,
+          description: step.description,
+          status: step.status,
+          position: step.position,
+          summary: step.summary ?? undefined,
+          notes: step.notes ?? undefined,
+        }))
+        const task = await add_steps_for_directory(get_directory(), {
+          task_id: taskId,
+          steps,
+        })
+        return map_task(task)
+      },
+      update: async (
+        taskId: string,
+        stepId: string,
+        input: Partial<SdkTaskStep>,
+      ) => {
+        const parsedStepId = Number(stepId)
+        if (!Number.isFinite(parsedStepId)) {
+          throw new ContinuumError('ITEM_NOT_FOUND', 'Invalid step id')
+        }
+        const task = await update_step_for_directory(get_directory(), {
+          task_id: taskId,
+          step_id: parsedStepId,
+          title: input.title,
+          description: input.description,
+          position: input.position,
+          summary: input.summary ?? undefined,
+          status: input.status,
+          notes: input.notes ?? undefined,
+        })
+        return map_task(task)
+      },
+      complete: async (
+        taskId: string,
+        input: { stepId?: string; notes?: string } = {},
+      ) => {
+        const stepId = input.stepId ? Number(input.stepId) : undefined
+        if (input.stepId && !Number.isFinite(stepId)) {
+          throw new ContinuumError('ITEM_NOT_FOUND', 'Invalid step id')
+        }
+        const task = await complete_step_for_directory(get_directory(), {
+          task_id: taskId,
+          step_id: stepId,
+          notes: input.notes,
+        })
+        return map_task(task)
+      },
+    },
+    notes: {
+      add: async (
+        taskId: string,
+        input: SdkTaskNoteInput & { kind: 'discovery' | 'decision' },
+      ) => {
+        if (input.kind === 'discovery') {
+          const task = await add_discovery_for_directory(get_directory(), {
+            task_id: taskId,
+            content: input.content,
+            source: input.source,
+            impact: input.impact,
+          })
+          return map_task(task)
+        }
+        const task = await add_decision_for_directory(get_directory(), {
+          task_id: taskId,
+          content: input.content,
+          rationale: input.rationale ?? undefined,
+          source: input.source,
+          impact: input.impact,
+        })
+        return map_task(task)
+      },
     },
   },
 }

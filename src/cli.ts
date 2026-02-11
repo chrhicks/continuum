@@ -13,6 +13,9 @@ export async function main(): Promise<void> {
     .name('continuum')
     .description('Continuum CLI - Task and memory management system')
     .version('0.1.0')
+    .option('--json', 'Output JSON responses')
+    .option('--cwd <path>', 'Run in target directory')
+    .option('--quiet', 'Suppress non-JSON output')
     .showHelpAfterError()
     .showSuggestionAfterError()
     .addCommand(createMemoryCommand())
@@ -20,6 +23,17 @@ export async function main(): Promise<void> {
     .addCommand(createLoopCommand())
 
   program.exitOverride()
+
+  program.hook('preAction', (_thisCommand, actionCommand) => {
+    let root = actionCommand as Command
+    while (root.parent) {
+      root = root.parent
+    }
+    const options = root.opts<{ cwd?: string }>()
+    if (options.cwd) {
+      process.chdir(options.cwd)
+    }
+  })
 
   if (process.argv.length <= 2) {
     program.outputHelp()

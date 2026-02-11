@@ -20,20 +20,43 @@ continuum memory consolidate
 continuum memory status
 ```
 
-## Tasks (MVP)
+## Tasks (CLI)
 
 ```bash
 # Initialize task database in your project
 continuum task init
 
-# List tasks
-continuum task list
-continuum task list --status=open
-continuum task list --type=feature
+# List tasks (filtering + paging)
+continuum task list --status=ready --type=feature
+continuum task list --parent tkt-abc12345 --limit 50
 
 # View task details
-continuum task view tkt-abc12345
-continuum task view tkt-abc12345 --tree
+continuum task get tkt-abc12345
+continuum task get tkt-abc12345 --tree
+
+# Create/update/complete
+continuum task create --title "Fix login redirect" --type bug --description @desc.md
+continuum task update tkt-abc12345 --status ready
+continuum task complete tkt-abc12345 --outcome @outcome.md
+
+# Steps + notes
+continuum task steps add tkt-abc12345 --steps @steps.json
+continuum task steps complete tkt-abc12345 --notes "updated handler"
+continuum task note add tkt-abc12345 --kind discovery --content @-
+
+# Validation + graph
+continuum task validate tkt-abc12345 --transition completed
+continuum task graph descendants tkt-abc12345
+```
+
+Global flags:
+
+```bash
+# JSON output (machine-friendly)
+continuum --json task list --status=open
+
+# Run in another repo without cd
+continuum --cwd /path/to/repo task list
 ```
 
 ## SDK Usage
@@ -88,7 +111,7 @@ Notes:
 - Use `task.list({ includeDeleted: true })` to include deleted tasks.
 - `init()` returns `initialized` and `created` flags in `initStatus`.
 
-For full types and documentation, point your agent at `src/sdk.d.ts`.
+For full types and documentation, point your agent at `src/sdk/types.ts`.
 
 ## Architecture
 

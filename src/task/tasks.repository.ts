@@ -156,7 +156,10 @@ async function validate_blockers(
   return unique.filter((id) => !found.has(id))
 }
 
-async function has_open_blockers(db: DbClient, task: Task): Promise<string[]> {
+export async function has_open_blockers(
+  db: DbClient,
+  task: Task,
+): Promise<string[]> {
   if (task.blocked_by.length === 0) return []
   const rows = await db
     .select({ id: tasks.id, status: tasks.status })

@@ -361,6 +361,8 @@ export interface TaskStepInput {
   description: string
   status?: TaskStepStatus
   position?: number | null
+  summary?: string | null
+  notes?: string | null
 }
 
 /**
@@ -381,6 +383,17 @@ export interface TaskNoteInput {
 
 export interface CompleteTaskInput {
   outcome: string
+}
+
+export type TaskGraphQuery = 'ancestors' | 'descendants' | 'children'
+
+export interface TaskGraphResult {
+  taskIds: string[]
+}
+
+export interface TaskValidationResult {
+  missingFields: string[]
+  openBlockers: string[]
 }
 
 /**
@@ -492,5 +505,28 @@ export interface ContinuumSDK {
      * - removing a task that should no longer appear in lists
      */
     delete: (id: string) => Promise<void>
+    validateTransition: (
+      id: string,
+      nextStatus: TaskStatus,
+    ) => Promise<TaskValidationResult>
+    graph: (query: TaskGraphQuery, taskId: string) => Promise<TaskGraphResult>
+    steps: {
+      add: (taskId: string, input: { steps: TaskStepInput[] }) => Promise<Task>
+      update: (
+        taskId: string,
+        stepId: string,
+        input: Partial<TaskStep>,
+      ) => Promise<Task>
+      complete: (
+        taskId: string,
+        input?: { stepId?: string; notes?: string },
+      ) => Promise<Task>
+    }
+    notes: {
+      add: (
+        taskId: string,
+        input: TaskNoteInput & { kind: 'discovery' | 'decision' },
+      ) => Promise<Task>
+    }
   }
 }

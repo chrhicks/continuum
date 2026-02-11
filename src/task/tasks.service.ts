@@ -26,6 +26,7 @@ import {
   get_task,
   list_tasks,
   list_tasks_by_statuses,
+  has_open_blockers,
   update_step,
   update_task,
 } from './tasks.repository'
@@ -147,4 +148,16 @@ export async function add_decision_for_directory(
 ): Promise<Task> {
   const db = await get_task_db(directory)
   return add_decision(db, input)
+}
+
+export async function get_open_blockers_for_directory(
+  directory: string,
+  task_id: string,
+): Promise<string[]> {
+  const db = await get_task_db(directory)
+  const task = await get_task(db, task_id)
+  if (!task) {
+    throw new ContinuumError('TASK_NOT_FOUND', 'Task not found')
+  }
+  return has_open_blockers(db, task)
 }
