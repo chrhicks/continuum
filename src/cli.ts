@@ -2,6 +2,8 @@ import { Command } from 'commander'
 import { createMemoryCommand, endSessionIfActive } from './cli/commands/memory'
 import { createTaskCommand } from './cli/commands/task'
 import { createLoopCommand } from './cli/commands/loop'
+import { runCommand } from './cli/io'
+import continuum from './sdk'
 
 let exitHandlersInstalled = false
 
@@ -18,9 +20,36 @@ export async function main(): Promise<void> {
     .option('--quiet', 'Suppress non-JSON output')
     .showHelpAfterError()
     .showSuggestionAfterError()
-    .addCommand(createMemoryCommand())
-    .addCommand(createTaskCommand())
-    .addCommand(createLoopCommand())
+
+  program
+    .command('init')
+    .description('Initialize continuum database in current directory')
+    .action(async (_options: unknown, command: Command) => {
+      await runCommand(
+        command,
+        async () => {
+          const status = await continuum.task.init()
+          return { status }
+        },
+        ({ status }) => {
+          if (!status.created) {
+            console.log('Continuum is already initialized in this directory.')
+            console.log(`Database: ${process.cwd()}/.continuum/continuum.db`)
+            return
+          }
+          console.log('Initialized continuum in current directory.')
+          console.log(`Database: ${process.cwd()}/.continuum/continuum.db`)
+          console.log('')
+          console.log('Next steps:')
+          console.log('  continuum task list              List tasks')
+          console.log('  continuum task get <task_id>     View task details')
+        },
+      )
+    })
+
+  program.addCommand(createMemoryCommand())
+  program.addCommand(createTaskCommand())
+  program.addCommand(createLoopCommand())
 
   program.exitOverride()
 

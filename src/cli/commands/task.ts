@@ -5,10 +5,14 @@ import type {
   TaskGraphQuery,
   TaskStatus,
   TaskStepStatus,
-  TaskStepInput,
   TaskType,
 } from '../../sdk/types'
 import { parseIdList, readInput, readJsonInput, runCommand } from '../io'
+import {
+  TASK_STEP_JSON_SCHEMA,
+  TASK_STEP_TEMPLATE,
+  validateTaskStepsInput,
+} from '../task-steps'
 
 type TaskListOptions = {
   status?: string
@@ -61,6 +65,10 @@ type TaskValidateOptions = {
 
 type TaskStepsAddOptions = {
   steps?: string
+}
+
+type TaskStepsTemplateOptions = {
+  schema?: boolean
 }
 
 type TaskStepsUpdateOptions = {
@@ -237,9 +245,12 @@ export function createTaskCommand(): Command {
     .option('--blocked-by <ids...>', 'Comma-separated blocker IDs')
     .action(
       async (options: TaskCreateOptions, command: Command): Promise<void> => {
+        let initCreated = false
         await runCommand(
           command,
           async () => {
+            const initStatus = await continuum.task.init()
+            initCreated = initStatus.created
             const inputFromFile = await readJsonInput<
               Partial<{
                 title: string
@@ -291,6 +302,12 @@ export function createTaskCommand(): Command {
             return { task }
           },
           ({ task }) => {
+            if (initCreated) {
+              console.log(
+                `Initialized continuum in current directory and created task ${task.id}`,
+              )
+              return
+            }
             console.log(`Created task ${task.id}`)
           },
         )
@@ -495,7 +512,31 @@ export function createTaskCommand(): Command {
     })
   taskCommand.addCommand(templatesCommand)
 
-  const stepsCommand = new Command('steps').description('Manage task steps')
+  const stepsCommand = new Command('steps')
+    .alias('step')
+    .description('Manage task steps')
+  stepsCommand
+    .command('template')
+    .description('Print steps JSON template')
+    .option('--schema', 'Print JSON schema')
+    .action(
+      async (
+        options: TaskStepsTemplateOptions,
+        command: Command,
+      ): Promise<void> => {
+        await runCommand(
+          command,
+          async () => ({
+            template: TASK_STEP_TEMPLATE,
+            schema: TASK_STEP_JSON_SCHEMA,
+          }),
+          ({ template, schema }) => {
+            const payload = options.schema ? schema : template
+            console.log(JSON.stringify(payload, null, 2))
+          },
+        )
+      },
+    )
   stepsCommand
     .command('add')
     .description('Add steps to a task')
@@ -510,10 +551,11 @@ export function createTaskCommand(): Command {
         await runCommand(
           command,
           async () => {
-            const steps = await readJsonInput<TaskStepInput[]>(options.steps)
-            if (!steps || !Array.isArray(steps) || steps.length === 0) {
+            const rawSteps = await readJsonInput<unknown>(options.steps)
+            if (rawSteps === undefined) {
               throw new Error('Missing required option: --steps')
             }
+            const steps = validateTaskStepsInput(rawSteps)
             const task = await continuum.task.steps.add(taskId, { steps })
             return { task }
           },
@@ -612,7 +654,7 @@ export function createTaskCommand(): Command {
     .command('list')
     .description('List task steps')
     .argument('<task_id>', 'Task ID')
-    .action(async (taskId: string, command: Command) => {
+    .action(async (taskId: string, _options: unknown, command: Command) => {
       await runCommand(
         command,
         async () => {
@@ -652,7 +694,7 @@ export function createTaskCommand(): Command {
     .option('--content <content>', 'Note content (@file or @-)')
     .option('--rationale <rationale>', 'Decision rationale')
     .option('--impact <impact>', 'Impact summary')
-    .option('--source <source>', 'user, agent, or system')
+    .option('--source <source>', 'user, agent, or system (default: agent)')
     .action(
       async (taskId: string, options: TaskNoteAddOptions, command: Command) => {
         await runCommand(
@@ -825,7 +867,7 @@ function parseNoteKind(value: string): 'discovery' | 'decision' {
 }
 
 function parseNoteSource(value?: string): 'user' | 'agent' | 'system' {
-  if (!value) return 'system'
+  if (!value) return 'agent'
   const normalized = value.trim()
   if (
     normalized === 'user' ||

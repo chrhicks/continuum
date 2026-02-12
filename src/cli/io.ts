@@ -36,7 +36,18 @@ export function getGlobalOptions(command: Command): GlobalCliOptions {
 export async function readInput(value?: string): Promise<string | undefined> {
   if (value === undefined) return undefined
   if (value === '@-') {
-    return readStdin()
+    if (process.stdin.isTTY) {
+      throw new Error(
+        "No stdin detected for '@-'. Pipe input or use @file instead. Example: cat notes.md | continuum task note add tkt-123 --content @-",
+      )
+    }
+    const stdin = await readStdin()
+    if (!stdin) {
+      throw new Error(
+        "No stdin detected for '@-'. Pipe input or use @file instead. Example: cat notes.md | continuum task note add tkt-123 --content @-",
+      )
+    }
+    return stdin
   }
   if (value.startsWith('@')) {
     const path = value.slice(1)

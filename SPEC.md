@@ -9,6 +9,7 @@ A file-based memory system for OpenCode agents that provides context persistence
 Task metadata lives in `.continuum/continuum.db` and is available via the CLI.
 
 ```bash
+continuum init
 continuum task init
 continuum task list [--status=<status>] [--type=<type>]
 continuum task view <task_id> [--tree]

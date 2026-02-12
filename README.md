@@ -24,6 +24,7 @@ continuum memory status
 
 ```bash
 # Initialize task database in your project
+continuum init
 continuum task init
 
 # List tasks (filtering + paging)
