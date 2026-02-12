@@ -43,10 +43,24 @@ CLI (use this for every call):
 Cheat Sheet:
 - Task init: `task init`
 - Create: `task create --title ... --type ... --description @- --plan @- --intent "..."`
-- Steps: `task steps add <task_id> --steps @steps.json`
+- Steps (inline JSON): `task steps add <task_id> --steps '[{"title":"...","description":"...","position":1}]'`
 - Notes: `task note add <task_id> --kind discovery --content @-`
 - Validate: `task validate <task_id> --transition completed`
 - Complete: `task complete <task_id> --outcome @-`
+
+Heredoc examples:
+```
+
+task steps add <task_id> --steps @- <<'EOF'
+[
+{ "title": "...", "description": "...", "position": 1 }
+]
+EOF
+task note add <task_id> --kind discovery --content @- <<'EOF'
+...
+EOF
+
+```
 
 Begin.
 ```

@@ -36,16 +36,17 @@ export function getGlobalOptions(command: Command): GlobalCliOptions {
 export async function readInput(value?: string): Promise<string | undefined> {
   if (value === undefined) return undefined
   if (value === '@-') {
+    const stdinMessage = `No stdin detected for '@-'. Pipe input, use a heredoc, or use @file instead.
+Example:
+continuum task note add tkt-123 --content @- <<'EOF'
+Your notes here
+EOF`
     if (process.stdin.isTTY) {
-      throw new Error(
-        "No stdin detected for '@-'. Pipe input or use @file instead. Example: cat notes.md | continuum task note add tkt-123 --content @-",
-      )
+      throw new Error(stdinMessage)
     }
     const stdin = await readStdin()
     if (!stdin) {
-      throw new Error(
-        "No stdin detected for '@-'. Pipe input or use @file instead. Example: cat notes.md | continuum task note add tkt-123 --content @-",
-      )
+      throw new Error(stdinMessage)
     }
     return stdin
   }

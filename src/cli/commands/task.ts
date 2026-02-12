@@ -541,7 +541,7 @@ export function createTaskCommand(): Command {
     .command('add')
     .description('Add steps to a task')
     .argument('<task_id>', 'Task ID')
-    .option('--steps <path>', 'Steps JSON array (use @file or @-)')
+    .option('--steps <steps>', 'Steps JSON array (inline JSON, @file, or @-)')
     .action(
       async (
         taskId: string,
@@ -576,8 +576,8 @@ export function createTaskCommand(): Command {
     .option('--description <description>', 'Step description (@file or @-)')
     .option('--status <status>', 'Step status')
     .option('--position <position>', 'Step position')
-    .option('--summary <summary>', 'Step summary')
-    .option('--notes <notes>', 'Step notes')
+    .option('--summary <summary>', 'Step summary (@file or @-)')
+    .option('--notes <notes>', 'Step notes (@file or @-)')
     .action(
       async (
         taskId: string,
@@ -626,7 +626,7 @@ export function createTaskCommand(): Command {
     .description('Complete a step')
     .argument('<task_id>', 'Task ID')
     .option('--step-id <step_id>', 'Step ID (defaults to current step)')
-    .option('--notes <notes>', 'Completion notes')
+    .option('--notes <notes>', 'Completion notes (@file or @-)')
     .action(
       async (
         taskId: string,
@@ -697,9 +697,9 @@ export function createTaskCommand(): Command {
     .description('Add a discovery or decision')
     .argument('<task_id>', 'Task ID')
     .option('--kind <kind>', 'discovery or decision')
-    .option('--content <content>', 'Note content (@file or @-)')
-    .option('--rationale <rationale>', 'Decision rationale')
-    .option('--impact <impact>', 'Impact summary')
+    .option('--content <content>', 'Note content (inline text, @file, or @-)')
+    .option('--rationale <rationale>', 'Decision rationale (@file or @-)')
+    .option('--impact <impact>', 'Impact summary (@file or @-)')
     .option('--source <source>', 'user, agent, or system (default: agent)')
     .action(
       async (taskId: string, options: TaskNoteAddOptions, command: Command) => {
