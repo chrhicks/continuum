@@ -41,9 +41,17 @@ continuum task update tkt-abc12345 --status ready
 continuum task complete tkt-abc12345 --outcome @outcome.md
 
 # Steps + notes
-continuum task steps add tkt-abc12345 --steps @steps.json
+continuum task steps template
+continuum task steps add tkt-abc12345 --steps '[{"title":"Update handler","description":"Fix redirect + tests","position":1}]'
+continuum task steps add tkt-abc12345 --steps @- <<'EOF'
+[
+  { "title": "Add regression test", "description": "Cover redirect behavior", "position": 2 }
+]
+EOF
 continuum task steps complete tkt-abc12345 --notes "updated handler"
-continuum task note add tkt-abc12345 --kind discovery --content @-
+continuum task note add tkt-abc12345 --kind discovery --content @- <<'EOF'
+Missing role claim caused redirect to /.
+EOF
 
 # Validation + graph
 continuum task validate tkt-abc12345 --transition completed

@@ -306,7 +306,9 @@ describe('task CLI', () => {
 
 describe('cli input', () => {
   test("readInput rejects '@-' without stdin", async () => {
-    await expect(readInput('@-')).rejects.toThrow("No stdin detected for '@-'.")
+    await expect(readInput('@-')).rejects.toThrow(
+      "No stdin detected for '@-'. Pipe input, use a heredoc, or use @file instead.",
+    )
   })
 })
 

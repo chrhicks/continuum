@@ -11,8 +11,16 @@ bun run /path/to/continuum/bin/continuum --cwd <REPO_DIR> --json <command>
 ```
 task init
 task create --title "..." --type feature --intent "..." --description @- --plan @-
-task steps add <task_id> --steps @steps.json
-task note add <task_id> --kind discovery --content @-
+task steps template
+task steps add <task_id> --steps '[{"title":"Investigate failure","description":"Reproduce issue","position":1}]'
+task steps add <task_id> --steps @- <<'EOF'
+[
+  { "title": "Investigate failure", "description": "Reproduce issue", "position": 1 }
+]
+EOF
+task note add <task_id> --kind discovery --content @- <<'EOF'
+Captured logs and repro steps.
+EOF
 task validate <task_id> --transition completed
 task complete <task_id> --outcome @-
 ```
