@@ -127,10 +127,10 @@ export function createTaskCommand(): Command {
           }
           console.log('Initialized continuum in current directory.')
           console.log(`Database: ${process.cwd()}/.continuum/continuum.db`)
-          console.log('')
-          console.log('Next steps:')
-          console.log('  continuum task list              List tasks')
-          console.log('  continuum task get <task_id>     View task details')
+          renderNextSteps([
+            'continuum task list              List tasks',
+            'continuum task get <task_id>     View task details',
+          ])
         },
       )
     })
@@ -306,9 +306,13 @@ export function createTaskCommand(): Command {
               console.log(
                 `Initialized continuum in current directory and created task ${task.id}`,
               )
-              return
+            } else {
+              console.log(`Created task ${task.id}`)
             }
-            console.log(`Created task ${task.id}`)
+            renderNextSteps([
+              `continuum task steps add ${task.id} --steps '[{"title":"...","description":"...","position":1}]'`,
+              `continuum task note add ${task.id} --kind discovery --content "..."`,
+            ])
           },
         )
       },
@@ -561,6 +565,10 @@ export function createTaskCommand(): Command {
           },
           ({ task }) => {
             console.log(`Updated steps for ${task.id}`)
+            renderNextSteps([
+              `continuum task steps complete ${task.id} --notes "Done"`,
+              `continuum task validate ${task.id} --transition completed`,
+            ])
           },
         )
       },
@@ -883,6 +891,15 @@ function parseNoteSource(value?: string): 'user' | 'agent' | 'system' {
     return normalized
   }
   throw new Error('Invalid source. Use: user, agent, or system.')
+}
+
+function renderNextSteps(steps: string[]): void {
+  if (steps.length === 0) return
+  console.log('')
+  console.log('Next steps:')
+  for (const step of steps) {
+    console.log(`  ${step}`)
+  }
 }
 
 function renderTaskList(tasks: Task[]): void {
