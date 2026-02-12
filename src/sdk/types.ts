@@ -396,6 +396,11 @@ export interface TaskValidationResult {
   openBlockers: string[]
 }
 
+export interface TaskStepCompleteResult {
+  task: Task
+  warnings?: string[]
+}
+
 /**
  * Patch operations for nested collections on a task.
  *
@@ -520,7 +525,7 @@ export interface ContinuumSDK {
       complete: (
         taskId: string,
         input?: { stepId?: string; notes?: string },
-      ) => Promise<Task>
+      ) => Promise<TaskStepCompleteResult>
     }
     notes: {
       add: (

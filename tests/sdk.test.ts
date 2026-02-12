@@ -181,4 +181,37 @@ describe('sdk flows', () => {
       expect(completed.status).toBe('completed')
     })
   })
+
+  test('steps complete warns on duplicate completion', async () => {
+    await withTempCwd(async () => {
+      await continuum.task.init()
+
+      const task = await continuum.task.create({
+        title: 'Duplicate completion warning',
+        type: 'feature',
+        description: 'Warn when completing the same step twice.',
+      })
+
+      const withSteps = await continuum.task.steps.add(task.id, {
+        steps: [
+          {
+            title: 'Step 1',
+            description: 'First step.',
+            position: 1,
+          },
+        ],
+      })
+      const stepId = withSteps.steps[0]?.id
+      if (!stepId) {
+        throw new Error('Missing step id')
+      }
+
+      const first = await continuum.task.steps.complete(task.id, { stepId })
+      expect(first.warnings ?? []).toHaveLength(0)
+
+      const second = await continuum.task.steps.complete(task.id, { stepId })
+      expect(second.warnings?.length).toBe(1)
+      expect(second.warnings?.[0]).toContain('already completed')
+    })
+  })
 })

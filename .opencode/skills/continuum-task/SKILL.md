@@ -218,6 +218,8 @@ Complete a step:
 bun run bin/continuum task steps complete <task_id> --step-id <step_id> --notes "Done"
 ```
 
+Note: completing an already completed step returns a warning and makes no changes.
+
 List steps:
 
 ```bash

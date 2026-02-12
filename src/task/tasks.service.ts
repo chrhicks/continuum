@@ -6,6 +6,7 @@ import type {
   AddDiscoveryInput,
   AddStepsInput,
   CompleteStepInput,
+  CompleteStepResult,
   CompleteTaskInput,
   CreateTaskInput,
   ListTaskFilters,
@@ -121,7 +122,7 @@ export async function add_steps_for_directory(
 export async function complete_step_for_directory(
   directory: string,
   input: CompleteStepInput,
-): Promise<Task> {
+): Promise<CompleteStepResult> {
   const db = await get_task_db(directory)
   return complete_step(db, input)
 }

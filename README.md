@@ -50,6 +50,8 @@ continuum task validate tkt-abc12345 --transition completed
 continuum task graph descendants tkt-abc12345
 ```
 
+Note: repeating `task steps complete` for an already completed step returns a warning and makes no changes.
+
 Global flags:
 
 ```bash

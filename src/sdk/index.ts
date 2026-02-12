@@ -403,12 +403,12 @@ const continuum: ContinuumSDK = {
         if (input.stepId && !Number.isFinite(stepId)) {
           throw new ContinuumError('ITEM_NOT_FOUND', 'Invalid step id')
         }
-        const task = await complete_step_for_directory(get_directory(), {
+        const result = await complete_step_for_directory(get_directory(), {
           task_id: taskId,
           step_id: stepId,
           notes: input.notes,
         })
-        return map_task(task)
+        return { task: map_task(result.task), warnings: result.warnings }
       },
     },
     notes: {

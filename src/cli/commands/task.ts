@@ -637,13 +637,19 @@ export function createTaskCommand(): Command {
           command,
           async () => {
             const notes = await readInput(options.notes)
-            const task = await continuum.task.steps.complete(taskId, {
+            const result = await continuum.task.steps.complete(taskId, {
               stepId: options.stepId,
               notes,
             })
-            return { task }
+            return result
           },
-          ({ task }) => {
+          ({ task, warnings }) => {
+            if (warnings && warnings.length > 0) {
+              for (const warning of warnings) {
+                console.log(`Warning: ${warning}`)
+              }
+              return
+            }
             console.log(`Updated steps for ${task.id}`)
           },
         )

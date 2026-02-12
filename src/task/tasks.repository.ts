@@ -9,6 +9,7 @@ import type {
   AddDiscoveryInput,
   AddStepsInput,
   CompleteStepInput,
+  CompleteStepResult,
   CompleteTaskInput,
   CreateTaskInput,
   Decision,
@@ -689,7 +690,7 @@ export async function add_steps(
 export async function complete_step(
   db: DbClient,
   input: CompleteStepInput,
-): Promise<Task> {
+): Promise<CompleteStepResult> {
   const task = await get_task(db, input.task_id)
   if (!task) {
     throw new ContinuumError('TASK_NOT_FOUND', 'Task not found')
@@ -710,6 +711,12 @@ export async function complete_step(
   }
 
   const existingStep = task.steps[stepIndex]!
+  if (existingStep.status === 'completed') {
+    return {
+      task,
+      warnings: [`Step ${existingStep.id} already completed; no changes made.`],
+    }
+  }
   const updatedSteps = [...task.steps]
   updatedSteps[stepIndex] = {
     id: existingStep.id,
@@ -740,7 +747,7 @@ export async function complete_step(
     .where(eq(tasks.id, input.task_id))
     .run()
 
-  return (await get_task(db, input.task_id))!
+  return { task: (await get_task(db, input.task_id))! }
 }
 
 export async function update_step(

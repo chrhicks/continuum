@@ -252,6 +252,56 @@ describe('task CLI', () => {
       }
     })
   })
+
+  test('task steps complete warns on duplicate completion', async () => {
+    await withTempCwd(async () => {
+      await continuum.task.init()
+      const task = await continuum.task.create({
+        title: 'Duplicate completion warning',
+        type: 'feature',
+        description: 'Warn when completing the same step twice.',
+      })
+      const withSteps = await continuum.task.steps.add(task.id, {
+        steps: [
+          {
+            title: 'Step 1',
+            description: 'First step.',
+            position: 1,
+          },
+        ],
+      })
+      const stepId = withSteps.steps[0]?.id
+      if (!stepId) {
+        throw new Error('Missing step id')
+      }
+
+      const originalArgv = process.argv
+      process.argv = [
+        'node',
+        'continuum',
+        'task',
+        'steps',
+        'complete',
+        task.id,
+        '--step-id',
+        stepId,
+      ]
+
+      try {
+        await withCapturedLogs(async () => {
+          await main()
+        })
+        const logs = await withCapturedLogs(async () => {
+          await main()
+        })
+        const output = logs.join('\n')
+        expect(output).toContain('Warning:')
+        expect(output).toContain('already completed')
+      } finally {
+        process.argv = originalArgv
+      }
+    })
+  })
 })
 
 describe('cli input', () => {

@@ -171,6 +171,11 @@ export interface CompleteStepInput {
   notes?: string
 }
 
+export interface CompleteStepResult {
+  task: Task
+  warnings?: string[]
+}
+
 export interface UpdateStepInput {
   task_id: string
   step_id: number
