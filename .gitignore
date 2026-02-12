@@ -3,11 +3,14 @@ node_modules/
 dist/
 .env
 
+.continuum/
 .continuum/memory/
 .continuum/loop/
 .continuum/continuum.db
 
-.opencode/plugins/
+.opencode/
+
+runs/
 
 *.tmp
 *.lock
