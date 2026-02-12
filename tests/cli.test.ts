@@ -136,12 +136,16 @@ describe('task CLI', () => {
         const logs = await withCapturedLogs(async () => {
           await main()
         })
+        const output = logs.join('\n')
         const dbPath = join(process.cwd(), '.continuum', 'continuum.db')
         expect(existsSync(dbPath)).toBe(true)
         expect(
           logs.some((line) => line.includes('Initialized continuum')),
         ).toBe(true)
         expect(logs.some((line) => line.includes('created task'))).toBe(true)
+        expect(output).toContain('Next steps:')
+        expect(output).toContain('continuum task steps add')
+        expect(output).toContain('continuum task note add')
       } finally {
         process.argv = originalArgv
       }
@@ -205,6 +209,52 @@ describe('task CLI', () => {
         const output = logs.join('\n')
         expect(output).toContain('"title"')
         expect(output).toContain('"description"')
+      } finally {
+        process.argv = originalArgv
+      }
+    })
+  })
+
+  test('task steps add prints next-step hints', async () => {
+    await withTempCwd(async () => {
+      await continuum.task.init()
+      const task = await continuum.task.create({
+        title: 'Steps hints',
+        type: 'feature',
+        description: 'Ensure next-step hints are printed.',
+      })
+      const stepsPath = join(process.cwd(), 'steps.json')
+      writeFileSync(
+        stepsPath,
+        JSON.stringify(
+          [{ title: 'Step 1', description: 'First step.', position: 1 }],
+          null,
+          2,
+        ),
+        'utf-8',
+      )
+
+      const originalArgv = process.argv
+      process.argv = [
+        'node',
+        'continuum',
+        'task',
+        'steps',
+        'add',
+        task.id,
+        '--steps',
+        `@${stepsPath}`,
+      ]
+
+      try {
+        const logs = await withCapturedLogs(async () => {
+          await main()
+        })
+        const output = logs.join('\n')
+        expect(output).toContain('Updated steps for')
+        expect(output).toContain('Next steps:')
+        expect(output).toContain('continuum task steps complete')
+        expect(output).toContain('continuum task validate')
       } finally {
         process.argv = originalArgv
       }
