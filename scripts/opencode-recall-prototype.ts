@@ -1,12 +1,7 @@
-import {
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  writeFileSync,
-} from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { resolve, join, isAbsolute } from 'node:path'
 import { homedir } from 'node:os'
+import { Database } from 'bun:sqlite'
 import { serializeFrontmatter } from '../src/utils/frontmatter.ts'
 
 type SessionRecord = {
@@ -43,6 +38,43 @@ type PartRecord = {
 type ProjectRecord = {
   id: string
   worktree?: string
+}
+
+type ProjectRow = {
+  id: string
+  worktree: string
+}
+
+type SessionRow = {
+  id: string
+  project_id: string
+  slug: string
+  title: string
+  directory: string
+  version: string
+  parent_id: string | null
+  summary_additions: number | null
+  summary_deletions: number | null
+  summary_files: number | null
+  time_created: number
+  time_updated: number
+}
+
+type MessageRow = {
+  id: string
+  session_id: string
+  time_created: number
+  time_updated: number
+  data: string
+}
+
+type PartRow = {
+  id: string
+  message_id: string
+  session_id: string
+  time_created: number
+  time_updated: number
+  data: string
 }
 
 type NormalizedMessage = {
@@ -119,9 +151,6 @@ const getArgValue = (name: string) => {
   return null
 }
 
-const readJson = <T>(filePath: string): T =>
-  JSON.parse(readFileSync(filePath, 'utf-8')) as T
-
 const loadDotEnv = (filePath: string): void => {
   if (!existsSync(filePath)) return
   const raw = readFileSync(filePath, 'utf-8')
@@ -142,6 +171,125 @@ const loadDotEnv = (filePath: string): void => {
     }
     process.env[key] = value
   }
+}
+
+const resolveDbPath = (value: string | null): string => {
+  if (value) return isAbsolute(value) ? value : resolve(process.cwd(), value)
+  const dataHome = process.env.XDG_DATA_HOME
+  return join(
+    dataHome ?? join(homedir(), '.local', 'share'),
+    'opencode',
+    'opencode.db',
+  )
+}
+
+const parseJsonData = <T>(value: string, context: string): T => {
+  try {
+    return JSON.parse(value) as T
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    throw new Error(`Failed to parse ${context}: ${detail}`)
+  }
+}
+
+const mapSessionRow = (row: SessionRow): SessionRecord => {
+  return {
+    id: row.id,
+    slug: row.slug ?? undefined,
+    version: row.version ?? undefined,
+    projectID: row.project_id,
+    directory: row.directory ?? undefined,
+    title: row.title ?? undefined,
+    parentID: row.parent_id ?? undefined,
+    time: {
+      created: row.time_created,
+      updated: row.time_updated,
+    },
+  }
+}
+
+const mapMessageRow = (row: MessageRow): MessageRecord => {
+  const data = parseJsonData<Record<string, unknown>>(
+    row.data,
+    `message ${row.id}`,
+  )
+  const role = typeof data.role === 'string' ? data.role : 'unknown'
+  const parentID =
+    typeof data.parentID === 'string'
+      ? data.parentID
+      : typeof data.parent_id === 'string'
+        ? data.parent_id
+        : undefined
+  const summary =
+    data.summary && typeof data.summary === 'object'
+      ? (data.summary as { title?: string })
+      : undefined
+  const timeValue =
+    data.time && typeof data.time === 'object' ? data.time : null
+  const created =
+    timeValue && typeof (timeValue as { created?: number }).created === 'number'
+      ? (timeValue as { created?: number }).created
+      : row.time_created
+  const completed =
+    timeValue &&
+    typeof (timeValue as { completed?: number }).completed === 'number'
+      ? (timeValue as { completed?: number }).completed
+      : undefined
+
+  return {
+    id: row.id,
+    sessionID: row.session_id,
+    role,
+    parentID,
+    time: {
+      created,
+      completed,
+    },
+    summary,
+  }
+}
+
+const mapPartRow = (row: PartRow): PartRecord => {
+  const data = parseJsonData<Record<string, unknown>>(
+    row.data,
+    `part ${row.id}`,
+  )
+  const type = typeof data.type === 'string' ? data.type : 'unknown'
+  const text = typeof data.text === 'string' ? data.text : undefined
+  const tool = typeof data.tool === 'string' ? data.tool : undefined
+  const time =
+    data.time && typeof data.time === 'object'
+      ? (data.time as { start?: number; end?: number })
+      : undefined
+  const state =
+    data.state && typeof data.state === 'object'
+      ? (data.state as {
+          status?: string
+          time?: { start?: number; end?: number }
+        })
+      : undefined
+
+  return {
+    id: row.id,
+    sessionID: row.session_id,
+    messageID: row.message_id,
+    type,
+    text,
+    tool,
+    time,
+    state,
+  }
+}
+
+const groupByKey = <T>(items: T[], getKey: (item: T) => string) => {
+  return items.reduce<Record<string, T[]>>((acc, item) => {
+    const key = getKey(item)
+    const group = acc[key] ?? []
+    return {
+      ...acc,
+      [key]: [...group, item],
+    }
+  }, {})
 }
 
 const toIso = (value?: number | null): string | null => {
@@ -1003,8 +1151,9 @@ const run = async () => {
     )
     console.log('  --limit <n>       Limit sessions processed (default: 5)')
     console.log('  --session <id>    Process a single session id')
+    console.log('  --project <id>    Process sessions for a project id')
     console.log(
-      '  --storage <path>  OpenCode storage root (default: ~/.local/share/opencode/storage)',
+      '  --db <path>       OpenCode sqlite database (default: ~/.local/share/opencode/opencode.db)',
     )
     console.log('  --summarize       Generate LLM summary docs')
     console.log(
@@ -1051,14 +1200,12 @@ const run = async () => {
 
   const repoPath = resolve(process.cwd(), getArgValue('--repo') ?? '.')
   loadDotEnv(resolve(repoPath, '.env'))
-  const storageRoot = resolve(
-    getArgValue('--storage') ??
-      join(homedir(), '.local/share/opencode/storage'),
-  )
+  const dbPath = resolveDbPath(getArgValue('--db'))
   const outDir = resolveOutputDir(repoPath, getArgValue('--out'))
   const limitRaw = getArgValue('--limit')
   const limit = limitRaw ? Number(limitRaw) : 5
   const sessionFilter = getArgValue('--session')
+  const projectFilter = getArgValue('--project')
   const summaryInput = getFlag('--summary-input')
   const summarize = getFlag('--summarize')
   const summaryDebug = getFlag('--summary-debug')
@@ -1116,27 +1263,34 @@ const run = async () => {
     }
   }
 
-  if (!existsSync(storageRoot)) {
-    throw new Error(`OpenCode storage not found: ${storageRoot}`)
+  if (!existsSync(dbPath)) {
+    throw new Error(
+      `OpenCode sqlite database not found: ${dbPath}. OpenCode 1.2.0+ is required.`,
+    )
   }
 
-  const projectDir = join(storageRoot, 'project')
-  const projectFiles = existsSync(projectDir)
-    ? readdirSync(projectDir).filter((name) => name.endsWith('.json'))
-    : []
+  const db = new Database(dbPath)
   const resolvedRepo = resolve(repoPath)
+  const projectRows = db
+    .query('SELECT id, worktree FROM project')
+    .all() as ProjectRow[]
+  const projectRow = projectFilter
+    ? (projectRows.find((candidate) => candidate.id === projectFilter) ?? null)
+    : (projectRows.find(
+        (candidate) =>
+          candidate.worktree && resolve(candidate.worktree) === resolvedRepo,
+      ) ?? null)
 
-  let project: ProjectRecord | null = null
-  for (const file of projectFiles) {
-    const candidate = readJson<ProjectRecord>(join(projectDir, file))
-    if (candidate.worktree && resolve(candidate.worktree) === resolvedRepo) {
-      project = candidate
-      break
+  if (!projectRow) {
+    if (projectFilter) {
+      throw new Error(`No OpenCode project found for id: ${projectFilter}`)
     }
+    throw new Error(`No OpenCode project found for repo: ${resolvedRepo}`)
   }
 
-  if (!project) {
-    throw new Error(`No OpenCode project found for repo: ${resolvedRepo}`)
+  const project: ProjectRecord = {
+    id: projectRow.id,
+    worktree: projectRow.worktree,
   }
 
   const summaryConfig: SummaryClientConfig | null = summarize
@@ -1150,18 +1304,24 @@ const run = async () => {
       }
     : null
 
-  const sessionDir = join(storageRoot, 'session', project.id)
-  if (!existsSync(sessionDir)) {
-    throw new Error(`Session directory not found: ${sessionDir}`)
-  }
-
-  let sessions = readdirSync(sessionDir)
-    .filter((name) => name.endsWith('.json'))
-    .map((name) => readJson<SessionRecord>(join(sessionDir, name)))
-
+  const sessionConditions = ['project_id = ?']
+  const sessionParams: string[] = [project.id]
   if (sessionFilter) {
-    sessions = sessions.filter((session) => session.id === sessionFilter)
+    sessionConditions.push('id = ?')
+    sessionParams.push(sessionFilter)
   }
+  const sessionWhere = `WHERE ${sessionConditions.join(' AND ')}`
+  const sessionRows = db
+    .query(
+      `SELECT id, project_id, slug, title, directory, version, parent_id,
+        summary_additions, summary_deletions, summary_files,
+        time_created, time_updated
+      FROM session
+      ${sessionWhere}`,
+    )
+    .all(sessionParams) as SessionRow[]
+
+  let sessions = sessionRows.map(mapSessionRow)
 
   sessions = sortByNumber(
     sessions,
@@ -1183,16 +1343,13 @@ const run = async () => {
 
   const outputPaths: string[] = []
   for (const session of limitedSessions) {
-    const messageDir = join(storageRoot, 'message', session.id)
-    const messageFiles = existsSync(messageDir)
-      ? readdirSync(messageDir).filter((name) => name.endsWith('.json'))
-      : []
-
-    let messages = messageFiles.map((name) =>
-      readJson<MessageRecord>(join(messageDir, name)),
-    )
-    messages = sortByNumber(
-      messages,
+    const messageRows = db
+      .query(
+        'SELECT id, session_id, time_created, time_updated, data FROM message WHERE session_id = ?',
+      )
+      .all([session.id]) as MessageRow[]
+    const messages = sortByNumber(
+      messageRows.map(mapMessageRow),
       (message) =>
         typeof message.time?.created === 'number'
           ? message.time?.created
@@ -1200,16 +1357,16 @@ const run = async () => {
       'asc',
     )
 
-    const messageBlocks = messages.map((message) => {
-      const partDir = join(storageRoot, 'part', message.id)
-      const partFiles = existsSync(partDir)
-        ? readdirSync(partDir).filter((name) => name.endsWith('.json'))
-        : []
-      let parts = partFiles.map((name) =>
-        readJson<PartRecord>(join(partDir, name)),
+    const partRows = db
+      .query(
+        'SELECT id, message_id, session_id, time_created, time_updated, data FROM part WHERE session_id = ?',
       )
+      .all([session.id]) as PartRow[]
+    const parts = partRows.map(mapPartRow)
+    const partsByMessage = groupByKey(parts, (part) => part.messageID)
 
-      parts = parts.sort((a, b) => {
+    const messageBlocks = messages.map((message) => {
+      const messageParts = (partsByMessage[message.id] ?? []).sort((a, b) => {
         const left = a.time?.start ?? a.state?.time?.start
         const right = b.time?.start ?? b.state?.time?.start
         if (typeof left === 'number' && typeof right === 'number') {
@@ -1220,7 +1377,7 @@ const run = async () => {
         return (a.id ?? '').localeCompare(b.id ?? '')
       })
 
-      return { message, parts }
+      return { message, parts: messageParts }
     })
 
     const normalizedMessages: NormalizedMessage[] = messageBlocks
@@ -1523,7 +1680,12 @@ const run = async () => {
     }
   }
 
-  console.log(`Project: ${project.id} (${resolvedRepo})`)
+  db.close()
+
+  const projectWorktree = project.worktree
+    ? resolve(project.worktree)
+    : resolvedRepo
+  console.log(`Project: ${project.id} (${projectWorktree})`)
   console.log(`Sessions processed: ${limitedSessions.length}`)
   console.log(`Output dir: ${outDir}`)
   for (const filePath of outputPaths) {

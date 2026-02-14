@@ -23,6 +23,11 @@ type SyncPlan = {
   index_file: string
   summary_dir: string
   report_file: string | null
+  project_scope?: {
+    project_ids: string[]
+    include_global: boolean
+    repo_path: string
+  }
   stats: {
     total: number
     new: number
@@ -123,6 +128,42 @@ const applyTemplate = (template: string, item: SyncPlanItem): string => {
     .join(item.project_id)
     .split('{key}')
     .join(item.key)
+}
+
+const projectFlagPattern = /--project(?:-id)?(?=\s|=|$)/
+
+const adjustTemplateForScope = (
+  template: string | null,
+  plan: SyncPlan,
+): { template: string | null; appended: boolean; warning: string | null } => {
+  if (!template) {
+    return { template, appended: false, warning: null }
+  }
+  if (!plan.project_scope?.include_global) {
+    return { template, appended: false, warning: null }
+  }
+
+  const hasProjectPlaceholder = template.includes('{project_id}')
+  const hasProjectFlag = projectFlagPattern.test(template)
+
+  if (hasProjectPlaceholder) {
+    return { template, appended: false, warning: null }
+  }
+
+  if (hasProjectFlag) {
+    return {
+      template,
+      appended: false,
+      warning:
+        'Plan includes global sessions but command template does not reference {project_id}.',
+    }
+  }
+
+  return {
+    template: `${template} --project {project_id}`,
+    appended: true,
+    warning: null,
+  }
 }
 
 const runCommand = (command: string, cwd: string): CommandResult => {
@@ -309,6 +350,9 @@ const run = () => {
       '  --command <template>   Command template (supports {session_id}, {project_id}, {key})',
     )
     console.log(
+      '                         When plan includes global, {project_id} may be auto-appended as --project {project_id}.',
+    )
+    console.log(
       '  --cwd <path>           Working directory for commands (default: cwd)',
     )
     console.log('  --dry-run              Skip execution and ledger updates')
@@ -325,14 +369,14 @@ const run = () => {
   const dataRoot = resolveDataRoot(getArgValue('--data-root'))
   const planPath = resolvePlanFile(getArgValue('--plan'), dataRoot)
   const ledgerPath = resolveLedgerFile(getArgValue('--ledger'), dataRoot)
-  const commandTemplate = getArgValue('--command')
+  const commandTemplateRaw = getArgValue('--command')
   const cwd = resolve(process.cwd(), getArgValue('--cwd') ?? '.')
-  const dryRun = getFlag('--dry-run') || !commandTemplate
+  const dryRunFlag = getFlag('--dry-run')
   const failFast = getFlag('--fail-fast')
   const verbose = getFlag('--verbose')
   const limitRaw = getArgValue('--limit')
   const limit = limitRaw ? Number(limitRaw) : null
-  const writeLedger = !getFlag('--no-ledger') && !dryRun
+  const writeLedgerFlag = !getFlag('--no-ledger')
   const processedVersionRaw = getArgValue('--processed-version')
   const processedVersionCandidate = processedVersionRaw
     ? Number(processedVersionRaw)
@@ -347,6 +391,10 @@ const run = () => {
 
   const plan = JSON.parse(readFileSync(planPath, 'utf-8')) as SyncPlan
   const items = limitItems(plan.items ?? [], limit)
+  const adjustedTemplate = adjustTemplateForScope(commandTemplateRaw, plan)
+  const commandTemplate = adjustedTemplate.template
+  const dryRun = dryRunFlag || !commandTemplate
+  const writeLedger = writeLedgerFlag && !dryRun
 
   const existingLedger = existsSync(ledgerPath)
     ? (JSON.parse(readFileSync(ledgerPath, 'utf-8')) as Ledger)
@@ -357,6 +405,13 @@ const run = () => {
   const ledger = {
     ...baseLedger,
     processed_version: processedVersion,
+  }
+
+  if (adjustedTemplate.appended) {
+    console.log('Note: appended --project {project_id} to command template.')
+  }
+  if (adjustedTemplate.warning) {
+    console.log(`Warning: ${adjustedTemplate.warning}`)
   }
 
   const results: ProcessResult[] = []

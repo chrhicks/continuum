@@ -1,26 +1,38 @@
 import { createHash } from 'node:crypto'
-import {
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  statSync,
-  writeFileSync,
-} from 'node:fs'
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { isAbsolute, join, resolve } from 'node:path'
+import { dirname, isAbsolute, join, resolve } from 'node:path'
+import { Database } from 'bun:sqlite'
 
-type ProjectRecord = {
+type ProjectRow = {
   id: string
-  worktree?: string
+  worktree: string
 }
 
-type SessionRecord = {
-  id?: string
-  slug?: string
-  title?: string
-  directory?: string
-  time?: { created?: number; updated?: number }
+type SessionRow = {
+  id: string
+  project_id: string
+  slug: string
+  title: string
+  directory: string
+  version: string
+  summary_additions: number | null
+  summary_deletions: number | null
+  summary_files: number | null
+  time_created: number
+  time_updated: number
+}
+
+type MessageStatsRow = {
+  session_id: string
+  message_count: number
+  message_latest_ms: number | null
+}
+
+type PartStatsRow = {
+  session_id: string
+  part_count: number
+  part_latest_ms: number | null
 }
 
 type SessionIndexEntry = {
@@ -46,6 +58,7 @@ type SourceIndex = {
   version: number
   generated_at: string
   storage_root: string
+  db_path: string
   data_root: string
   index_file: string
   filters: {
@@ -60,18 +73,11 @@ type SourceIndex = {
   }
 }
 
-type MessageStats = {
-  count: number
-  latestMtimeMs: number | null
-  records: Array<{
-    name: string
-    id: string
-    size: number
-    mtimeMs: number
-    partCount: number
-    partLatestMtimeMs: number | null
-    partSizeTotal: number
-  }>
+type SessionStats = {
+  message_count: number
+  part_count: number
+  message_latest_ms: number | null
+  part_latest_ms: number | null
 }
 
 const args = process.argv.slice(2)
@@ -84,17 +90,9 @@ const getArgValue = (name: string) => {
   return null
 }
 
-const readJson = <T>(filePath: string): T =>
-  JSON.parse(readFileSync(filePath, 'utf-8')) as T
-
 const toIso = (value?: number | null): string | null => {
   if (typeof value !== 'number' || !Number.isFinite(value)) return null
   return new Date(value).toISOString()
-}
-
-const listJsonFiles = (dir: string): string[] => {
-  if (!existsSync(dir)) return []
-  return readdirSync(dir).filter((name) => name.endsWith('.json'))
 }
 
 const resolvePath = (value: string | null): string | null => {
@@ -113,70 +111,87 @@ const resolveIndexFile = (value: string | null, dataRoot: string): string => {
   return join(dataRoot, 'recall', 'opencode', 'source-index.json')
 }
 
-const collectMessageStats = (
-  storageRoot: string,
-  messageDir: string,
-): MessageStats => {
-  const files = listJsonFiles(messageDir).sort((a, b) => a.localeCompare(b))
-  const records: MessageStats['records'] = []
-  let latestMtimeMs: number | null = null
-
-  for (const name of files) {
-    const id = name.replace(/\.json$/, '')
-    const stat = statSync(join(messageDir, name))
-    const partStats = collectPartStats(storageRoot, id)
-    records.push({
-      name,
-      id,
-      size: stat.size,
-      mtimeMs: stat.mtimeMs,
-      partCount: partStats.count,
-      partLatestMtimeMs: partStats.latestMtimeMs,
-      partSizeTotal: partStats.sizeTotal,
-    })
-    if (latestMtimeMs === null || stat.mtimeMs > latestMtimeMs) {
-      latestMtimeMs = stat.mtimeMs
-    }
-  }
-
-  return { count: files.length, latestMtimeMs, records }
+const resolveDbPath = (value: string | null): string => {
+  if (value) return resolvePath(value) as string
+  const dataHome = process.env.XDG_DATA_HOME
+  return join(
+    dataHome ?? join(homedir(), '.local', 'share'),
+    'opencode',
+    'opencode.db',
+  )
 }
 
-const collectPartStats = (storageRoot: string, messageId: string) => {
-  const partDir = join(storageRoot, 'part', messageId)
-  const files = listJsonFiles(partDir)
-  let latestMtimeMs: number | null = null
-  let sizeTotal = 0
+const hashFields = (fields: Array<string | number | null>): string => {
+  const payload = fields.map((value) => String(value ?? '')).join('|')
+  return createHash('sha256').update(payload).digest('hex')
+}
 
-  for (const name of files) {
-    const stat = statSync(join(partDir, name))
-    sizeTotal += stat.size
-    if (latestMtimeMs === null || stat.mtimeMs > latestMtimeMs) {
-      latestMtimeMs = stat.mtimeMs
-    }
+const indexBySessionId = <T extends { session_id: string }>(rows: T[]) => {
+  return rows.reduce<Record<string, T>>(
+    (acc, row) => ({
+      ...acc,
+      [row.session_id]: row,
+    }),
+    {},
+  )
+}
+
+const buildSessionStats = (
+  messageStats: MessageStatsRow | null,
+  partStats: PartStatsRow | null,
+): SessionStats => {
+  return {
+    message_count: messageStats?.message_count ?? 0,
+    part_count: partStats?.part_count ?? 0,
+    message_latest_ms: messageStats?.message_latest_ms ?? null,
+    part_latest_ms: partStats?.part_latest_ms ?? null,
   }
+}
+
+const buildSessionEntry = (
+  session: SessionRow,
+  project: { id: string; worktree: string | null } | null,
+  stats: SessionStats,
+  dbPath: string,
+): SessionIndexEntry => {
+  const createdAt = toIso(session.time_created)
+  const updatedAt = toIso(session.time_updated)
+  const fingerprint = hashFields([
+    session.id,
+    session.project_id,
+    session.slug,
+    session.title,
+    session.directory,
+    session.version,
+    session.summary_additions,
+    session.summary_deletions,
+    session.summary_files,
+    session.time_created,
+    session.time_updated,
+    stats.message_count,
+    stats.part_count,
+    stats.message_latest_ms,
+    stats.part_latest_ms,
+  ])
 
   return {
-    count: files.length,
-    latestMtimeMs,
-    sizeTotal,
+    key: `${session.project_id}:${session.id}`,
+    session_id: session.id,
+    project_id: session.project_id,
+    title: session.title ?? null,
+    slug: session.slug ?? null,
+    directory: session.directory ?? project?.worktree ?? null,
+    created_at: createdAt,
+    updated_at: updatedAt,
+    message_count: stats.message_count,
+    part_count: stats.part_count,
+    message_latest_mtime_ms: stats.message_latest_ms,
+    part_latest_mtime_ms: stats.part_latest_ms,
+    session_file: `${dbPath}#session:${session.id}`,
+    message_dir: null,
+    session_mtime_ms: session.time_updated ?? null,
+    fingerprint,
   }
-}
-
-const buildFingerprint = (
-  sessionRaw: string,
-  messageStats: MessageStats,
-): string => {
-  const hash = createHash('sha256')
-  hash.update(sessionRaw)
-  hash.update(`|messages:${messageStats.count}`)
-  for (const record of messageStats.records) {
-    hash.update(`|msg:${record.name}:${record.size}:${record.mtimeMs}`)
-    hash.update(
-      `|parts:${record.id}:${record.partCount}:${record.partLatestMtimeMs ?? 'null'}:${record.partSizeTotal}`,
-    )
-  }
-  return hash.digest('hex')
 }
 
 const run = () => {
@@ -189,7 +204,7 @@ const run = () => {
     console.log('')
     console.log('Options:')
     console.log(
-      '  --storage <path>    OpenCode storage root (default: ~/.local/share/opencode/storage)',
+      '  --db <path>         OpenCode sqlite database (default: ~/.local/share/opencode/opencode.db)',
     )
     console.log(
       '  --data-root <path>  Continuum data root (default: $XDG_DATA_HOME/continuum)',
@@ -203,106 +218,90 @@ const run = () => {
     return
   }
 
-  const storageRootArg = getArgValue('--storage')
+  const dbPath = resolveDbPath(getArgValue('--db'))
   const dataRoot = resolveDataRoot(getArgValue('--data-root'))
   const indexFile = resolveIndexFile(getArgValue('--index'), dataRoot)
-  const indexDir = resolve(join(indexFile, '..'))
+  const indexDir = resolve(dirname(indexFile))
   const projectFilter = getArgValue('--project')
   const sessionFilter = getArgValue('--session')
   const verbose = getFlag('--verbose')
 
-  const dataHome = process.env.XDG_DATA_HOME
-  const storageRoot = resolve(
-    storageRootArg ??
-      join(
-        dataHome ?? join(homedir(), '.local', 'share'),
-        'opencode',
-        'storage',
-      ),
+  if (!existsSync(dbPath)) {
+    throw new Error(
+      `OpenCode sqlite database not found: ${dbPath}. OpenCode 1.2.0+ is required.`,
+    )
+  }
+
+  const db = new Database(dbPath)
+
+  const projectRows = db
+    .query('SELECT id, worktree FROM project')
+    .all() as ProjectRow[]
+  const projects = projectRows.reduce<
+    Record<string, { id: string; worktree: string | null }>
+  >(
+    (acc, row) => ({
+      ...acc,
+      [row.id]: { id: row.id, worktree: row.worktree ?? null },
+    }),
+    {},
   )
 
-  if (!existsSync(storageRoot)) {
-    throw new Error(`OpenCode storage not found: ${storageRoot}`)
+  const sessionConditions: string[] = []
+  const sessionParams: string[] = []
+  if (projectFilter) {
+    sessionConditions.push('project_id = ?')
+    sessionParams.push(projectFilter)
   }
-
-  const projectDir = join(storageRoot, 'project')
-  const sessionRoot = join(storageRoot, 'session')
-  if (!existsSync(projectDir) || !existsSync(sessionRoot)) {
-    throw new Error('OpenCode storage missing project/session directories.')
+  if (sessionFilter) {
+    sessionConditions.push('id = ?')
+    sessionParams.push(sessionFilter)
   }
+  const sessionWhere =
+    sessionConditions.length > 0
+      ? `WHERE ${sessionConditions.join(' AND ')}`
+      : ''
 
-  const projectFiles = listJsonFiles(projectDir)
-  const projects: Record<string, { id: string; worktree: string | null }> = {}
-  for (const file of projectFiles) {
-    const record = readJson<ProjectRecord>(join(projectDir, file))
-    if (!record.id) continue
-    projects[record.id] = {
-      id: record.id,
-      worktree: record.worktree ?? null,
+  const sessions = db
+    .query(
+      `SELECT id, project_id, slug, title, directory, version,
+        summary_additions, summary_deletions, summary_files,
+        time_created, time_updated
+      FROM session
+      ${sessionWhere}`,
+    )
+    .all(sessionParams) as SessionRow[]
+
+  const messageStatsRows = db
+    .query(
+      'SELECT session_id, COUNT(*) as message_count, MAX(time_updated) as message_latest_ms FROM message GROUP BY session_id',
+    )
+    .all() as MessageStatsRow[]
+  const partStatsRows = db
+    .query(
+      'SELECT session_id, COUNT(*) as part_count, MAX(time_updated) as part_latest_ms FROM part GROUP BY session_id',
+    )
+    .all() as PartStatsRow[]
+
+  const messageStatsBySession = indexBySessionId(messageStatsRows)
+  const partStatsBySession = indexBySessionId(partStatsRows)
+
+  const entries = sessions.map((session) => {
+    const stats = buildSessionStats(
+      messageStatsBySession[session.id] ?? null,
+      partStatsBySession[session.id] ?? null,
+    )
+    const entry = buildSessionEntry(
+      session,
+      projects[session.project_id] ?? null,
+      stats,
+      dbPath,
+    )
+    if (verbose) {
+      console.log(`Indexed ${entry.key} (${entry.message_count} messages)`)
     }
-  }
-
-  const sessionDirNames = readdirSync(sessionRoot).filter((name) => {
-    const dirPath = join(sessionRoot, name)
-    return existsSync(dirPath) && statSync(dirPath).isDirectory()
+    return entry
   })
-
-  const entries: SessionIndexEntry[] = []
-  for (const projectId of sessionDirNames) {
-    if (projectFilter && projectId !== projectFilter) continue
-    const sessionDir = join(sessionRoot, projectId)
-    const sessionFiles = listJsonFiles(sessionDir)
-
-    for (const file of sessionFiles) {
-      const sessionPath = join(sessionDir, file)
-      const raw = readFileSync(sessionPath, 'utf-8')
-      const session = JSON.parse(raw) as SessionRecord
-      const sessionId = session.id ?? file.replace(/\.json$/, '')
-      if (sessionFilter && sessionId !== sessionFilter) continue
-      const project = projects[projectId]
-      const messageDir = join(storageRoot, 'message', sessionId)
-      const messageStats = collectMessageStats(storageRoot, messageDir)
-
-      let partCount = 0
-      let partLatestMtimeMs: number | null = null
-      for (const record of messageStats.records) {
-        partCount += record.partCount
-        if (
-          record.partLatestMtimeMs !== null &&
-          (partLatestMtimeMs === null ||
-            record.partLatestMtimeMs > partLatestMtimeMs)
-        ) {
-          partLatestMtimeMs = record.partLatestMtimeMs
-        }
-      }
-
-      const sessionStat = statSync(sessionPath)
-      const fingerprint = buildFingerprint(raw, messageStats)
-      const entry: SessionIndexEntry = {
-        key: `${projectId}:${sessionId}`,
-        session_id: sessionId,
-        project_id: projectId,
-        title: session.title ?? null,
-        slug: session.slug ?? null,
-        directory: session.directory ?? project?.worktree ?? null,
-        created_at: toIso(session.time?.created),
-        updated_at: toIso(session.time?.updated),
-        message_count: messageStats.count,
-        part_count: partCount,
-        message_latest_mtime_ms: messageStats.latestMtimeMs,
-        part_latest_mtime_ms: partLatestMtimeMs,
-        session_file: sessionPath,
-        message_dir: existsSync(messageDir) ? messageDir : null,
-        session_mtime_ms: sessionStat.mtimeMs ?? null,
-        fingerprint,
-      }
-
-      entries.push(entry)
-      if (verbose) {
-        console.log(`Indexed ${entry.key} (${entry.message_count} messages)`)
-      }
-    }
-  }
 
   entries.sort((a, b) => {
     const left = a.created_at ?? ''
@@ -311,14 +310,15 @@ const run = () => {
     return a.key.localeCompare(b.key)
   })
 
-  const sessions = Object.fromEntries(
+  const sessionsIndex = Object.fromEntries(
     entries.map((entry) => [entry.key, entry]),
   )
 
   const index: SourceIndex = {
-    version: 1,
+    version: 2,
     generated_at: new Date().toISOString(),
-    storage_root: storageRoot,
+    storage_root: dirname(dbPath),
+    db_path: dbPath,
     data_root: dataRoot,
     index_file: indexFile,
     filters: {
@@ -326,12 +326,14 @@ const run = () => {
       session_id: sessionFilter,
     },
     projects,
-    sessions,
+    sessions: sessionsIndex,
     stats: {
       project_count: Object.keys(projects).length,
       session_count: entries.length,
     },
   }
+
+  db.close()
 
   mkdirSync(indexDir, { recursive: true })
   writeFileSync(indexFile, `${JSON.stringify(index, null, 2)}\n`, 'utf-8')

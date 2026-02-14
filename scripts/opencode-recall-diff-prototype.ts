@@ -34,12 +34,14 @@ type SourceIndex = {
   version: number
   generated_at: string
   storage_root: string
+  db_path?: string
   data_root: string
   index_file: string
   filters: {
     project_id: string | null
     session_id: string | null
   }
+  projects?: Record<string, { id: string; worktree: string | null }>
   sessions: Record<string, SourceIndexSession>
 }
 
@@ -87,6 +89,11 @@ type DiffReport = {
   generated_at: string
   index_file: string
   summary_dir: string
+  project_scope: {
+    project_ids: string[]
+    include_global: boolean
+    repo_path: string
+  }
   stats: {
     source_sessions: number
     local_summaries: number
@@ -125,6 +132,7 @@ type SyncPlan = {
   index_file: string
   summary_dir: string
   report_file: string | null
+  project_scope: DiffReport['project_scope']
   stats: {
     total: number
     new: number
@@ -202,6 +210,65 @@ const resolvePlanFile = (value: string | null, dataRoot: string): string => {
 const resolveReportFile = (value: string | null, dataRoot: string): string => {
   if (value) return resolvePath(value) as string
   return join(dataRoot, 'recall', 'opencode', 'diff-report.json')
+}
+
+const resolveProjectIdForRepo = (
+  projects: Record<string, { id: string; worktree: string | null }>,
+  repoPath: string,
+): string | null => {
+  const normalizedRepo = resolve(repoPath)
+  const match = Object.values(projects).find(
+    (project) =>
+      project.worktree && resolve(project.worktree) === normalizedRepo,
+  )
+  return match?.id ?? null
+}
+
+const buildProjectScope = (
+  sourceIndex: SourceIndex,
+  repoPath: string,
+  explicitProject: string | null,
+  includeGlobal: boolean,
+): DiffReport['project_scope'] => {
+  const resolvedProject =
+    explicitProject ??
+    resolveProjectIdForRepo(sourceIndex.projects ?? {}, repoPath)
+  const projectIds = resolvedProject ? [resolvedProject] : []
+  const scope = includeGlobal
+    ? Array.from(new Set([...projectIds, 'global']))
+    : projectIds
+
+  if (scope.length === 0) {
+    throw new Error(
+      `No OpenCode project found for repo: ${repoPath}. Use --project or --include-global.`,
+    )
+  }
+
+  return {
+    project_ids: scope,
+    include_global: includeGlobal,
+    repo_path: repoPath,
+  }
+}
+
+const filterSourceSessions = (
+  sessions: Record<string, SourceIndexSession>,
+  projectIds: string[],
+): Record<string, SourceIndexSession> => {
+  const allowed = new Set(projectIds)
+  return Object.fromEntries(
+    Object.entries(sessions).filter(([, entry]) =>
+      allowed.has(entry.project_id),
+    ),
+  )
+}
+
+const filterSummaryEntries = (
+  entries: LocalSummaryEntry[],
+  projectIds: string[],
+): LocalSummaryEntry[] => {
+  const allowed = new Set(projectIds)
+  return entries.filter((entry) => allowed.has(entry.project_id))
 }
 
 const resolveLedgerFile = (value: string | null, dataRoot: string): string => {
@@ -417,6 +484,7 @@ const buildReport = (
   sourceIndex: SourceIndex,
   summaryIndex: LocalSummaryIndex,
   summaryDir: string,
+  projectScope: DiffReport['project_scope'],
 ): DiffReport => {
   const sourceEntries = Object.values(sourceIndex.sessions ?? {})
   const summaryEntries = Object.values(summaryIndex.summaries)
@@ -446,6 +514,7 @@ const buildReport = (
     generated_at: new Date().toISOString(),
     index_file: sourceIndex.index_file,
     summary_dir: summaryDir,
+    project_scope: projectScope,
     stats: {
       source_sessions: sourceEntries.length,
       local_summaries: summaryEntries.length,
@@ -494,6 +563,7 @@ const buildSyncPlan = (
     index_file: report.index_file,
     summary_dir: report.summary_dir,
     report_file: reportFile,
+    project_scope: report.project_scope,
     stats: {
       total: items.length,
       new: newCount,
@@ -637,6 +707,7 @@ const renderTextReport = (report: DiffReport, limit: number): string => {
   const lines: string[] = []
   lines.push(`Source index: ${report.index_file}`)
   lines.push(`Summary dir: ${report.summary_dir}`)
+  lines.push(`Project scope: ${report.project_scope.project_ids.join(', ')}`)
   lines.push(`Source sessions: ${report.stats.source_sessions}`)
   lines.push(
     `Local summaries: ${report.stats.local_summaries} (duplicates: ${report.stats.local_duplicates})`,
@@ -696,6 +767,8 @@ const run = () => {
       '  --report <path>     Write JSON report to file (default: <data-root>/recall/opencode/diff-report.json)',
     )
     console.log('  --no-report         Skip writing the report file')
+    console.log('  --project <id>      Limit to a single project id')
+    console.log('  --include-global    Include global sessions in scope')
     console.log(
       '  --plan <path>       Write sync plan file (default: <data-root>/recall/opencode/sync-plan.json)',
     )
@@ -714,6 +787,8 @@ const run = () => {
   const dataRoot = resolveDataRoot(getArgValue('--data-root'))
   const indexFile = resolveIndexFile(getArgValue('--index'), dataRoot)
   const summaryDir = resolveSummaryDir(repoPath, getArgValue('--summaries'))
+  const projectFilter = getArgValue('--project')
+  const includeGlobal = getFlag('--include-global')
   const limitRaw = getArgValue('--limit')
   const limit = limitRaw ? Number(limitRaw) : 10
   const json = getFlag('--json')
@@ -739,12 +814,34 @@ const run = () => {
     readFileSync(indexFile, 'utf-8'),
   ) as SourceIndex
 
-  const summaryEntries = listSummaryFiles(summaryDir)
-    .map((name) => parseSummaryFile(join(summaryDir, name)))
-    .filter((entry): entry is LocalSummaryEntry => entry !== null)
+  const projectScope = buildProjectScope(
+    sourceIndex,
+    repoPath,
+    projectFilter,
+    includeGlobal,
+  )
+  const scopedSourceIndex: SourceIndex = {
+    ...sourceIndex,
+    sessions: filterSourceSessions(
+      sourceIndex.sessions ?? {},
+      projectScope.project_ids,
+    ),
+  }
+
+  const summaryEntries = filterSummaryEntries(
+    listSummaryFiles(summaryDir)
+      .map((name) => parseSummaryFile(join(summaryDir, name)))
+      .filter((entry): entry is LocalSummaryEntry => entry !== null),
+    projectScope.project_ids,
+  )
 
   const summaryIndex = indexSummaries(summaryEntries)
-  const report = buildReport(sourceIndex, summaryIndex, summaryDir)
+  const report = buildReport(
+    scopedSourceIndex,
+    summaryIndex,
+    summaryDir,
+    projectScope,
+  )
 
   if (writeReport) {
     writeJsonFile(reportPath, report)
