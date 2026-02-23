@@ -96,7 +96,87 @@ type SummaryResult = {
   open_questions: string[]
   next_steps: string[]
   confidence: 'low' | 'med' | 'high'
+  keywords?: SummaryKeywordBlock
 }
+
+type SummaryKeywordGroup =
+  | 'commands'
+  | 'flags'
+  | 'errors'
+  | 'constants'
+  | 'numbers'
+  | 'files'
+  | 'ids'
+  | 'aliases'
+
+type SummaryKeywordBlock = {
+  commands: string[]
+  flags: string[]
+  errors: string[]
+  constants: string[]
+  numbers: string[]
+  files: string[]
+  ids: string[]
+  aliases: string[]
+}
+
+const SUMMARY_KEYWORD_GROUPS: SummaryKeywordGroup[] = [
+  'commands',
+  'flags',
+  'errors',
+  'constants',
+  'numbers',
+  'files',
+  'ids',
+  'aliases',
+]
+
+const SUMMARY_KEYWORD_LIMITS: Record<SummaryKeywordGroup, number> = {
+  commands: 12,
+  flags: 18,
+  errors: 10,
+  constants: 16,
+  numbers: 12,
+  files: 20,
+  ids: 12,
+  aliases: 12,
+}
+
+const SUMMARY_KEYWORD_MAX_LENGTH = 120
+const SUMMARY_KEYWORD_MIN_LENGTH = 2
+const SUMMARY_KEYWORD_NOISE = new Set(['none', 'n/a', 'unknown', 'null', 'nil'])
+
+const SUMMARY_COMMAND_PREFIXES = new Set([
+  'bun',
+  'bunx',
+  'npm',
+  'npx',
+  'pnpm',
+  'pnpx',
+  'yarn',
+  'git',
+  'gh',
+  'node',
+  'python',
+  'deno',
+  'cargo',
+  'go',
+  'rg',
+  'ripgrep',
+  'make',
+  'cmake',
+  'docker',
+  'kubectl',
+  'pytest',
+  'jest',
+  'vitest',
+  'turbo',
+  'bash',
+  'sh',
+  'zsh',
+])
+
+const SUMMARY_ALIAS_HINT = /\b(?:aka|a\.k\.a\.|alias|also known as)\b/i
 
 type SummaryClientConfig = {
   apiUrl: string
@@ -622,6 +702,246 @@ const filterFilesByTranscript = (
   return files.filter((file) => allowedFiles.has(normalizeFileEntry(file)))
 }
 
+const trimKeywordLength = (value: string): string => {
+  if (value.length <= SUMMARY_KEYWORD_MAX_LENGTH) return value
+  const slice = value.slice(0, SUMMARY_KEYWORD_MAX_LENGTH)
+  const lastSpace = slice.lastIndexOf(' ')
+  if (lastSpace >= SUMMARY_KEYWORD_MIN_LENGTH) {
+    return slice.slice(0, lastSpace)
+  }
+  return slice
+}
+
+const normalizeKeywordToken = (value: string): string | null => {
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  const cleaned = trimmed
+    .replace(/^[-*]\s+/, '')
+    .replace(/^[`"']+/, '')
+    .replace(/[`"']+$/, '')
+    .replace(/^[,.;:!?]+/, '')
+    .replace(/[,.;:!?]+$/, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (!cleaned) return null
+  if (!/^[\x20-\x7E]+$/.test(cleaned)) return null
+  if (cleaned.length < SUMMARY_KEYWORD_MIN_LENGTH) return null
+  if (SUMMARY_KEYWORD_NOISE.has(cleaned.toLowerCase())) return null
+  return trimKeywordLength(cleaned)
+}
+
+const finalizeKeywordList = (values: string[], limit: number): string[] => {
+  const cleaned = values
+    .map(normalizeKeywordToken)
+    .filter((value): value is string => Boolean(value))
+  return uniqueSorted(cleaned).slice(0, limit)
+}
+
+const extractInlineCodeSnippets = (text: string): string[] => {
+  const snippets: string[] = []
+  const inlineRegex = /`([^`\n]+)`/g
+  for (const match of text.matchAll(inlineRegex)) {
+    snippets.push(match[1])
+  }
+  const fenceRegex = /```[a-zA-Z0-9_-]*\n([\s\S]*?)```/g
+  for (const match of text.matchAll(fenceRegex)) {
+    snippets.push(match[1])
+  }
+  return snippets
+}
+
+const normalizeCommandLine = (line: string): string | null => {
+  let trimmed = line.trim()
+  if (!trimmed) return null
+  trimmed = trimmed.replace(/^[-*]\s+/, '')
+  trimmed = trimmed.replace(/^[$>]\s+/, '')
+  const firstToken = trimmed.split(/\s+/)[0]
+  if (!firstToken) return null
+  if (!SUMMARY_COMMAND_PREFIXES.has(firstToken)) return null
+  return trimmed
+}
+
+const extractCommandTokens = (text: string): string[] => {
+  const commands: string[] = []
+  for (const line of text.split('\n')) {
+    const value = normalizeCommandLine(line)
+    if (value) commands.push(value)
+  }
+  for (const snippet of extractInlineCodeSnippets(text)) {
+    for (const line of snippet.split('\n')) {
+      const value = normalizeCommandLine(line)
+      if (value) commands.push(value)
+    }
+  }
+  return commands
+}
+
+const extractFlagTokens = (text: string): string[] => {
+  const flags: string[] = []
+  for (const match of text.matchAll(/--[A-Za-z0-9][A-Za-z0-9_-]*/g)) {
+    flags.push(match[0])
+  }
+  for (const match of text.matchAll(/(^|\s)-[A-Za-z]{1,2}\b/g)) {
+    flags.push(match[0].trim())
+  }
+  return flags
+}
+
+const extractErrorTokens = (text: string): string[] => {
+  const errors: string[] = []
+  for (const line of text.split('\n')) {
+    const trimmed = line.trim()
+    if (!trimmed) continue
+    if (/no\s+errors?/i.test(trimmed)) continue
+    if (!/(error|failed|exception|panic|timeout)\b/i.test(trimmed)) continue
+    const match = trimmed.match(
+      /(error|failed|exception|panic|timeout)[^:]*[:\-]?\s*(.+)$/i,
+    )
+    if (match) {
+      const label = match[1].toLowerCase()
+      const detail = match[2].trim()
+      errors.push(detail ? `${label}: ${detail}` : label)
+      continue
+    }
+    errors.push(trimmed)
+  }
+  return errors
+}
+
+const extractConstantTokens = (text: string): string[] => {
+  return text.match(/\b[A-Z][A-Z0-9_]{2,}\b/g) ?? []
+}
+
+const extractNumberTokens = (text: string): string[] => {
+  const matches =
+    text.match(/\b\d+(?:\.\d+)?(?:ms|s|m|h|kb|mb|gb|%|x)?\b/gi) ?? []
+  return matches.filter((token) => token.length >= 3 || /[a-z%]/i.test(token))
+}
+
+const extractIdTokens = (text: string): string[] => {
+  const ids: string[] = []
+  const taskMatches = text.match(/\b(?:tkt|task)[-_][a-zA-Z0-9_-]+\b/g)
+  if (taskMatches) ids.push(...taskMatches)
+  const sessionMatches = text.match(/\b(?:ses|sess)_[a-zA-Z0-9]+\b/g)
+  if (sessionMatches) ids.push(...sessionMatches)
+  const shaMatches = text.match(/\b[a-f0-9]{7,40}\b/gi)
+  if (shaMatches) ids.push(...shaMatches)
+  return ids
+}
+
+const extractQuotedTokens = (text: string): string[] => {
+  const tokens: string[] = []
+  const regex = /`([^`]+)`|"([^"]+)"|'([^']+)'/g
+  for (const match of text.matchAll(regex)) {
+    const value = match[1] ?? match[2] ?? match[3]
+    if (value) tokens.push(value)
+  }
+  return tokens
+}
+
+const extractAliasTokens = (text: string): string[] => {
+  const aliases: string[] = []
+  for (const line of text.split('\n')) {
+    if (!SUMMARY_ALIAS_HINT.test(line)) continue
+    const quoted = extractQuotedTokens(line)
+    if (quoted.length > 0) {
+      aliases.push(...quoted)
+      continue
+    }
+    const match = line.match(
+      /\b(?:aka|a\.k\.a\.|alias|also known as)\b[:\s-]*([^\n]+)/i,
+    )
+    if (!match) continue
+    const tail = match[1].split(/[.;]/)[0]
+    const parts = tail
+      .split(',')
+      .map((part) => part.trim())
+      .filter(Boolean)
+    if (parts.length > 0) aliases.push(...parts)
+  }
+  return aliases
+}
+
+const buildSummaryText = (summary: SummaryResult): string => {
+  return [
+    summary.focus,
+    ...summary.decisions,
+    ...summary.discoveries,
+    ...summary.patterns,
+    ...summary.tasks,
+    ...summary.files,
+    ...summary.blockers,
+    ...summary.open_questions,
+    ...summary.next_steps,
+  ]
+    .filter(Boolean)
+    .join('\n')
+}
+
+const extractSummaryKeywords = (
+  summary: SummaryResult,
+  context: { transcript: string; allowedFiles: Set<string> },
+): SummaryKeywordBlock => {
+  const summaryText = buildSummaryText(summary)
+  const combinedText = `${summaryText}\n${context.transcript}`
+  const commands = finalizeKeywordList(
+    extractCommandTokens(combinedText),
+    SUMMARY_KEYWORD_LIMITS.commands,
+  )
+  const flags = finalizeKeywordList(
+    extractFlagTokens(combinedText),
+    SUMMARY_KEYWORD_LIMITS.flags,
+  )
+  const errors = finalizeKeywordList(
+    extractErrorTokens(combinedText),
+    SUMMARY_KEYWORD_LIMITS.errors,
+  )
+  const constants = finalizeKeywordList(
+    extractConstantTokens(combinedText),
+    SUMMARY_KEYWORD_LIMITS.constants,
+  )
+  const numbers = finalizeKeywordList(
+    extractNumberTokens(combinedText),
+    SUMMARY_KEYWORD_LIMITS.numbers,
+  )
+  const ids = finalizeKeywordList(
+    extractIdTokens(combinedText),
+    SUMMARY_KEYWORD_LIMITS.ids,
+  )
+  const aliases = finalizeKeywordList(
+    extractAliasTokens(combinedText),
+    SUMMARY_KEYWORD_LIMITS.aliases,
+  )
+  const files = finalizeKeywordList(
+    [
+      ...summary.files.map(normalizeFileEntry),
+      ...Array.from(context.allowedFiles),
+    ],
+    SUMMARY_KEYWORD_LIMITS.files,
+  )
+
+  return {
+    commands,
+    flags,
+    errors,
+    constants,
+    numbers,
+    files,
+    ids,
+    aliases,
+  }
+}
+
+const applySummaryKeywords = (
+  summary: SummaryResult,
+  context: { transcript: string; allowedFiles: Set<string> },
+): SummaryResult => {
+  return {
+    ...summary,
+    keywords: extractSummaryKeywords(summary, context),
+  }
+}
+
 const TRANSIENT_ITEM_PATTERNS: RegExp[] = [
   /^run\b/i,
   /^re-?run\b/i,
@@ -971,6 +1291,37 @@ const renderSummaryList = (items: string[]): string[] => {
   return items.map((item) => `- ${cleanListItem(item)}`)
 }
 
+const renderKeywordTokens = (items: string[]): string => {
+  if (items.length === 0) return 'none'
+  return items.map((item) => `\`${item}\``).join(', ')
+}
+
+const renderKeywordBlock = (
+  keywords: SummaryKeywordBlock | undefined,
+): string[] => {
+  if (!keywords) return ['- none']
+  return SUMMARY_KEYWORD_GROUPS.map((group) => {
+    return `- ${group}: ${renderKeywordTokens(keywords[group])}`
+  })
+}
+
+const buildKeywordStats = (
+  keywords: SummaryKeywordBlock | undefined,
+): { counts: Record<SummaryKeywordGroup, number>; total: number } => {
+  const counts = SUMMARY_KEYWORD_GROUPS.reduce(
+    (acc, group) => {
+      acc[group] = keywords?.[group]?.length ?? 0
+      return acc
+    },
+    {} as Record<SummaryKeywordGroup, number>,
+  )
+  const total = SUMMARY_KEYWORD_GROUPS.reduce(
+    (sum, group) => sum + counts[group],
+    0,
+  )
+  return { counts, total }
+}
+
 const buildSummaryDoc = (
   session: SessionRecord,
   project: ProjectRecord,
@@ -984,6 +1335,7 @@ const buildSummaryDoc = (
 ): string => {
   const createdAt = toIso(session.time?.created)
   const updatedAt = toIso(session.time?.updated)
+  const keywordStats = buildKeywordStats(summary.keywords)
   const frontmatter = serializeFrontmatter({
     source: 'opencode',
     session_id: session.id,
@@ -998,6 +1350,7 @@ const buildSummaryDoc = (
     summary_max_chars: meta.maxChars,
     summary_max_lines: meta.maxLines,
     summary_generated_at: new Date().toISOString(),
+    summary_keyword_total: keywordStats.total,
   })
 
   const headerTitle = session.title?.trim() || session.slug || session.id
@@ -1029,6 +1382,10 @@ const buildSummaryDoc = (
   lines.push('## Files')
   lines.push('')
   lines.push(...renderSummaryList(summary.files))
+  lines.push('')
+  lines.push('## Keywords')
+  lines.push('')
+  lines.push(...renderKeywordBlock(summary.keywords))
   lines.push('')
   lines.push('## Blockers')
   lines.push('')
@@ -1522,10 +1879,16 @@ const run = async () => {
                 debugConfig,
                 tokenState,
               )
-        const summary = applySummaryCaps(
-          applySummaryPostProcessing(mergeResult.summary, {
+        const summary = applySummaryKeywords(
+          applySummaryCaps(
+            applySummaryPostProcessing(mergeResult.summary, {
+              allowedFiles,
+            }),
+          ),
+          {
+            transcript: normalizedTranscript,
             allowedFiles,
-          }),
+          },
         )
 
         return {
@@ -1570,6 +1933,7 @@ const run = async () => {
         writeFileSync(summaryPath, summaryDoc, 'utf-8')
         outputPaths.push(summaryPath)
 
+        const keywordStats = buildKeywordStats(summaryRun.summary.keywords)
         const summaryMeta = {
           session_id: session.id,
           project_id: project.id,
@@ -1583,6 +1947,10 @@ const run = async () => {
           summary_single_pass_max_est_tokens: summarySinglePassMaxTokens,
           summary_single_pass_est_tokens: normalizedEstTokens,
           summary_caps: SUMMARY_SECTION_CAPS,
+          summary_keyword_limits: SUMMARY_KEYWORD_LIMITS,
+          summary_keyword_counts: keywordStats.counts,
+          summary_keyword_total: keywordStats.total,
+          summary_keywords: summaryRun.summary.keywords ?? null,
           summary_post_filters: {
             files: true,
             durable_patterns_tasks: true,
