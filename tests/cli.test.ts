@@ -174,6 +174,75 @@ describe('task CLI', () => {
     })
   })
 
+  test('task list excludes cancelled tasks by default', async () => {
+    await withTempCwd(async () => {
+      await continuum.task.init()
+      const openTask = await continuum.task.create({
+        title: 'Open task',
+        type: 'feature',
+        description: 'Should appear in list.',
+      })
+      const cancelledTask = await continuum.task.create({
+        title: 'Cancelled task',
+        type: 'feature',
+        status: 'cancelled',
+        description: 'Should be hidden by default.',
+      })
+
+      const originalArgv = process.argv
+      process.argv = ['node', 'continuum', 'task', 'list']
+
+      try {
+        const logs = await withCapturedLogs(async () => {
+          await main()
+        })
+        const output = logs.join('\n')
+        expect(output).toContain(openTask.id)
+        expect(output).not.toContain(cancelledTask.id)
+      } finally {
+        process.argv = originalArgv
+      }
+    })
+  })
+
+  test('task list --status cancelled includes cancelled tasks', async () => {
+    await withTempCwd(async () => {
+      await continuum.task.init()
+      const openTask = await continuum.task.create({
+        title: 'Open task',
+        type: 'feature',
+        description: 'Should be filtered out.',
+      })
+      const cancelledTask = await continuum.task.create({
+        title: 'Cancelled task',
+        type: 'feature',
+        status: 'cancelled',
+        description: 'Should appear when filtered.',
+      })
+
+      const originalArgv = process.argv
+      process.argv = [
+        'node',
+        'continuum',
+        'task',
+        'list',
+        '--status',
+        'cancelled',
+      ]
+
+      try {
+        const logs = await withCapturedLogs(async () => {
+          await main()
+        })
+        const output = logs.join('\n')
+        expect(output).toContain(cancelledTask.id)
+        expect(output).not.toContain(openTask.id)
+      } finally {
+        process.argv = originalArgv
+      }
+    })
+  })
+
   test('task step alias works', async () => {
     await withTempCwd(async () => {
       await continuum.task.init()

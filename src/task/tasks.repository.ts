@@ -541,6 +541,10 @@ export async function list_tasks(
     where.push(ne(tasks.status, 'deleted'))
   }
 
+  if (!filters.status) {
+    where.push(ne(tasks.status, 'cancelled'))
+  }
+
   if (filters.status) {
     where.push(eq(tasks.status, filters.status))
   }
