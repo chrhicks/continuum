@@ -10,6 +10,8 @@ dist/
 
 .opencode/
 
+.agents/
+
 runs/
 
 *.tmp

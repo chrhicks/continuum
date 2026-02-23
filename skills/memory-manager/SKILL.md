@@ -1,12 +1,13 @@
 ---
-trigger_events:
-  - manual_user_request
-  - manual_agent_request
-  - session_end # Detected via /exit or SIGINT
-  # - scheduled: "0 2 * * *"  # TODO v1.0: Daily 2am (future)
-priority: 800 # Higher than generic skills
-requires_state: ['writable', 'no_active_agent']
-min_version: '0.1.0'
+name: memory-manager
+description: 'Consolidate NOW/RECENT/MEMORY files for Continuum sessions.'
+license: MIT
+compatibility: opencode
+metadata:
+  trigger: manual_user_request, manual_agent_request, session_end
+  priority: '800'
+  requires_state: writable,no_active_agent
+  min_version: '0.1.0'
 ---
 
 # Memory Manager Skill

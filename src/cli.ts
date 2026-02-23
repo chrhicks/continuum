@@ -2,6 +2,7 @@ import { Command } from 'commander'
 import { createMemoryCommand, endSessionIfActive } from './cli/commands/memory'
 import { createTaskCommand } from './cli/commands/task'
 import { createLoopCommand } from './cli/commands/loop'
+import { createSetupCommand } from './cli/commands/setup'
 import { runCommand } from './cli/io'
 import continuum from './sdk'
 
@@ -47,6 +48,7 @@ export async function main(): Promise<void> {
       )
     })
 
+  program.addCommand(createSetupCommand())
   program.addCommand(createMemoryCommand())
   program.addCommand(createTaskCommand())
   program.addCommand(createLoopCommand())
