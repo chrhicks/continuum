@@ -13,7 +13,7 @@ Scenario: <SCENARIO_ID>
 Requirements:
 - Use the Continuum CLI for all task tracking.
 - Use --json on every CLI call.
-- Create the task with intent, description, and plan.
+- Create the task with intent, description, plan, and an explicit priority (lower = higher priority).
 - Use steps, add at least one discovery or decision note, validate before completion.
 - Run lint + typecheck if you make code changes.
 
@@ -33,7 +33,7 @@ Scenario: <SCENARIO_ID>
 Requirements:
 - Use the Continuum CLI for all task tracking.
 - Use --json on every CLI call.
-- Create the task with intent, description, and plan.
+- Create the task with intent, description, plan, and an explicit priority (lower = higher priority).
 - Use steps, add at least one discovery or decision note, validate before completion.
 - Run lint + typecheck if you make code changes.
 
@@ -42,7 +42,7 @@ CLI (use this for every call):
 
 Cheat Sheet:
 - Task init: `task init`
-- Create: `task create --title ... --type ... --description @- --plan @- --intent "..."`
+- Create: `task create --title ... --type ... --priority 100 --description @- --plan @- --intent "..."`
 - Steps (inline JSON): `task steps add <task_id> --steps '[{"title":"...","description":"...","position":1}]'`
 - Notes: `task note add <task_id> --kind discovery --content @-`
 - Validate: `task validate <task_id> --transition completed`

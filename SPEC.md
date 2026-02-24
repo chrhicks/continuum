@@ -11,9 +11,11 @@ Task metadata lives in `.continuum/continuum.db` and is available via the CLI.
 ```bash
 continuum init
 continuum task init
-continuum task list [--status=<status>] [--type=<type>]
+continuum task list [--status=<status>] [--type=<type>] [--sort=<createdAt|updatedAt|priority>]
 continuum task view <task_id> [--tree]
 ```
+
+Tasks include a numeric `priority` (lower = higher priority, default 100).
 
 ## Architecture
 

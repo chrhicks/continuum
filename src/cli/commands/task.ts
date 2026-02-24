@@ -36,6 +36,7 @@ type TaskCreateOptions = {
   title?: string
   type?: string
   status?: string
+  priority?: string
   intent?: string
   description?: string
   plan?: string
@@ -48,6 +49,7 @@ type TaskUpdateOptions = {
   title?: string
   type?: string
   status?: string
+  priority?: string
   intent?: string
   description?: string
   plan?: string
@@ -137,14 +139,14 @@ export function createTaskCommand(): Command {
 
   taskCommand
     .command('list')
-    .description('List all tasks')
+    .description('List tasks (excludes completed/cancelled by default)')
     .option('-s, --status <status>', 'Filter by status')
     .option('-t, --type <type>', 'Filter by type')
     .option('--parent <task_id>', 'Filter by parent task')
     .option('--include-deleted', 'Include deleted tasks')
     .option('--cursor <cursor>', 'Pagination cursor')
     .option('--limit <limit>', 'Limit results')
-    .option('--sort <sort>', 'Sort by createdAt or updatedAt')
+    .option('--sort <sort>', 'Sort by createdAt, updatedAt, or priority')
     .option('--order <order>', 'Sort order asc or desc')
     .action(async (options: TaskListOptions, command: Command) => {
       await runCommand(
@@ -238,6 +240,7 @@ export function createTaskCommand(): Command {
     .option('--title <title>', 'Task title')
     .option('--type <type>', 'Task type')
     .option('--status <status>', 'Initial status')
+    .option('--priority <priority>', 'Priority (lower is higher)')
     .option('--intent <intent>', 'Task intent')
     .option('--description <description>', 'Task description (@file or @-)')
     .option('--plan <plan>', 'Task plan (@file or @-)')
@@ -256,6 +259,7 @@ export function createTaskCommand(): Command {
                 title: string
                 type: TaskType
                 status: TaskStatus
+                priority: number | null
                 intent: string | null
                 description: string
                 plan: string | null
@@ -284,6 +288,10 @@ export function createTaskCommand(): Command {
             const status = options.status
               ? parseTaskStatus(options.status)
               : inputFromFile?.status
+            const priority =
+              options.priority !== undefined
+                ? parsePriority(options.priority)
+                : parsePriorityValue(inputFromFile?.priority)
             const parentId = options.parent ?? inputFromFile?.parentId
             const blockedBy =
               parseIdList(options.blockedBy) ??
@@ -293,6 +301,7 @@ export function createTaskCommand(): Command {
               title,
               type,
               status,
+              priority,
               intent: intent ?? null,
               description: description ?? '',
               plan: plan ?? null,
@@ -326,6 +335,7 @@ export function createTaskCommand(): Command {
     .option('--title <title>', 'Task title')
     .option('--type <type>', 'Task type')
     .option('--status <status>', 'Task status')
+    .option('--priority <priority>', 'Priority (lower is higher)')
     .option('--intent <intent>', 'Task intent')
     .option('--description <description>', 'Task description (@file or @-)')
     .option('--plan <plan>', 'Task plan (@file or @-)')
@@ -349,6 +359,9 @@ export function createTaskCommand(): Command {
             const intent = await readInput(intentRaw)
             const planRaw = options.plan
             const plan = await readInput(planRaw)
+            const priorityFromPatch = parsePriorityValue(
+              patchFromFile?.priority,
+            )
 
             const update: Record<string, unknown> = {
               ...(patchFromFile ?? {}),
@@ -359,6 +372,12 @@ export function createTaskCommand(): Command {
             }
             if (options.status !== undefined) {
               update.status = parseTaskStatus(options.status)
+            }
+            if (priorityFromPatch !== undefined) {
+              update.priority = priorityFromPatch
+            }
+            if (options.priority !== undefined) {
+              update.priority = parsePriority(options.priority)
             }
             if (intent !== undefined) update.intent = intent
             if (description !== undefined) update.description = description
@@ -848,12 +867,16 @@ function parseLimit(value: string): number {
   return limit
 }
 
-function parseSort(value: string): 'createdAt' | 'updatedAt' {
+function parseSort(value: string): 'createdAt' | 'updatedAt' | 'priority' {
   const normalized = value.trim()
-  if (normalized === 'createdAt' || normalized === 'updatedAt') {
+  if (
+    normalized === 'createdAt' ||
+    normalized === 'updatedAt' ||
+    normalized === 'priority'
+  ) {
     return normalized
   }
-  throw new Error('Invalid sort. Use: createdAt or updatedAt.')
+  throw new Error('Invalid sort. Use: createdAt, updatedAt, or priority.')
 }
 
 function parseOrder(value: string): 'asc' | 'desc' {
@@ -870,6 +893,21 @@ function parsePosition(value: string): number {
     throw new Error('Position must be an integer.')
   }
   return position
+}
+
+function parsePriority(value: string): number {
+  const priority = Number(value)
+  if (!Number.isInteger(priority)) {
+    throw new Error('Priority must be an integer.')
+  }
+  return priority
+}
+
+function parsePriorityValue(value: unknown): number | null | undefined {
+  if (value === undefined) return undefined
+  if (value === null) return null
+  if (typeof value === 'number' && Number.isInteger(value)) return value
+  throw new Error('Priority must be an integer.')
 }
 
 function parseNoteKind(value: string): 'discovery' | 'decision' {
@@ -909,11 +947,17 @@ function renderTaskList(tasks: Task[]): void {
   }
 
   const idWidth = Math.max(12, ...tasks.map((task) => task.id.length))
+  const priorityWidth = Math.max(
+    8,
+    ...tasks.map((task) => String(task.priority).length),
+  )
   const typeWidth = Math.max(6, ...tasks.map((task) => task.type.length))
   const statusWidth = Math.max(11, ...tasks.map((task) => task.status.length))
 
   console.log(
     'ID'.padEnd(idWidth) +
+      '  ' +
+      'Priority'.padEnd(priorityWidth) +
       '  ' +
       'Type'.padEnd(typeWidth) +
       '  ' +
@@ -921,16 +965,19 @@ function renderTaskList(tasks: Task[]): void {
       '  ' +
       'Title',
   )
-  console.log('-'.repeat(idWidth + typeWidth + statusWidth + 40))
+  console.log(
+    '-'.repeat(idWidth + priorityWidth + typeWidth + statusWidth + 50),
+  )
 
   for (const task of tasks) {
     const id = task.id.padEnd(idWidth)
+    const priority = String(task.priority).padEnd(priorityWidth)
     const type = task.type.padEnd(typeWidth)
     const status = task.status.padEnd(statusWidth)
     const title =
       task.title.length > 50 ? `${task.title.slice(0, 47)}...` : task.title
 
-    console.log(`${id}  ${type}  ${status}  ${title}`)
+    console.log(`${id}  ${priority}  ${type}  ${status}  ${title}`)
   }
 
   console.log(`\n${tasks.length} task(s)`)
@@ -939,7 +986,7 @@ function renderTaskList(tasks: Task[]): void {
 function renderTaskTree(task: Task, children: Task[]): void {
   console.log('='.repeat(70))
   console.log(
-    `${task.type.toUpperCase()}: ${task.title} [${task.id}] (${task.status})`,
+    `${task.type.toUpperCase()}: ${task.title} [${task.id}] (${task.status}, priority ${task.priority})`,
   )
   console.log('='.repeat(70))
 
@@ -999,6 +1046,7 @@ function renderTaskDetails(task: Task): void {
   console.log(`ID:      ${task.id}`)
   console.log(`Type:    ${task.type}`)
   console.log(`Status:  ${task.status}`)
+  console.log(`Priority: ${task.priority}`)
   console.log(`Created: ${formatTaskDate(task.createdAt)}`)
   console.log(`Updated: ${formatTaskDate(task.updatedAt)}`)
 
@@ -1081,7 +1129,7 @@ function renderTaskDetails(task: Task): void {
 function formatTaskCompact(task: Task, indent: string = ''): string {
   const lines: string[] = []
 
-  const header = `${indent}[${task.id}] ${task.type}/${task.status} ${task.title}`
+  const header = `${indent}[${task.id}] P${task.priority} ${task.type}/${task.status} ${task.title}`
   lines.push(header)
 
   if (task.intent) {

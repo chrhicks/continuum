@@ -66,6 +66,7 @@ export type TaskType = 'epic' | 'feature' | 'bug' | 'investigation' | 'chore'
  *     '- Verify with 3 sample reports'
  *   ].join('\n'),
  *   status: 'ready',
+ *   priority: 100,
  *   type: 'feature',
  *   parentId: null,
  *   blockedBy: [],
@@ -115,6 +116,11 @@ export interface Task {
    */
   plan?: string | null
   status: TaskStatus
+  /**
+   * @name priority
+   * @description Lower numbers mean higher priority (default: 100).
+   */
+  priority: number
   type: TaskType
   parentId: string | null
   blockedBy: string[]
@@ -302,7 +308,7 @@ export interface ListTasksOptions {
   includeDeleted?: boolean
   cursor?: string
   limit?: number
-  sort?: 'createdAt' | 'updatedAt'
+  sort?: 'createdAt' | 'updatedAt' | 'priority'
   order?: 'asc' | 'desc'
 }
 
@@ -340,6 +346,11 @@ export interface CreateTaskInput {
   title: string
   type: TaskType
   status?: TaskStatus
+  /**
+   * @name priority
+   * @description Lower numbers mean higher priority (default: 100).
+   */
+  priority?: number | null
   intent?: string | null
   description: string
   plan?: string | null
@@ -488,6 +499,7 @@ export interface ContinuumSDK {
         intent?: string | null
         plan?: string | null
         status?: TaskStatus
+        priority?: number | null
         type?: TaskType
         parentId?: string | null
         blockedBy?: string[] | null

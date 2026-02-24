@@ -18,7 +18,8 @@ export function writeLoopRequest(count: number): string {
   const request: LoopRequest = {
     count,
     created_at: new Date().toISOString(),
-    selection_rule: 'highest priority, oldest created, ready-only',
+    selection_rule:
+      'priority-first (lowest number wins), createdAt tie-breaker, open before ready',
     qa_policy: 'bun test + task QA steps + minimal smoke test',
     resume_behavior:
       'blocked tasks should include an unblock plan; next iteration may resume',

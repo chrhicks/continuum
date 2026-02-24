@@ -45,6 +45,7 @@ type SdkUpdateTaskInput = {
   intent?: string | null
   plan?: string | null
   status?: SdkTaskStatus
+  priority?: number | null
   type?: SdkTaskType
   parentId?: string | null
   blockedBy?: string[] | null
@@ -85,6 +86,7 @@ function map_task(task: Task): SdkTask {
     intent: task.intent ?? null,
     plan: task.plan ?? null,
     status: task.status as SdkTaskStatus,
+    priority: task.priority,
     type: task.type,
     parentId: task.parent_id,
     blockedBy: task.blocked_by,
@@ -114,6 +116,7 @@ function map_create_input(input: SdkCreateTaskInput) {
     title: input.title,
     type: input.type,
     status: map_status(input.status),
+    priority: input.priority ?? null,
     intent: input.intent ?? null,
     description: input.description,
     plan: input.plan ?? null,
@@ -129,6 +132,7 @@ function map_update_input(input: SdkUpdateTaskInput) {
     intent: input.intent,
     plan: input.plan,
     status: map_status(input.status),
+    priority: input.priority === undefined ? undefined : input.priority,
     type: input.type,
     parent_id: input.parentId === undefined ? undefined : input.parentId,
     blocked_by: input.blockedBy === undefined ? undefined : input.blockedBy,

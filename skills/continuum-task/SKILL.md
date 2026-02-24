@@ -51,6 +51,11 @@ Task type:
 
 - `epic`, `feature`, `bug`, `investigation`, `chore`
 
+Task priority:
+
+- Integer (lower = higher priority)
+- Default: `100`
+
 Step status:
 
 - `pending`, `in_progress`, `completed`, `skipped`
@@ -78,7 +83,7 @@ bun run bin/continuum task init
 List tasks with filters and pagination.
 
 ```bash
-bun run bin/continuum task list --status ready --type feature --sort createdAt --order asc --limit 20
+bun run bin/continuum task list --status ready --type feature --sort priority --order asc --limit 20
 ```
 
 Options:
@@ -89,8 +94,10 @@ Options:
 - `--include-deleted`
 - `--cursor <cursor>`
 - `--limit <limit>`
-- `--sort <createdAt|updatedAt>`
+- `--sort <createdAt|updatedAt|priority>`
 - `--order <asc|desc>`
+
+Default ordering (when `--sort` is omitted): priority ascending, then createdAt ascending.
 
 ### Get / View
 
@@ -125,6 +132,7 @@ Supported fields:
 - `--title <title>` (required)
 - `--type <type>` (required)
 - `--status <status>`
+- `--priority <number>` (lower = higher priority)
 - `--intent <intent>`
 - `--description <description>`
 - `--plan <plan>`
@@ -148,6 +156,7 @@ Supported fields:
 - `--title <title>`
 - `--type <type>`
 - `--status <status>`
+- `--priority <number>` (lower = higher priority)
 - `--intent <intent>`
 - `--description <description>`
 - `--plan <plan>`
@@ -260,7 +269,7 @@ Options:
 ## Suggested Safe Workflow
 
 1. `task init` once per repo
-2. `task create` with intent/description/plan
+2. `task create` with intent/description/plan and an explicit priority
 3. `task steps add` for executable subunits
 4. `task note add` for discoveries/decisions
 5. `task validate --transition ready|completed` before changing status

@@ -41,6 +41,7 @@ export interface Task {
   title: string
   type: TaskType
   status: TaskStatus | 'deleted'
+  priority: number
   intent: string | null
   description: string | null
   plan: string | null
@@ -60,6 +61,7 @@ export interface CreateTaskInput {
   title: string
   type: TaskType
   status?: TaskStatus
+  priority?: number | null
   intent?: string | null
   description?: string | null
   plan?: string | null
@@ -71,6 +73,7 @@ export interface UpdateTaskInput {
   title?: string
   type?: TaskType
   status?: TaskStatus
+  priority?: number | null
   intent?: string | null
   description?: string | null
   plan?: string | null
@@ -143,7 +146,7 @@ export interface ListTaskFilters {
   includeDeleted?: boolean
   cursor?: string
   limit?: number
-  sort?: 'createdAt' | 'updatedAt'
+  sort?: 'createdAt' | 'updatedAt' | 'priority'
   order?: 'asc' | 'desc'
 }
 

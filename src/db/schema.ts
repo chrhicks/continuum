@@ -13,6 +13,7 @@ export const tasks = sqliteTable(
     title: text('title').notNull(),
     type: text('type').notNull(),
     status: text('status').notNull().default('open'),
+    priority: integer('priority').notNull().default(100),
     intent: text('intent'),
     description: text('description'),
     plan: text('plan'),
@@ -34,5 +35,6 @@ export const tasks = sqliteTable(
     }).onDelete('set null'),
     index('idx_tasks_status').on(table.status),
     index('idx_tasks_parent').on(table.parent_id),
+    index('idx_tasks_priority').on(table.priority),
   ],
 )

@@ -26,6 +26,13 @@ import type {
 
 type TaskRow = typeof tasks.$inferSelect
 
+const DEFAULT_TASK_PRIORITY = 100
+
+function normalize_priority(value?: number | null): number {
+  if (value === null || value === undefined) return DEFAULT_TASK_PRIORITY
+  return value
+}
+
 function parse_json_array<T>(
   value: string | null,
   defaultValue: T[] = [],
@@ -82,21 +89,37 @@ function parse_decisions(value: string | null): Decision[] {
   }))
 }
 
-function encode_cursor(sortValue: string, id: string): string {
-  return Buffer.from(JSON.stringify({ sortValue, id }), 'utf-8').toString(
-    'base64',
-  )
+function encode_cursor(
+  sortValue: string | number,
+  id: string,
+  secondarySortValue?: string | number,
+): string {
+  return Buffer.from(
+    JSON.stringify({ sortValue, id, secondarySortValue }),
+    'utf-8',
+  ).toString('base64')
 }
 
-function decode_cursor(
-  cursor: string | undefined,
-): { sortValue: string; id: string } | null {
+function decode_cursor(cursor: string | undefined): {
+  sortValue: string | number
+  id: string
+  secondarySortValue?: string | number
+} | null {
   if (!cursor) return null
   try {
     const raw = Buffer.from(cursor, 'base64').toString('utf-8')
-    const parsed = JSON.parse(raw) as { sortValue?: string; id?: string }
-    if (!parsed.sortValue || !parsed.id) return null
-    return { sortValue: parsed.sortValue, id: parsed.id }
+    const parsed = JSON.parse(raw) as {
+      sortValue?: string | number
+      id?: string
+      secondarySortValue?: string | number
+    }
+    if (parsed.sortValue === undefined || parsed.id === undefined) return null
+    if (typeof parsed.id !== 'string' || parsed.id.length === 0) return null
+    return {
+      sortValue: parsed.sortValue,
+      id: parsed.id,
+      secondarySortValue: parsed.secondarySortValue,
+    }
   } catch {
     return null
   }
@@ -116,6 +139,7 @@ function row_to_task(row: TaskRow): Task {
     title: row.title,
     type: row.type as TaskType,
     status: row.status as TaskStatus | 'deleted',
+    priority: normalize_priority(row.priority ?? undefined),
     intent: row.intent ?? null,
     description: row.description ?? null,
     plan: row.plan ?? null,
@@ -181,6 +205,7 @@ export async function create_task(
   const updated_at = created_at
   const completed_at = input.status === 'completed' ? created_at : null
   const blocked_by = input.blocked_by ?? []
+  const priority = normalize_priority(input.priority)
 
   validate_blocker_list(id, blocked_by)
 
@@ -209,6 +234,7 @@ export async function create_task(
       title: input.title,
       type: input.type,
       status: input.status ?? 'open',
+      priority,
       intent: input.intent ?? null,
       description: input.description ?? null,
       plan: input.plan ?? null,
@@ -280,6 +306,9 @@ export async function update_task(
     updates.status = input.status
     updates.completed_at =
       input.status === 'completed' ? new Date().toISOString() : null
+  }
+  if (input.priority !== undefined) {
+    updates.priority = normalize_priority(input.priority)
   }
   if (input.intent !== undefined) updates.intent = input.intent
   if (input.description !== undefined) updates.description = input.description
@@ -543,6 +572,7 @@ export async function list_tasks(
 
   if (!filters.status) {
     where.push(ne(tasks.status, 'cancelled'))
+    where.push(ne(tasks.status, 'completed'))
   }
 
   if (filters.status) {
@@ -561,27 +591,49 @@ export async function list_tasks(
     }
   }
 
+  const sortKey = filters.sort ?? 'priority'
   const sortColumn =
-    filters.sort === 'updatedAt' ? tasks.updated_at : tasks.created_at
+    sortKey === 'priority'
+      ? tasks.priority
+      : sortKey === 'updatedAt'
+        ? tasks.updated_at
+        : tasks.created_at
   const sortOrder = filters.order === 'desc' ? 'desc' : 'asc'
   const limit = filters.limit && filters.limit > 0 ? filters.limit : 50
   const cursor = decode_cursor(filters.cursor)
 
   if (cursor) {
     const comparator = sortOrder === 'desc' ? '<' : '>'
-    where.push(
-      sql`(${sortColumn}, ${tasks.id}) ${sql.raw(comparator)} (${cursor.sortValue}, ${cursor.id})`,
-    )
+    if (sortKey === 'priority') {
+      if (cursor.secondarySortValue !== undefined) {
+        where.push(
+          sql`(${tasks.priority}, ${tasks.created_at}, ${tasks.id}) ${sql.raw(comparator)} (${cursor.sortValue}, ${cursor.secondarySortValue}, ${cursor.id})`,
+        )
+      } else {
+        where.push(
+          sql`(${tasks.priority}, ${tasks.id}) ${sql.raw(comparator)} (${cursor.sortValue}, ${cursor.id})`,
+        )
+      }
+    } else {
+      where.push(
+        sql`(${sortColumn}, ${tasks.id}) ${sql.raw(comparator)} (${cursor.sortValue}, ${cursor.id})`,
+      )
+    }
   }
 
   const orderFn = sortOrder === 'desc' ? desc : asc
   const baseQuery = db.select().from(tasks)
   const filteredQuery =
     where.length > 0 ? baseQuery.where(and(...where)) : baseQuery
-  const rows = await filteredQuery
-    .orderBy(orderFn(sortColumn), orderFn(tasks.id))
-    .limit(limit + 1)
-    .all()
+  const orderedQuery =
+    sortKey === 'priority'
+      ? filteredQuery.orderBy(
+          orderFn(tasks.priority),
+          orderFn(tasks.created_at),
+          orderFn(tasks.id),
+        )
+      : filteredQuery.orderBy(orderFn(sortColumn), orderFn(tasks.id))
+  const rows = await orderedQuery.limit(limit + 1).all()
 
   const hasMore = rows.length > limit
   const slice = hasMore ? rows.slice(0, limit) : rows
@@ -593,11 +645,17 @@ export async function list_tasks(
 
   const last = slice[slice.length - 1]!
   const sortValue =
-    sortColumn === tasks.updated_at ? last.updated_at : last.created_at
+    sortKey === 'priority'
+      ? last.priority
+      : sortKey === 'updatedAt'
+        ? last.updated_at
+        : last.created_at
+  const secondarySortValue =
+    sortKey === 'priority' ? last.created_at : undefined
 
   return {
     tasks: mapped,
-    nextCursor: encode_cursor(sortValue, last.id),
+    nextCursor: encode_cursor(sortValue, last.id, secondarySortValue),
   }
 }
 
@@ -625,7 +683,7 @@ export async function list_tasks_by_statuses(
     .select()
     .from(tasks)
     .where(and(...where))
-    .orderBy(asc(tasks.created_at))
+    .orderBy(asc(tasks.priority), asc(tasks.created_at), asc(tasks.id))
     .all()
 
   return rows.map(row_to_task)

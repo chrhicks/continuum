@@ -10,7 +10,7 @@ bun run /path/to/continuum/bin/continuum --cwd <REPO_DIR> --json <command>
 
 ```
 task init
-task create --title "..." --type feature --intent "..." --description @- --plan @-
+task create --title "..." --type feature --priority 100 --intent "..." --description @- --plan @-
 task steps template
 task steps add <task_id> --steps '[{"title":"Investigate failure","description":"Reproduce issue","position":1}]'
 task steps add <task_id> --steps @- <<'EOF'
@@ -25,10 +25,13 @@ task validate <task_id> --transition completed
 task complete <task_id> --outcome @-
 ```
 
+Priority: integer, lower is higher (default 100).
+
 ## Task Listing / Graph
 
 ```
 task list --status ready
+task list --status ready --sort priority --order asc
 task get <task_id> --expand parent,children,blockers
 task graph descendants <task_id>
 ```
