@@ -16,6 +16,11 @@ metadata:
 
 Maintain a 3-tier memory system (NOW → RECENT → MEMORY) that captures and consolidates project context across OpenCode sessions. This skill runs asynchronously to preserve working agent performance.
 
+## CLI-First Workflow
+
+Use the `continuum memory` CLI for all memory writes. Do not manually edit
+`.continuum/memory/*.md` unless the CLI cannot run and recovery is required.
+
 ## Memory Architecture
 
 ### Three Tiers
@@ -45,12 +50,13 @@ This skill triggers when:
 
 ### 1. Analysis Phase
 
-Reads and analyzes:
+Inspect via CLI (no manual edits):
 
-- `.continuum/memory/NOW-{latest}.md` - Current session transcript
-- `.continuum/memory/RECENT.md` - Existing recent context
-- `.continuum/tasks/` (via continuum plugin) - Related task data
-- Git history - Recent commits for context
+- `continuum memory status` and `continuum memory list` to locate the latest NOW
+- `continuum memory log --tail 50` for audit context
+- `continuum memory search "<query>" --tier all` for quick recall
+- `bun run bin/continuum task ...` for related task data
+- Git history for recent commits
 
 Identifies:
 
@@ -62,33 +68,18 @@ Identifies:
 
 ### 2. Consolidation Phase
 
-#### A. Update RECENT.md
+#### Use the CLI to consolidate
 
-- Append summary of latest NOW session
-- Maintain only last 3 sessions (oldest dropped)
-- Structure: Focus, Key Decisions, Discoveries, Tasks, Links
-- Max size: ~500 lines
-
-#### B. Update MEMORY.md Index
-
-- Add entries to Architecture Decisions, Discoveries, Patterns, etc.
-- Link to detailed content in MEMORY-{date}.md
-- Organize by theme, not chronology
-- Tag entries for searchability
-
-#### C. Create/Update MEMORY-{date}.md
-
-- Write structured, detailed summaries
-- Include code examples when relevant
-- Link back to tasks, files, commits
-- Add tags and metadata for search
+- Run `continuum memory consolidate` to update RECENT/MEMORY and the audit log.
+- Use `continuum memory session end --consolidate` when closing a session.
+- Use `--dry-run` to preview consolidation output.
+- Do not manually edit RECENT/MEMORY files unless recovering from a CLI failure.
 
 ### 3. Cleanup Phase
 
-- Clear NOW.md (after successful consolidation)
-- Garbage collect NOW files older than 3 days
-- Rotate consolidation.log if >1000 lines
-- Update timestamps and metadata
+- Use `continuum memory recover --hours <n>` to find stale NOW sessions.
+- Add `--consolidate` to recover and consolidate stale sessions.
+- Avoid manual deletions; the CLI manages cleanup and logs.
 
 ## What to Extract as Important
 
@@ -121,6 +112,8 @@ Identifies:
 
 ## Output Format
 
+The CLI generates these formats; treat them as read-only outputs.
+
 ### RECENT.md Entry Structure
 
 ```markdown
@@ -130,8 +123,8 @@ Identifies:
 
 **Key Decisions**:
 
-- [ ] Item 1
-- [ ] Item 2
+- Item 1
+- Item 2
 
 **Discoveries**:
 
@@ -146,37 +139,43 @@ Identifies:
 ### MEMORY.md Index Entry
 
 ```markdown
-- **[Title](MEMORY-{date}.md#anchor)** - Brief description, date, tags
+- **[Session {date} {time}](MEMORY-{date}.md#anchor)** - Brief description
 ```
 
 ### MEMORY-{date}.md Section
 
 ```markdown
-## Section Title
+## Session {date} {time} UTC ({session_id})
 
-**Date Range**: {start} to {end}
-**Status**: IMPLEMENTED | IN PROGRESS | ABANDONED
+<a name="{anchor}"></a>
 
-### Summary
+**Focus**: One-line summary
 
-2-3 paragraphs explaining what happened and why it matters
+**Decisions**:
 
-### Implementation
+- Decision 1
+- Decision 2
 
-Code examples, file paths, specific details
+**Discoveries**:
 
-### Related Work
+- Discovery 1
+- Discovery 2
 
-Tasks, commits, other sessions
+**Patterns**:
+
+- Pattern 1
+
+**Tasks**: tkt_123, tkt_456
+**Files**: `path/to/file.ts`, `path/to/test.ts`
 ```
 
 ## Error Handling
 
-### If NOW.md is locked (another agent writing)
+### If memory is locked
 
-- Wait 5 seconds, retry up to 3 times
-- If still locked: log warning, skip this consolidation
-- Notify: "Memory consolidation skipped: session still active"
+- If `continuum memory` commands return a lock error, wait briefly and retry.
+- Do not delete lock files manually.
+- If it still fails, log a warning and skip consolidation for now.
 
 ### If files are corrupted (invalid YAML, unreadable)
 
@@ -227,7 +226,7 @@ auto_consolidate_schedule: null # Future: "0 2 * * *"
 ### Check what would be consolidated
 
 ```bash
-continuum memory consolidate --dry-run --verbose
+continuum memory consolidate --dry-run
 ```
 
 ### View consolidation history
@@ -246,21 +245,14 @@ continuum memory search "auth" --tier=all
 
 ### Prompt for Working Agent
 
-You should maintain real-time session transcript in NOW.md:
+You should maintain the session transcript using the CLI:
 
-1. Create/open: `.continuum/memory/NOW-{ISO}.md`
-2. For each exchange, append:
-
-   ```markdown
-   ## User: {message}
-
-   ## Agent: {response}
-
-   [Tool: {tool_name} - {summary}]
-   ```
-
-3. Update YAML frontmatter: increment lines, add tags, etc.
-4. On session end: trigger this skill
+1. Start/resume a session: `continuum memory session start` (optional; `continuum memory append` auto-starts).
+2. For each exchange, append via CLI:
+   - `continuum memory append user "<message>"`
+   - `continuum memory append agent "<message>"`
+   - `continuum memory append tool <tool_name> "<summary>"`
+3. On session end, run `continuum memory session end --consolidate` (or `continuum memory consolidate` if already ended).
 
 ### Suggesting Consolidation
 
