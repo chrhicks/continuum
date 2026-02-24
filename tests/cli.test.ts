@@ -40,6 +40,70 @@ async function withCapturedLogs(run: () => Promise<void>): Promise<string[]> {
   return logs
 }
 
+const RECALL_SUMMARY_CONTENT = [
+  '---',
+  'source: opencode',
+  'session_id: ses_test_cli',
+  'project_id: proj_test',
+  'directory: /tmp/project',
+  'slug: test-session',
+  'title: Test Session',
+  'created_at: 2026-02-10T10:00:00.000Z',
+  'updated_at: 2026-02-10T10:30:00.000Z',
+  'summary_model: test',
+  'summary_chunks: 1',
+  'summary_max_chars: 1000',
+  'summary_max_lines: 200',
+  'summary_generated_at: 2026-02-10T10:31:00.000Z',
+  'summary_keyword_total: 0',
+  '---',
+  '',
+  '# Session Summary: Test Session',
+  '',
+  '## Focus',
+  '',
+  'Test recall import CLI.',
+  '',
+  '## Decisions',
+  '',
+  '- None',
+  '',
+  '## Discoveries',
+  '',
+  '- CLI uses summary dir.',
+  '',
+  '## Patterns',
+  '',
+  '- none',
+  '',
+  '## Tasks',
+  '',
+  '- tkt_cli',
+  '',
+  '## Files',
+  '',
+  '- src/memory/recall-import.ts',
+  '',
+  '## Keywords',
+  '',
+  '- commands: `memory recall import`',
+  '',
+  '## Blockers',
+  '',
+  '- none',
+  '',
+  '## Open Questions',
+  '',
+  '- none',
+  '',
+  '## Next Steps',
+  '',
+  '- write tests',
+  '',
+  '## Confidence (0.72)',
+  '',
+].join('\n')
+
 describe('memory search CLI', () => {
   test('accepts --tier=VALUE syntax', async () => {
     await withTempCwd(async () => {
@@ -117,6 +181,66 @@ describe('memory search CLI', () => {
   })
 })
 
+describe('memory recall CLI', () => {
+  test('prints dry-run summary for recall import', async () => {
+    await withTempCwd(async () => {
+      const recallDir = join(process.cwd(), '.continuum', 'recall', 'opencode')
+      mkdirSync(recallDir, { recursive: true })
+      writeFileSync(
+        join(recallDir, 'OPENCODE-SUMMARY-2026-02-10T10-00-00-ses_test_cli.md'),
+        RECALL_SUMMARY_CONTENT,
+        'utf-8',
+      )
+
+      const originalArgv = process.argv
+      process.argv = [
+        'node',
+        'continuum',
+        'memory',
+        'recall',
+        'import',
+        '--dry-run',
+      ]
+
+      try {
+        const logs = await withCapturedLogs(async () => {
+          await main()
+        })
+        const output = logs.join('\n')
+        expect(output).toContain('Recall import (dry run):')
+        expect(output).toContain('Summaries: 1')
+        expect(output).toContain('Imported: 0')
+        expect(output).toContain('Skipped (existing): 0')
+        expect(output).toContain('Skipped (invalid): 0')
+      } finally {
+        process.argv = originalArgv
+      }
+    })
+  })
+
+  test('reports when no recall summaries exist', async () => {
+    await withTempCwd(async () => {
+      const recallDir = join(process.cwd(), '.continuum', 'recall', 'opencode')
+      mkdirSync(recallDir, { recursive: true })
+
+      const originalArgv = process.argv
+      process.argv = ['node', 'continuum', 'memory', 'recall', 'import']
+
+      try {
+        const logs = await withCapturedLogs(async () => {
+          await main()
+        })
+        const output = logs.join('\n')
+        expect(output).toContain(
+          `No opencode recall summaries found in ${recallDir}.`,
+        )
+      } finally {
+        process.argv = originalArgv
+      }
+    })
+  })
+})
+
 describe('task CLI', () => {
   test('task create auto-initializes when missing', async () => {
     await withTempCwd(async () => {
@@ -174,7 +298,7 @@ describe('task CLI', () => {
     })
   })
 
-  test('task list excludes cancelled tasks by default', async () => {
+  test('task list excludes cancelled and completed tasks by default', async () => {
     await withTempCwd(async () => {
       await continuum.task.init()
       const openTask = await continuum.task.create({
@@ -188,6 +312,12 @@ describe('task CLI', () => {
         status: 'cancelled',
         description: 'Should be hidden by default.',
       })
+      const completedTask = await continuum.task.create({
+        title: 'Completed task',
+        type: 'feature',
+        status: 'completed',
+        description: 'Should be hidden by default.',
+      })
 
       const originalArgv = process.argv
       process.argv = ['node', 'continuum', 'task', 'list']
@@ -199,6 +329,7 @@ describe('task CLI', () => {
         const output = logs.join('\n')
         expect(output).toContain(openTask.id)
         expect(output).not.toContain(cancelledTask.id)
+        expect(output).not.toContain(completedTask.id)
       } finally {
         process.argv = originalArgv
       }
@@ -236,6 +367,44 @@ describe('task CLI', () => {
         })
         const output = logs.join('\n')
         expect(output).toContain(cancelledTask.id)
+        expect(output).not.toContain(openTask.id)
+      } finally {
+        process.argv = originalArgv
+      }
+    })
+  })
+
+  test('task list --status completed includes completed tasks', async () => {
+    await withTempCwd(async () => {
+      await continuum.task.init()
+      const openTask = await continuum.task.create({
+        title: 'Open task',
+        type: 'feature',
+        description: 'Should be filtered out.',
+      })
+      const completedTask = await continuum.task.create({
+        title: 'Completed task',
+        type: 'feature',
+        status: 'completed',
+        description: 'Should appear when filtered.',
+      })
+
+      const originalArgv = process.argv
+      process.argv = [
+        'node',
+        'continuum',
+        'task',
+        'list',
+        '--status',
+        'completed',
+      ]
+
+      try {
+        const logs = await withCapturedLogs(async () => {
+          await main()
+        })
+        const output = logs.join('\n')
+        expect(output).toContain(completedTask.id)
         expect(output).not.toContain(openTask.id)
       } finally {
         process.argv = originalArgv
@@ -432,6 +601,36 @@ describe('cli input', () => {
 })
 
 describe('memory session CLI', () => {
+  test('memory list prints memory files', async () => {
+    await withTempCwd(async () => {
+      const memoryDir = join(process.cwd(), '.continuum', 'memory')
+      mkdirSync(memoryDir, { recursive: true })
+
+      const nowFileName = 'NOW-2026-02-02T16-10-00.md'
+      writeFileSync(join(memoryDir, nowFileName), 'hello', 'utf-8')
+      writeFileSync(join(memoryDir, '.current'), nowFileName, 'utf-8')
+      writeFileSync(join(memoryDir, 'RECENT.md'), 'recent', 'utf-8')
+      writeFileSync(join(memoryDir, 'MEMORY.md'), 'memory', 'utf-8')
+
+      const originalArgv = process.argv
+      process.argv = ['node', 'continuum', 'memory', 'list']
+
+      try {
+        const logs = await withCapturedLogs(async () => {
+          await main()
+        })
+        const output = logs.join('\n')
+        expect(output).toContain('Memory files:')
+        expect(output).toContain(nowFileName)
+        expect(output).toContain('RECENT.md')
+        expect(output).toContain('MEMORY.md')
+        expect(output).toContain('current,')
+      } finally {
+        process.argv = originalArgv
+      }
+    })
+  })
+
   test('end --consolidate triggers consolidation', async () => {
     await withTempCwd(async () => {
       startSession()
