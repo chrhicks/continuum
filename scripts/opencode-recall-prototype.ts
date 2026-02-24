@@ -1299,9 +1299,9 @@ const renderKeywordTokens = (items: string[]): string => {
 const renderKeywordBlock = (
   keywords: SummaryKeywordBlock | undefined,
 ): string[] => {
-  if (!keywords) return ['- none']
   return SUMMARY_KEYWORD_GROUPS.map((group) => {
-    return `- ${group}: ${renderKeywordTokens(keywords[group])}`
+    const values = keywords?.[group] ?? []
+    return `- ${group}: ${renderKeywordTokens(values)}`
   })
 }
 
