@@ -1,3 +1,11 @@
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+} from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
 import { Command } from 'commander'
 import { initMemory } from '../../memory/init'
 import {
@@ -14,12 +22,39 @@ import {
 } from '../../memory/now-writer'
 import { searchMemory, type MemorySearchTier } from '../../memory/search'
 import { searchRecall, type RecallSearchMode } from '../../recall/search'
+import { resolveOpencodeOutputDir } from '../../recall/opencode/paths'
+import {
+  buildOpencodeSourceIndex,
+  resolveOpencodeSourceIndexFile,
+  resolveRecallDataRoot,
+  type OpencodeSourceIndex,
+} from '../../recall/index/opencode-source-index'
+import {
+  buildOpencodeDiffProjectScope,
+  buildOpencodeDiffReport,
+  buildOpencodeSyncPlan,
+  filterOpencodeSourceSessions,
+  filterOpencodeSummaryEntries,
+  indexOpencodeSummaryEntries,
+  listOpencodeSummaryFiles,
+  parseOpencodeSummaryFile,
+  type OpencodeDiffEntry,
+  type OpencodeDiffReport,
+} from '../../recall/diff/opencode-diff'
+import {
+  buildOpencodeSyncLedger,
+  runOpencodeSyncPlan,
+  updateOpencodeSyncLedger,
+  type OpencodeSyncLedger,
+} from '../../recall/sync/opencode-sync'
 import { validateMemory } from '../../memory/validate'
 import { readConsolidationLog } from '../../memory/log'
 import { recoverStaleNowFiles } from '../../memory/recover'
 import { listMemoryEntries } from '../../memory/list'
 import { importOpencodeRecall } from '../../memory/recall-import'
 import { handleLoop } from './loop'
+
+const DEFAULT_SYNC_PROCESSED_VERSION = 1
 
 export function createMemoryCommand(): Command {
   const memoryCommand = new Command('memory').description(
@@ -123,6 +158,133 @@ export function createMemoryCommand(): Command {
         dryRun?: boolean
       }) => {
         handleRecallImport(options)
+      },
+    )
+
+  recallCommand
+    .command('index')
+    .description('Build recall source index from OpenCode storage')
+    .option('--db <path>', 'OpenCode sqlite database path')
+    .option(
+      '--data-root <path>',
+      'Continuum data root (default: $XDG_DATA_HOME/continuum)',
+    )
+    .option(
+      '--index <path>',
+      'Output index file (default: <data-root>/recall/opencode/source-index.json)',
+    )
+    .option('--project <id>', 'Limit to a single project id')
+    .option('--session <id>', 'Limit to a single session id')
+    .option('--verbose', 'Print progress details')
+    .action(
+      (options: {
+        db?: string
+        dataRoot?: string
+        index?: string
+        project?: string
+        session?: string
+        verbose?: boolean
+      }) => {
+        handleRecallIndex(options)
+      },
+    )
+
+  recallCommand
+    .command('diff')
+    .description('Compare recall summaries to source index')
+    .option(
+      '--index <path>',
+      'Source index file (default: $XDG_DATA_HOME/continuum/recall/opencode/source-index.json)',
+    )
+    .option(
+      '--data-root <path>',
+      'Continuum data root (default: $XDG_DATA_HOME/continuum)',
+    )
+    .option('--repo <path>', 'Repo root (default: cwd)')
+    .option(
+      '--summary-dir <dir>',
+      'Summary dir (default: <repo>/.continuum/recall/opencode)',
+    )
+    .option('--summaries <dir>', 'Alias for --summary-dir')
+    .option('--limit <n>', 'Limit items per section', '10')
+    .option('--json', 'Output JSON report to stdout')
+    .option(
+      '--report <path>',
+      'Write JSON report to file (default: <data-root>/recall/opencode/diff-report.json)',
+    )
+    .option('--no-report', 'Skip writing the report file')
+    .option(
+      '--plan <path>',
+      'Write sync plan file (default: <data-root>/recall/opencode/sync-plan.json)',
+    )
+    .option('--no-plan', 'Skip writing the sync plan file')
+    .option('--project <id>', 'Limit to a single project id')
+    .option('--include-global', 'Include global sessions in scope')
+    .action(
+      (options: {
+        index?: string
+        dataRoot?: string
+        repo?: string
+        summaryDir?: string
+        summaries?: string
+        limit?: string
+        json?: boolean
+        report?: string | boolean
+        plan?: string | boolean
+        project?: string
+        includeGlobal?: boolean
+      }) => {
+        handleRecallDiff(options)
+      },
+    )
+
+  recallCommand
+    .command('sync')
+    .description('Execute recall sync plan')
+    .option(
+      '--plan <path>',
+      'Sync plan file (default: <data-root>/recall/opencode/sync-plan.json)',
+    )
+    .option(
+      '--ledger <path>',
+      'Ledger file (default: <data-root>/recall/opencode/state.json)',
+    )
+    .option(
+      '--log <path>',
+      'Append sync log to file (default: <data-root>/recall/opencode/sync-log.jsonl)',
+    )
+    .option(
+      '--data-root <path>',
+      'Continuum data root (default: $XDG_DATA_HOME/continuum)',
+    )
+    .option(
+      '--command <template>',
+      'Command template (supports {session_id}, {project_id}, {key})',
+    )
+    .option('--cwd <path>', 'Working directory for commands (default: cwd)')
+    .option('--dry-run', 'Skip execution and ledger updates')
+    .option('--fail-fast', 'Stop on first failure')
+    .option('--limit <n>', 'Limit number of items processed')
+    .option(
+      '--processed-version <n>',
+      `Ledger processed version (default: ${DEFAULT_SYNC_PROCESSED_VERSION})`,
+    )
+    .option('--verbose', 'Print per-item results')
+    .action(
+      (options: {
+        plan?: string
+        ledger?: string
+        log?: string
+        dataRoot?: string
+        command?: string
+        cwd?: string
+        dryRun?: boolean
+        failFast?: boolean
+        limit?: string
+        processedVersion?: string
+        verbose?: boolean
+      }) => {
+        handleRecallSync(options)
       },
     )
 
@@ -404,6 +566,232 @@ function handleRecallImport(options: {
   }
 }
 
+function handleRecallIndex(options: {
+  db?: string
+  dataRoot?: string
+  index?: string
+  project?: string
+  session?: string
+  verbose?: boolean
+}): void {
+  const index = buildOpencodeSourceIndex({
+    dbPath: options.db,
+    dataRoot: options.dataRoot,
+    indexFile: options.index,
+    projectId: options.project,
+    sessionId: options.session,
+  })
+
+  if (options.verbose) {
+    for (const entry of Object.values(index.sessions)) {
+      console.log(`Indexed ${entry.key} (${entry.message_count} messages)`)
+    }
+  }
+
+  writeJsonFile(index.index_file, index)
+  console.log(`Source index written: ${index.index_file}`)
+  console.log(
+    `Sessions indexed: ${index.stats.session_count} (projects: ${index.stats.project_count})`,
+  )
+}
+
+function handleRecallDiff(options: {
+  index?: string
+  dataRoot?: string
+  repo?: string
+  summaryDir?: string
+  summaries?: string
+  limit?: string
+  json?: boolean
+  report?: string | boolean
+  plan?: string | boolean
+  project?: string
+  includeGlobal?: boolean
+}): void {
+  const repoPath = resolve(process.cwd(), options.repo ?? '.')
+  const dataRoot = resolveRecallDataRoot(options.dataRoot)
+  const indexFile = resolveOpencodeSourceIndexFile(dataRoot, options.index)
+  const limit = parseDiffLimit(options.limit)
+  const summaryDirArg = options.summaryDir ?? options.summaries ?? null
+  const summaryDir = resolveOpencodeOutputDir(repoPath, summaryDirArg)
+  const reportEnabled = options.report !== false
+  const planEnabled = options.plan !== false
+  const reportPath = resolveDiffReportPath(
+    dataRoot,
+    typeof options.report === 'string' ? options.report : null,
+  )
+  const planPath = resolveSyncPlanPath(
+    dataRoot,
+    typeof options.plan === 'string' ? options.plan : null,
+  )
+
+  if (!existsSync(indexFile)) {
+    throw new Error(`Source index not found: ${indexFile}`)
+  }
+
+  const sourceIndex = JSON.parse(
+    readFileSync(indexFile, 'utf-8'),
+  ) as OpencodeSourceIndex
+
+  const projectScope = buildOpencodeDiffProjectScope(
+    sourceIndex,
+    repoPath,
+    options.project ?? null,
+    options.includeGlobal ?? false,
+  )
+
+  const scopedSourceIndex: OpencodeSourceIndex = {
+    ...sourceIndex,
+    sessions: filterOpencodeSourceSessions(
+      sourceIndex.sessions ?? {},
+      projectScope.project_ids,
+    ),
+  }
+
+  const summaryEntries = listOpencodeSummaryFiles(summaryDir)
+    .map((filePath) => parseOpencodeSummaryFile(filePath))
+    .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
+  const scopedSummaryEntries = filterOpencodeSummaryEntries(
+    summaryEntries,
+    projectScope.project_ids,
+  )
+
+  const summaryIndex = indexOpencodeSummaryEntries(scopedSummaryEntries)
+  const report = buildOpencodeDiffReport(
+    scopedSourceIndex,
+    summaryIndex,
+    summaryDir,
+    projectScope,
+  )
+
+  if (reportEnabled) {
+    writeJsonFile(reportPath, report)
+  }
+
+  const plan = planEnabled
+    ? buildOpencodeSyncPlan(report, reportEnabled ? reportPath : null)
+    : null
+  if (planEnabled && plan) {
+    writeJsonFile(planPath, plan)
+  }
+
+  if (options.json) {
+    console.log(JSON.stringify(report, null, 2))
+    return
+  }
+
+  const pathLines: string[] = []
+  if (reportEnabled) {
+    pathLines.push(`Report file: ${reportPath}`)
+  }
+  if (planEnabled) {
+    pathLines.push(`Plan file: ${planPath}`)
+  }
+  const prefix = pathLines.length > 0 ? `${pathLines.join('\n')}\n` : ''
+  console.log(`${prefix}${renderRecallDiffReport(report, limit)}`)
+}
+
+function handleRecallSync(options: {
+  plan?: string
+  ledger?: string
+  log?: string
+  dataRoot?: string
+  command?: string
+  cwd?: string
+  dryRun?: boolean
+  failFast?: boolean
+  limit?: string
+  processedVersion?: string
+  verbose?: boolean
+}): void {
+  const dataRoot = resolveRecallDataRoot(options.dataRoot)
+  const ledgerPath = resolveSyncLedgerPath(dataRoot, options.ledger ?? null)
+  const logPath = resolveSyncLogPath(dataRoot, options.log ?? null)
+  const limit = parseSyncLimit(options.limit)
+  const processedVersion = parseProcessedVersion(options.processedVersion)
+
+  const result = runOpencodeSyncPlan({
+    planPath: options.plan ?? null,
+    dataRoot,
+    commandTemplate: options.command ?? null,
+    cwd: options.cwd ?? null,
+    dryRun: options.dryRun,
+    failFast: options.failFast,
+    limit,
+  })
+
+  const now = new Date().toISOString()
+  const shouldWriteLedger = !result.dryRun && result.summary.success > 0
+  let ledgerWritten = false
+
+  if (shouldWriteLedger) {
+    const existingLedger = existsSync(ledgerPath)
+      ? (JSON.parse(readFileSync(ledgerPath, 'utf-8')) as OpencodeSyncLedger)
+      : null
+    const baseLedger =
+      existingLedger ??
+      buildOpencodeSyncLedger(result.plan, processedVersion, now)
+    const nextLedger: OpencodeSyncLedger = {
+      ...baseLedger,
+      processed_version: processedVersion,
+    }
+    const updatedLedger = updateOpencodeSyncLedger(
+      nextLedger,
+      result.results,
+      now,
+    )
+    writeJsonFile(ledgerPath, updatedLedger)
+    ledgerWritten = true
+  }
+
+  const runCwd = resolve(process.cwd(), options.cwd ?? '.')
+  appendJsonLine(logPath, {
+    generated_at: now,
+    plan_path: result.planPath,
+    ledger_path: ledgerPath,
+    command_template: result.commandTemplate,
+    command_appended: result.commandAppended,
+    warning: result.warning,
+    dry_run: result.dryRun,
+    fail_fast: Boolean(options.failFast),
+    limit,
+    cwd: runCwd,
+    processed_version: processedVersion,
+    items_processed: result.results.length,
+    summary: result.summary,
+    results: result.results,
+    ledger_written: ledgerWritten,
+  })
+
+  if (result.commandAppended) {
+    console.log('Note: appended --project {project_id} to command template.')
+  }
+  if (result.warning) {
+    console.log(`Warning: ${result.warning}`)
+  }
+
+  if (options.verbose) {
+    for (const entry of result.results) {
+      const label = entry.status.toUpperCase()
+      const commandLabel = entry.command ? ` command=${entry.command}` : ''
+      console.log(`${label}: ${entry.item.key}${commandLabel}`)
+    }
+  }
+
+  console.log(`Plan file: ${result.planPath}`)
+  if (ledgerWritten) {
+    console.log(`Ledger file: ${ledgerPath}`)
+  }
+  console.log(`Sync log: ${logPath}`)
+  if (result.dryRun && !result.commandTemplate) {
+    console.log('Dry-run: missing --command, no execution performed.')
+  }
+  console.log(`Items processed: ${result.results.length}`)
+  console.log(`- success: ${result.summary.success}`)
+  console.log(`- failed: ${result.summary.failed}`)
+  console.log(`- skipped: ${result.summary.skipped}`)
+}
+
 function handleRecallSearch(
   query: string,
   options: { mode?: string; summaryDir?: string; limit?: string },
@@ -444,6 +832,69 @@ function handleRecallSearch(
       `- [${score}] ${match.filePath}${sessionLabel}${titleLabel}${snippetLabel}`,
     )
   }
+}
+
+function renderRecallDiffReport(
+  report: OpencodeDiffReport,
+  limit: number,
+): string {
+  const lines: string[] = []
+  lines.push(`Source index: ${report.index_file}`)
+  lines.push(`Summary dir: ${report.summary_dir}`)
+  lines.push(`Project scope: ${report.project_scope.project_ids.join(', ')}`)
+  lines.push(`Source sessions: ${report.stats.source_sessions}`)
+  lines.push(
+    `Local summaries: ${report.stats.local_summaries} (duplicates: ${report.stats.local_duplicates})`,
+  )
+  lines.push('Diff:')
+  lines.push(`- new: ${report.stats.new}`)
+  lines.push(`- stale: ${report.stats.stale}`)
+  lines.push(`- unchanged: ${report.stats.unchanged}`)
+  lines.push(`- orphan: ${report.stats.orphan}`)
+  lines.push(`- unknown: ${report.stats.unknown}`)
+  lines.push('')
+
+  lines.push(...renderRecallDiffSection('New', report.new, limit))
+  lines.push(...renderRecallDiffSection('Stale', report.stale, limit))
+  lines.push(...renderRecallDiffSection('Orphan', report.orphan, limit))
+  lines.push(...renderRecallDiffSection('Unknown', report.unknown, limit))
+
+  if (report.stats.local_duplicates > 0) {
+    const duplicateSuffix =
+      limit > 0 && report.duplicates.length > limit ? `, showing ${limit}` : ''
+    lines.push(
+      `Duplicates (${report.stats.local_duplicates}${duplicateSuffix})`,
+    )
+    const rows = report.duplicates.slice(0, limit).map((entry) => {
+      return `- ${entry.key} | kept=${entry.kept} | dropped=${entry.dropped}`
+    })
+    lines.push(...rows, '')
+  }
+
+  return lines.join('\n').trimEnd() + '\n'
+}
+
+function renderRecallDiffSection(
+  label: string,
+  entries: OpencodeDiffEntry[],
+  limit: number,
+): string[] {
+  const showing = entries.slice(0, limit)
+  const headerSuffix =
+    limit > 0 && entries.length > limit ? `, showing ${limit}` : ''
+  const header = `${label} (${entries.length}${headerSuffix})`
+  if (showing.length === 0) {
+    return [header, '- none', '']
+  }
+
+  const rows = showing.map((entry) => {
+    const title = entry.title ?? 'untitled'
+    const sourceUpdated = entry.source_updated_at ?? 'n/a'
+    const summaryGenerated = entry.summary_generated_at ?? 'n/a'
+    return `- ${entry.key} | ${title} | source_updated_at=${sourceUpdated} | summary_generated_at=${summaryGenerated}`
+  })
+
+  return [header, ...rows, '']
 }
 
 function handleLog(tail?: number): void {
@@ -590,6 +1041,33 @@ function parseRecallLimit(value?: string): number {
   return count
 }
 
+function parseDiffLimit(value?: string): number {
+  if (!value) return 10
+  const count = Number(value)
+  if (!Number.isInteger(count) || count <= 0) {
+    throw new Error('Limit must be a positive integer.')
+  }
+  return count
+}
+
+function parseSyncLimit(value?: string): number | null {
+  if (!value) return null
+  const count = Number(value)
+  if (!Number.isInteger(count) || count <= 0) {
+    throw new Error('Limit must be a positive integer.')
+  }
+  return count
+}
+
+function parseProcessedVersion(value?: string): number {
+  if (!value) return DEFAULT_SYNC_PROCESSED_VERSION
+  const count = Number(value)
+  if (!Number.isInteger(count) || count <= 0) {
+    throw new Error('Processed version must be a positive integer.')
+  }
+  return count
+}
+
 function parseTail(value: string): number {
   const count = Number(value)
   if (!Number.isInteger(count) || count <= 0) {
@@ -612,6 +1090,44 @@ function parseLoopCount(value: string): number {
     throw new Error('Count must be a positive integer.')
   }
   return count
+}
+
+function resolveDiffReportPath(dataRoot: string, value: string | null): string {
+  if (value) {
+    return resolve(process.cwd(), value)
+  }
+  return join(dataRoot, 'recall', 'opencode', 'diff-report.json')
+}
+
+function resolveSyncPlanPath(dataRoot: string, value: string | null): string {
+  if (value) {
+    return resolve(process.cwd(), value)
+  }
+  return join(dataRoot, 'recall', 'opencode', 'sync-plan.json')
+}
+
+function resolveSyncLedgerPath(dataRoot: string, value: string | null): string {
+  if (value) {
+    return resolve(process.cwd(), value)
+  }
+  return join(dataRoot, 'recall', 'opencode', 'state.json')
+}
+
+function resolveSyncLogPath(dataRoot: string, value: string | null): string {
+  if (value) {
+    return resolve(process.cwd(), value)
+  }
+  return join(dataRoot, 'recall', 'opencode', 'sync-log.jsonl')
+}
+
+function writeJsonFile(filePath: string, payload: unknown): void {
+  mkdirSync(dirname(filePath), { recursive: true })
+  writeFileSync(filePath, `${JSON.stringify(payload, null, 2)}\n`, 'utf-8')
+}
+
+function appendJsonLine(filePath: string, payload: unknown): void {
+  mkdirSync(dirname(filePath), { recursive: true })
+  appendFileSync(filePath, `${JSON.stringify(payload)}\n`, 'utf-8')
 }
 
 function formatScore(score: number): string {
