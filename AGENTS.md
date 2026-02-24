@@ -23,7 +23,7 @@ I always want you to run tests and check types
 
 ## Searching for Files & Directories
 
-- The `Glob` tool can be unreliable. If you do not see results, use `Bash` and `ls` or `tree` (scoped).
+- The `Glob` tool can be unreliable. If you do not see results, use `Bash` and `ls` or `tree` (scoped). Pipe to `grep` to filter results.
 
 ## Introspection of OpenCode sessions
 
