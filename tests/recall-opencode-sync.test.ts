@@ -55,7 +55,7 @@ const buildPlan = (): OpencodeSyncPlan => ({
 })
 
 describe('opencode sync ledger updates', () => {
-  test('updates ledger only for success results', () => {
+  test('updates ledger for success and failed results', () => {
     const plan = buildPlan()
     const ledger = buildOpencodeSyncLedger(plan, 1, '2026-02-20T01:00:00.000Z')
     const now = '2026-02-20T02:00:00.000Z'
@@ -79,12 +79,16 @@ describe('opencode sync ledger updates', () => {
     expect(updated.entries['proj_a:ses_1']?.status).toBe('processed')
     expect(updated.entries['proj_a:ses_1']?.processed_at).toBe(now)
     expect(updated.entries['proj_a:ses_1']?.verified_at).toBe(now)
-    expect(updated.entries['proj_a:ses_2']).toBeUndefined()
+    expect(updated.entries['proj_a:ses_2']?.status).toBe('pending')
+    expect(updated.entries['proj_a:ses_2']?.reason).toBe('failed: boom')
+    expect(updated.entries['proj_a:ses_2']?.processed_at).toBeNull()
+    expect(updated.entries['proj_a:ses_2']?.verified_at).toBe(now)
     expect(updated.stats.processed).toBe(1)
+    expect(updated.stats.pending).toBe(1)
     expect(updated.generated_at).toBe(now)
   })
 
-  test('skips ledger update when no results succeed', () => {
+  test('updates ledger when no results succeed', () => {
     const plan = buildPlan()
     const ledger = buildOpencodeSyncLedger(plan, 1, '2026-02-20T01:00:00.000Z')
     const results: OpencodeSyncProcessResult[] = [
@@ -108,8 +112,20 @@ describe('opencode sync ledger updates', () => {
       '2026-02-20T03:00:00.000Z',
     )
 
-    expect(updated).toBe(ledger)
-    expect(updated.entries).toEqual({})
-    expect(updated.generated_at).toBe('2026-02-20T01:00:00.000Z')
+    expect(updated.entries['proj_a:ses_1']?.status).toBe('pending')
+    expect(updated.entries['proj_a:ses_1']?.reason).toBe('failed: boom')
+    expect(updated.entries['proj_a:ses_1']?.processed_at).toBeNull()
+    expect(updated.entries['proj_a:ses_1']?.verified_at).toBe(
+      '2026-02-20T03:00:00.000Z',
+    )
+    expect(updated.entries['proj_a:ses_2']?.status).toBe('pending')
+    expect(updated.entries['proj_a:ses_2']?.reason).toBe('skipped: dry-run')
+    expect(updated.entries['proj_a:ses_2']?.processed_at).toBeNull()
+    expect(updated.entries['proj_a:ses_2']?.verified_at).toBe(
+      '2026-02-20T03:00:00.000Z',
+    )
+    expect(updated.stats.processed).toBe(0)
+    expect(updated.stats.pending).toBe(2)
+    expect(updated.generated_at).toBe('2026-02-20T03:00:00.000Z')
   })
 })

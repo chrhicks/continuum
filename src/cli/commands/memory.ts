@@ -292,7 +292,11 @@ export function createMemoryCommand(): Command {
     .command('search')
     .description('Search recall summaries')
     .argument('<query...>')
-    .option('--mode <mode>', 'Search mode: bm25, semantic, auto', 'auto')
+    .option(
+      '--mode <mode>',
+      'Search mode: bm25, semantic (tf-idf), auto',
+      'auto',
+    )
     .option(
       '--summary-dir <dir>',
       'Directory containing opencode recall summaries',
@@ -721,7 +725,7 @@ function handleRecallSync(options: {
   })
 
   const now = new Date().toISOString()
-  const shouldWriteLedger = !result.dryRun && result.summary.success > 0
+  const shouldWriteLedger = !result.dryRun && result.results.length > 0
   let ledgerWritten = false
 
   if (shouldWriteLedger) {
@@ -810,10 +814,11 @@ function handleRecallSearch(
     return
   }
 
-  const modeLabel = result.fallback ? `${result.mode} (fallback)` : result.mode
+  const modeLabel = formatRecallModeLabel(result.mode)
+  const modeOutput = result.fallback ? `${modeLabel} (fallback)` : modeLabel
 
   console.log('Recall search:')
-  console.log(`- Mode: ${modeLabel}`)
+  console.log(`- Mode: ${modeOutput}`)
   console.log(`- Summary dir: ${result.summaryDir}`)
   console.log(`- Files searched: ${result.filesSearched}`)
   console.log(`- Results: ${result.results.length}`)
@@ -1133,6 +1138,13 @@ function appendJsonLine(filePath: string, payload: unknown): void {
 function formatScore(score: number): string {
   const rounded = Math.round(score * 1000) / 1000
   return rounded.toFixed(3)
+}
+
+function formatRecallModeLabel(mode: 'bm25' | 'semantic'): string {
+  if (mode === 'semantic') {
+    return 'semantic (tf-idf)'
+  }
+  return mode
 }
 
 function formatBytes(bytes: number | null): string {

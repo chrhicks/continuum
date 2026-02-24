@@ -164,16 +164,36 @@ export function updateOpencodeSyncLedger(
   results: OpencodeSyncProcessResult[],
   now: string,
 ): OpencodeSyncLedger {
+  if (results.length === 0) {
+    return ledger
+  }
+
   const updates = results
-    .filter((result) => result.status === 'success')
-    .map((result) => ({
-      key: result.item.key,
-      entry: buildProcessedEntry(
-        ledger.entries[result.item.key] ?? null,
-        result.item,
-        now,
-      ),
-    }))
+    .map((result) => {
+      const existing = ledger.entries[result.item.key] ?? null
+      if (result.status === 'success') {
+        return {
+          key: result.item.key,
+          entry: buildProcessedEntry(existing, result.item, now),
+        }
+      }
+      if (result.status === 'failed' || result.status === 'skipped') {
+        return {
+          key: result.item.key,
+          entry: buildPendingEntry(
+            existing,
+            result.item,
+            now,
+            buildLedgerReason(result),
+          ),
+        }
+      }
+      return null
+    })
+    .filter(
+      (update): update is { key: string; entry: OpencodeSyncLedgerEntry } =>
+        Boolean(update),
+    )
 
   if (updates.length === 0) {
     return ledger
@@ -348,6 +368,32 @@ const buildProcessedEntry = (
   }
 }
 
+const buildPendingEntry = (
+  existing: OpencodeSyncLedgerEntry | null,
+  item: OpencodeSyncPlanItem,
+  now: string,
+  reason: string,
+): OpencodeSyncLedgerEntry => {
+  return {
+    key: item.key,
+    session_id: item.session_id,
+    project_id: item.project_id,
+    status: 'pending',
+    reason,
+    source_fingerprint:
+      item.source_fingerprint ?? existing?.source_fingerprint ?? null,
+    source_updated_at:
+      item.source_updated_at ?? existing?.source_updated_at ?? null,
+    summary_fingerprint:
+      item.summary_fingerprint ?? existing?.summary_fingerprint ?? null,
+    summary_path: item.summary_path ?? existing?.summary_path ?? null,
+    summary_generated_at:
+      item.summary_generated_at ?? existing?.summary_generated_at ?? null,
+    processed_at: existing?.processed_at ?? null,
+    verified_at: now,
+  }
+}
+
 const computeLedgerStats = (
   entries: Record<string, OpencodeSyncLedgerEntry>,
 ): OpencodeSyncLedger['stats'] => {
@@ -370,4 +416,16 @@ const summarizeResults = (
     }),
     { success: 0, failed: 0, skipped: 0 },
   )
+}
+
+const buildLedgerReason = (result: OpencodeSyncProcessResult): string => {
+  const base = result.status === 'failed' ? 'failed' : 'skipped'
+  const detail = normalizeLedgerReason(result.error)
+  return detail ? `${base}: ${detail}` : base
+}
+
+const normalizeLedgerReason = (value: string | null): string | null => {
+  if (!value) return null
+  const normalized = value.replace(/\s+/g, ' ').trim()
+  return normalized.length > 0 ? normalized : null
 }
