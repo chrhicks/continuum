@@ -7,6 +7,7 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { randomUUID } from 'node:crypto'
+import { basename } from 'node:path'
 import { initMemory } from './init'
 import { memoryPath } from './paths'
 import { parseFrontmatter, replaceFrontmatter } from '../utils/frontmatter'
@@ -20,34 +21,22 @@ export type SessionInfo = {
 }
 
 export function startSession(): SessionInfo {
+  return withMemoryLock(() => startSessionUnlocked())
+}
+
+export function ensureCurrentSessionPath(): string {
   return withMemoryLock(() => {
     initMemory()
-
-    const now = new Date()
-    const parentSession = resolveParentSessionId()
-    const sessionId = `sess_${randomUUID().replace(/-/g, '')}`
-    const timestampStart = now.toISOString()
-    const filename = `NOW-${formatTimestampForFilename(now)}-${formatSessionSuffix(sessionId)}.md`
-    const filePath = memoryPath(filename)
-
-    const frontmatter = {
-      session_id: sessionId,
-      timestamp_start: timestampStart,
-      timestamp_end: null,
-      duration_minutes: null,
-      project_path: process.cwd(),
-      tags: [],
-      parent_session: parentSession,
-      related_tasks: [],
-      memory_type: 'NOW',
+    const currentPath = getCurrentSessionPath()
+    if (currentPath) {
+      return currentPath
     }
-
-    const header = `# Session: ${sessionId} - ${formatTimestampForHeader(now)}`
-    const content = `${buildFrontmatter(frontmatter)}\n\n${header}\n\n`
-    writeFileSync(filePath, content, 'utf-8')
-    writeFileSync(CURRENT_SESSION_FILE, filename, 'utf-8')
-
-    return { filePath, sessionId }
+    const fallbackPath = resolveCurrentSessionPath({ allowFallback: true })
+    if (fallbackPath) {
+      writeFileSync(CURRENT_SESSION_FILE, basename(fallbackPath), 'utf-8')
+      return fallbackPath
+    }
+    return startSessionUnlocked().filePath
   })
 }
 
@@ -105,7 +94,11 @@ export function getCurrentSessionPath(): string | null {
   if (!filename) {
     return null
   }
-  return memoryPath(filename)
+  const filePath = memoryPath(filename)
+  if (!existsSync(filePath)) {
+    return null
+  }
+  return filePath
 }
 
 export function resolveCurrentSessionPath(
@@ -120,7 +113,12 @@ export function resolveCurrentSessionPath(
     return null
   }
 
-  const candidates = readdirSync(memoryPath('.'))
+  const memoryDir = memoryPath('.')
+  if (!existsSync(memoryDir)) {
+    return null
+  }
+
+  const candidates = readdirSync(memoryDir)
     .filter((name) => name.startsWith('NOW-') && name.endsWith('.md'))
     .map((name) => ({
       name,
@@ -166,6 +164,36 @@ function formatTimestampForHeader(date: Date): string {
   const iso = date.toISOString()
   const [day, time] = iso.split('T')
   return `${day} ${time.slice(0, 5)} UTC`
+}
+
+function startSessionUnlocked(): SessionInfo {
+  initMemory()
+
+  const now = new Date()
+  const parentSession = resolveParentSessionId()
+  const sessionId = `sess_${randomUUID().replace(/-/g, '')}`
+  const timestampStart = now.toISOString()
+  const filename = `NOW-${formatTimestampForFilename(now)}-${formatSessionSuffix(sessionId)}.md`
+  const filePath = memoryPath(filename)
+
+  const frontmatter = {
+    session_id: sessionId,
+    timestamp_start: timestampStart,
+    timestamp_end: null,
+    duration_minutes: null,
+    project_path: process.cwd(),
+    tags: [],
+    parent_session: parentSession,
+    related_tasks: [],
+    memory_type: 'NOW',
+  }
+
+  const header = `# Session: ${sessionId} - ${formatTimestampForHeader(now)}`
+  const content = `${buildFrontmatter(frontmatter)}\n\n${header}\n\n`
+  writeFileSync(filePath, content, 'utf-8')
+  writeFileSync(CURRENT_SESSION_FILE, filename, 'utf-8')
+
+  return { filePath, sessionId }
 }
 
 function buildFrontmatter(frontmatter: Record<string, unknown>): string {

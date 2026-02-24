@@ -1,7 +1,7 @@
 import { Command } from 'commander'
 import { initMemory } from '../../memory/init'
 import {
-  getCurrentSessionPath,
+  resolveCurrentSessionPath,
   startSession,
   endSession,
 } from '../../memory/session'
@@ -13,9 +13,12 @@ import {
   appendUserMessage,
 } from '../../memory/now-writer'
 import { searchMemory, type MemorySearchTier } from '../../memory/search'
+import { searchRecall, type RecallSearchMode } from '../../recall/search'
 import { validateMemory } from '../../memory/validate'
 import { readConsolidationLog } from '../../memory/log'
 import { recoverStaleNowFiles } from '../../memory/recover'
+import { listMemoryEntries } from '../../memory/list'
+import { importOpencodeRecall } from '../../memory/recall-import'
 import { handleLoop } from './loop'
 
 export function createMemoryCommand(): Command {
@@ -82,6 +85,71 @@ export function createMemoryCommand(): Command {
     .action(() => {
       handleStatus()
     })
+
+  memoryCommand
+    .command('list')
+    .description('List memory files')
+    .action(() => {
+      handleList()
+    })
+
+  const recallCommand = new Command('recall').description(
+    'Recall import commands',
+  )
+
+  recallCommand.action(() => {
+    recallCommand.outputHelp()
+  })
+
+  recallCommand
+    .command('import')
+    .description('Import OpenCode recall summaries into memory')
+    .option(
+      '--summary-dir <dir>',
+      'Directory containing opencode recall summaries',
+    )
+    .option('--out <dir>', 'Alias for --summary-dir')
+    .option('--db <path>', 'OpenCode sqlite database path')
+    .option('--project <id>', 'Filter by OpenCode project id')
+    .option('--session <id>', 'Filter by OpenCode session id')
+    .option('--dry-run', 'Preview import without writing files')
+    .action(
+      (options: {
+        summaryDir?: string
+        out?: string
+        db?: string
+        project?: string
+        session?: string
+        dryRun?: boolean
+      }) => {
+        handleRecallImport(options)
+      },
+    )
+
+  recallCommand
+    .command('search')
+    .description('Search recall summaries')
+    .argument('<query...>')
+    .option('--mode <mode>', 'Search mode: bm25, semantic, auto', 'auto')
+    .option(
+      '--summary-dir <dir>',
+      'Directory containing opencode recall summaries',
+    )
+    .option('--limit <limit>', 'Maximum results to return', '5')
+    .action(
+      (
+        queryParts: string[],
+        options: { mode?: string; summaryDir?: string; limit?: string },
+      ) => {
+        const query = queryParts.join(' ').trim()
+        if (!query) {
+          throw new Error('Missing search query.')
+        }
+        handleRecallSearch(query, options)
+      },
+    )
+
+  memoryCommand.addCommand(recallCommand)
 
   memoryCommand
     .command('consolidate')
@@ -159,7 +227,7 @@ export function createMemoryCommand(): Command {
 export function endSessionIfActive(options: {
   consolidate: boolean
 }): string | null {
-  if (!getCurrentSessionPath()) {
+  if (!resolveCurrentSessionPath({ allowFallback: true })) {
     return null
   }
   const path = endSession()
@@ -180,6 +248,29 @@ function handleStatus(): void {
   console.log(`- RECENT lines: ${status.recentLines}`)
   console.log(`- Memory size: ${formatBytes(status.memoryBytes)}`)
   console.log(`- Last consolidation: ${status.lastConsolidation ?? 'n/a'}`)
+}
+
+function handleList(): void {
+  const entries = listMemoryEntries()
+  if (entries.length === 0) {
+    console.log('No memory files found.')
+    return
+  }
+
+  console.log('Memory files:')
+  for (const entry of entries) {
+    const ageMinutes = Math.max(
+      0,
+      Math.round((Date.now() - entry.mtimeMs) / 60000),
+    )
+    const ageLabel = formatAgeMinutes(ageMinutes)
+    const currentLabel = entry.isCurrent ? 'current, ' : ''
+    console.log(
+      `- ${entry.kind}: ${entry.fileName} (${currentLabel}${formatBytes(
+        entry.sizeBytes,
+      )}, ${ageLabel} old)`,
+    )
+  }
 }
 
 function handleConsolidate(dryRun: boolean): void {
@@ -265,6 +356,94 @@ function handleValidate(): void {
     console.error(`- ${error.filePath}:${error.lineNumber} ${error.message}`)
   }
   process.exitCode = 1
+}
+
+function handleRecallImport(options: {
+  summaryDir?: string
+  out?: string
+  db?: string
+  project?: string
+  session?: string
+  dryRun?: boolean
+}): void {
+  const result = importOpencodeRecall({
+    summaryDir: options.summaryDir,
+    outDir: options.out,
+    dbPath: options.db,
+    projectId: options.project,
+    sessionId: options.session,
+    dryRun: options.dryRun,
+  })
+
+  if (result.totalSummaries === 0) {
+    console.log(`No opencode recall summaries found in ${result.summaryDir}.`)
+    return
+  }
+
+  const dryRunLabel = result.dryRun ? ' (dry run)' : ''
+  console.log(`Recall import${dryRunLabel}:`)
+  console.log(`- Summary dir: ${result.summaryDir}`)
+  console.log(`- Summaries: ${result.totalSummaries}`)
+  console.log(`- Imported: ${result.imported}`)
+  console.log(`- Skipped (existing): ${result.skippedExisting}`)
+  console.log(`- Skipped (invalid): ${result.skippedInvalid}`)
+  if (result.skippedFiltered > 0) {
+    console.log(`- Skipped (filtered): ${result.skippedFiltered}`)
+  }
+
+  if (result.importedSessions.length > 0) {
+    console.log(`- Sessions: ${result.importedSessions.join(', ')}`)
+  }
+
+  if (result.skipped.length > 0) {
+    console.log('Skipped summaries:')
+    for (const entry of result.skipped) {
+      const label = entry.sessionId ? ` (${entry.sessionId})` : ''
+      console.log(`- ${entry.summaryPath}${label}: ${entry.reason}`)
+    }
+  }
+}
+
+function handleRecallSearch(
+  query: string,
+  options: { mode?: string; summaryDir?: string; limit?: string },
+): void {
+  const mode = parseRecallMode(options.mode)
+  const limit = parseRecallLimit(options.limit)
+  const result = searchRecall({
+    query,
+    mode,
+    summaryDir: options.summaryDir,
+    limit,
+  })
+
+  if (result.filesSearched === 0) {
+    console.log(`No opencode recall summaries found in ${result.summaryDir}.`)
+    return
+  }
+
+  const modeLabel = result.fallback ? `${result.mode} (fallback)` : result.mode
+
+  console.log('Recall search:')
+  console.log(`- Mode: ${modeLabel}`)
+  console.log(`- Summary dir: ${result.summaryDir}`)
+  console.log(`- Files searched: ${result.filesSearched}`)
+  console.log(`- Results: ${result.results.length}`)
+
+  if (result.results.length === 0) {
+    console.log(`No matches found for "${query}".`)
+    return
+  }
+
+  for (const match of result.results) {
+    const score = formatScore(match.score)
+    const sessionLabel = match.sessionId ? ` [${match.sessionId}]` : ''
+    const titleLabel = match.title ? ` (${match.title})` : ''
+    const snippetLabel = match.snippet ? ` - ${match.snippet}` : ''
+    console.log(
+      `- [${score}] ${match.filePath}${sessionLabel}${titleLabel}${snippetLabel}`,
+    )
+  }
 }
 
 function handleLog(tail?: number): void {
@@ -389,6 +568,28 @@ function parseSearchTags(value: string): string[] {
   return tags
 }
 
+function parseRecallMode(value?: string): RecallSearchMode {
+  if (!value) return 'auto'
+  const normalized = value.toLowerCase()
+  if (
+    normalized === 'bm25' ||
+    normalized === 'semantic' ||
+    normalized === 'auto'
+  ) {
+    return normalized
+  }
+  throw new Error('Invalid mode. Use: bm25, semantic, or auto.')
+}
+
+function parseRecallLimit(value?: string): number {
+  if (!value) return 5
+  const count = Number(value)
+  if (!Number.isInteger(count) || count <= 0) {
+    throw new Error('Limit must be a positive integer.')
+  }
+  return count
+}
+
 function parseTail(value: string): number {
   const count = Number(value)
   if (!Number.isInteger(count) || count <= 0) {
@@ -413,6 +614,11 @@ function parseLoopCount(value: string): number {
   return count
 }
 
+function formatScore(score: number): string {
+  const rounded = Math.round(score * 1000) / 1000
+  return rounded.toFixed(3)
+}
+
 function formatBytes(bytes: number | null): string {
   if (bytes === null) {
     return 'n/a'
@@ -429,4 +635,17 @@ function formatBytes(bytes: number | null): string {
   }
   const rounded = Math.round(value * 10) / 10
   return `${rounded} ${units[unitIndex]}`
+}
+
+function formatAgeMinutes(minutes: number): string {
+  if (!Number.isFinite(minutes) || minutes < 0) {
+    return 'n/a'
+  }
+  if (minutes < 60) {
+    return `${minutes}m`
+  }
+  if (minutes < 60 * 24) {
+    return `${Math.round(minutes / 60)}h`
+  }
+  return `${Math.round(minutes / (60 * 24))}d`
 }

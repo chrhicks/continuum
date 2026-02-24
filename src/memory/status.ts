@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { MEMORY_DIR, memoryPath } from './paths'
-import { getCurrentSessionPath } from './session'
+import { resolveCurrentSessionPath } from './session'
 
 export type MemoryStatus = {
   nowPath: string | null
@@ -14,7 +14,7 @@ export type MemoryStatus = {
 }
 
 export function getStatus(): MemoryStatus {
-  const nowPath = getCurrentSessionPath()
+  const nowPath = resolveCurrentSessionPath({ allowFallback: true })
   let nowLines = 0
   let nowAgeMinutes: number | null = null
   let nowBytes: number | null = null

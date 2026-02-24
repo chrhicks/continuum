@@ -9,9 +9,10 @@ import {
 } from 'node:fs'
 import { memoryPath } from './paths'
 import { parseFrontmatter, replaceFrontmatter } from '../utils/frontmatter'
-import { resolveCurrentSessionPath, startSession, endSession } from './session'
+import { ensureCurrentSessionPath, startSession, endSession } from './session'
 import { consolidateNow } from './consolidate'
 import { getMemoryConfig } from './config'
+import { initMemory } from './init'
 
 const LOCK_FILE = memoryPath('.now.lock')
 const MAX_LOCK_RETRIES = 3
@@ -48,16 +49,8 @@ async function appendEntry(
   entry: string,
   options: AppendOptions = {},
 ): Promise<void> {
-  const filePath = resolveCurrentSessionPath()
-  if (!filePath) {
-    throw new Error('No active NOW session found.')
-  }
-
   await withLock(async () => {
-    let currentPath = resolveCurrentSessionPath()
-    if (!currentPath) {
-      throw new Error('No active NOW session found.')
-    }
+    let currentPath = ensureCurrentSessionPath()
 
     let content = readFileSync(currentPath, 'utf-8')
     let { frontmatter, keys } = parseFrontmatter(content)
@@ -90,6 +83,7 @@ async function appendEntry(
 }
 
 async function withLock(action: () => void | Promise<void>): Promise<void> {
+  initMemory()
   let attempt = 0
   while (attempt < MAX_LOCK_RETRIES) {
     try {
