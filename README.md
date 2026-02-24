@@ -28,7 +28,7 @@ continuum init
 continuum task init
 
 # List tasks (filtering + paging)
-continuum task list --status=ready --type=feature
+continuum task list --status=ready --type=feature --sort priority --order asc
 continuum task list --parent tkt-abc12345 --limit 50
 
 # View task details
@@ -36,8 +36,8 @@ continuum task get tkt-abc12345
 continuum task get tkt-abc12345 --tree
 
 # Create/update/complete
-continuum task create --title "Fix login redirect" --type bug --description @desc.md
-continuum task update tkt-abc12345 --status ready
+continuum task create --title "Fix login redirect" --type bug --priority 50 --description @desc.md
+continuum task update tkt-abc12345 --status ready --priority 50
 continuum task complete tkt-abc12345 --outcome @outcome.md
 
 # Steps + notes
@@ -59,6 +59,7 @@ continuum task graph descendants tkt-abc12345
 ```
 
 Note: repeating `task steps complete` for an already completed step returns a warning and makes no changes.
+Priority: integer, lower is higher priority (default: `100`).
 
 Global flags:
 
@@ -81,14 +82,15 @@ const initStatus = await continuum.task.init()
 
 const { tasks, nextCursor } = await continuum.task.list({
   status: 'ready',
-  sort: 'updatedAt',
-  order: 'desc',
+  sort: 'priority',
+  order: 'asc',
   limit: 20,
 })
 
 const task = await continuum.task.create({
   title: 'Fix login redirect',
   type: 'bug',
+  priority: 50,
   description: 'Users are sent to / instead of /dashboard.',
   intent: 'Restore expected post-login flow',
   plan: 'Plan: update redirect logic and add regression test',
@@ -232,6 +234,23 @@ continuum memory recover --hours 24
 # Recover stale sessions by consolidating
 continuum memory recover --hours 24 --consolidate
 ```
+
+### Recall Import
+
+```bash
+# Import OpenCode recall summaries into memory
+continuum memory recall import
+
+# Preview without writing files
+continuum memory recall import --dry-run
+
+# Use a custom summary directory
+continuum memory recall import --summary-dir .continuum/recall/opencode
+```
+
+The import expects `OPENCODE-SUMMARY-*.md` files produced by the recall prototype
+in `.continuum/recall/opencode` and skips sessions already consolidated into
+MEMORY files.
 
 ## Agent Loop (Batch Mode)
 
