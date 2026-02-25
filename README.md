@@ -25,7 +25,6 @@ continuum memory status
 ```bash
 # Initialize task database in your project
 continuum init
-continuum task init
 
 # List tasks (filtering + paging)
 continuum task list --status=ready --type=feature --sort priority --order asc
@@ -210,6 +209,9 @@ continuum memory search "auth" --tier=MEMORY
 
 # Search by tags
 continuum memory search "auth" --tags auth,security
+
+# Search from a date/time onward
+continuum memory search "auth" --after 2026-02-01T00:00:00Z
 ```
 
 ### Diagnostics

@@ -9,7 +9,7 @@ bun run /path/to/continuum/bin/continuum --cwd <REPO_DIR> --json <command>
 ## Task Lifecycle
 
 ```
-task init
+init
 task create --title "..." --type feature --priority 100 --intent "..." --description @- --plan @-
 task steps template
 task steps add <task_id> --steps '[{"title":"Investigate failure","description":"Reproduce issue","position":1}]'

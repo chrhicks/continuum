@@ -75,7 +75,7 @@ Note source:
 Create the local database in the current directory.
 
 ```bash
-bun run bin/continuum task init
+bun run bin/continuum init
 ```
 
 ### List
@@ -268,7 +268,7 @@ Options:
 
 ## Suggested Safe Workflow
 
-1. `task init` once per repo
+1. `init` once per repo
 2. `task create` with intent/description/plan and an explicit priority
 3. `task steps add` for executable subunits
 4. `task note add` for discoveries/decisions

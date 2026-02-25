@@ -41,7 +41,7 @@ CLI (use this for every call):
   bun run /path/to/continuum/bin/continuum --cwd <REPO_DIR> --json <command>
 
 Cheat Sheet:
-- Task init: `task init`
+- Task init: `init`
 - Create: `task create --title ... --type ... --priority 100 --description @- --plan @- --intent "..."`
 - Steps (inline JSON): `task steps add <task_id> --steps '[{"title":"...","description":"...","position":1}]'`
 - Notes: `task note add <task_id> --kind discovery --content @-`
