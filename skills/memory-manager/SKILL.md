@@ -14,74 +14,162 @@ metadata:
 
 ## Purpose
 
-Maintain a 3-tier memory system (NOW → RECENT → MEMORY) that captures and consolidates project context across OpenCode sessions. This skill runs asynchronously to preserve working agent performance.
+Maintain a 3-tier memory system (NOW → RECENT → MEMORY) that captures and
+consolidates project context across OpenCode sessions.
 
-## CLI-First Workflow
-
-Use the `continuum memory` CLI for all memory writes. Do not manually edit
-`.continuum/memory/*.md` unless the CLI cannot run and recovery is required.
+Use `continuum memory` for all memory operations. Do not manually edit files
+under `.continuum/memory/` unless the CLI cannot run and recovery is required.
 
 ## Memory Architecture
 
 ### Three Tiers
 
-1. **NOW** (Current): Live session capture, ~200 lines max
-2. **RECENT** (Last 3 sessions): Summary for continuity, ~500 lines
-3. **MEMORY** (Long-term): Consolidated knowledge, permanent archive
+1. **NOW** - Live session capture (current session, ~200 lines max)
+2. **RECENT** - Summary of the last few sessions (~500 lines, for continuity)
+3. **MEMORY** - Long-term consolidated knowledge (permanent archive)
 
-### File Locations
+## CLI Reference
 
-- `.continuum/memory/NOW-{date}T{time}.md` - Timestamped session files
-- `.continuum/memory/RECENT.md` - Recent sessions summary
-- `.continuum/memory/MEMORY.md` - Index linking to consolidated files
-- `.continuum/memory/MEMORY-{date}.md` - Consolidated content by date
-- `.continuum/memory/consolidation.log` - Audit trail
+### Initialize
 
-## When to Run
+```bash
+continuum memory init
+```
 
-This skill triggers when:
+Sets up `.continuum/memory/` on first use.
 
-- User explicitly requests: "consolidate memory", "reflect on recent work"
-- Working agent suggests and user approves
-- Session ends cleanly (/exit) or via Ctrl+C (SIGINT)
-- (Future) Scheduled via cron for unattended consolidation
+### Session Management
 
-## Actions Performed
+```bash
+continuum memory session start          # Start a new NOW session explicitly
+continuum memory session end            # End the current session
+continuum memory session end --consolidate  # End and consolidate in one step
+```
 
-### 1. Analysis Phase
+`session start` is optional — `append` auto-starts a session if none exists.
 
-Inspect via CLI (no manual edits):
+### Appending to the Current Session
 
-- `continuum memory status` and `continuum memory list` to locate the latest NOW
-- `continuum memory log --tail 50` for audit context
-- `continuum memory search "<query>" --tier all` for quick recall
-- `bun run bin/continuum task ...` for related task data
-- Git history for recent commits
+```bash
+continuum memory append user "<message>"
+continuum memory append agent "<message>"
+continuum memory append tool <tool_name> ["<summary>"]
+continuum memory session append user "<message>"   # same, scoped to session
+```
 
-Identifies:
+Passing `/exit` as the user message ends the active session.
+Passing `/exit --consolidate` ends it and consolidates immediately.
 
-- **Decisions**: Key choices made with rationale
-- **Discoveries**: Technical insights, bug root causes
-- **Patterns**: Repeated approaches or anti-patterns
-- **Tasks**: Created, completed, or blocked tasks
-- **Files**: Code locations frequently referenced
+### Inspecting Memory
 
-### 2. Consolidation Phase
+```bash
+continuum memory status       # Summary: current NOW file, sizes, last consolidation
+continuum memory list         # All memory files with sizes and ages
+continuum memory validate     # Check structure of all memory files
+continuum memory log          # View consolidation audit log
+continuum memory log --tail 20
+```
 
-#### Use the CLI to consolidate
+### Consolidation
 
-- Run `continuum memory consolidate` to update RECENT/MEMORY and the audit log.
-- Use `continuum memory session end --consolidate` when closing a session.
-- Use `--dry-run` to preview consolidation output.
-- Do not manually edit RECENT/MEMORY files unless recovering from a CLI failure.
+```bash
+continuum memory consolidate            # Consolidate NOW → RECENT → MEMORY
+continuum memory consolidate --dry-run  # Preview without writing
+```
 
-### 3. Cleanup Phase
+Consolidation updates RECENT and MEMORY from the current NOW file, then logs the
+result to the audit trail. Use `--dry-run` to review output before committing.
 
-- Use `continuum memory recover --hours <n>` to find stale NOW sessions.
-- Add `--consolidate` to recover and consolidate stale sessions.
-- Avoid manual deletions; the CLI manages cleanup and logs.
+### Search
 
-## What to Extract as Important
+```bash
+continuum memory search "<query>"
+continuum memory search "<query>" --tier NOW
+continuum memory search "<query>" --tier RECENT
+continuum memory search "<query>" --tier MEMORY
+continuum memory search "<query>" --tier all
+continuum memory search "<query>" --tags tag1,tag2
+```
+
+### Recovery
+
+```bash
+continuum memory recover                     # Find stale NOW files (default threshold)
+continuum memory recover --hours 12          # Find sessions older than 12 hours
+continuum memory recover --hours 12 --consolidate  # Find and consolidate them
+```
+
+### Recall (OpenCode Session Import)
+
+Import past OpenCode session summaries into memory:
+
+```bash
+# Step 1: Build an index of what OpenCode has
+continuum memory recall index
+
+# Step 2: Diff the index against existing recall summaries
+continuum memory recall diff
+
+# Step 3: Execute the sync plan (use --dry-run first)
+continuum memory recall sync --dry-run
+continuum memory recall sync --command "opencode ..." 
+
+# Import summaries directly from a directory
+continuum memory recall import --summary-dir <dir> [--dry-run]
+
+# Search existing recall summaries
+continuum memory recall search "<query>"
+continuum memory recall search "<query>" --mode bm25
+continuum memory recall search "<query>" --limit 10
+```
+
+## Key Workflows
+
+### Starting a Session (Working Agent)
+
+1. Begin the session (auto-started on first append, or explicitly):
+   ```bash
+   continuum memory session start
+   ```
+2. For each significant exchange, append:
+   ```bash
+   continuum memory append user "<user message summary>"
+   continuum memory append agent "<agent response summary>"
+   continuum memory append tool <tool_name> "<what it did>"
+   ```
+3. End and consolidate on session close:
+   ```bash
+   continuum memory session end --consolidate
+   ```
+   Or, if the session already ended:
+   ```bash
+   continuum memory consolidate
+   ```
+
+### Consolidating Memory
+
+```bash
+continuum memory consolidate --dry-run   # Preview first
+continuum memory consolidate             # Write RECENT + MEMORY
+```
+
+### Checking Status Before and After
+
+```bash
+continuum memory status    # Sizes, current NOW, last consolidation time
+continuum memory list      # All files with ages
+continuum memory validate  # Structural check
+continuum memory log --tail 20  # Recent audit entries
+```
+
+### Recovering Abandoned Sessions
+
+```bash
+continuum memory recover --hours 6
+continuum memory recover --hours 6 --consolidate
+```
+
+## What to Capture
 
 ### High Priority (Always Keep)
 
@@ -94,179 +182,45 @@ Identifies:
 ### Medium Priority (Condense)
 
 - **Task progress**: Summarize, don't transcribe every step
-- **Code changes**: Reference locations, don't duplicate code
-- **Conversations**: Keep user-agent dialog, omit routine commands
+- **Code changes**: Reference file locations, don't duplicate code
+- **Conversations**: Keep key user-agent dialog, omit routine commands
 
 ### Low Priority (Discard)
 
-- **Routine file operations**: ls, cd, git status
-- **Tool boilerplate**: Standard command output
-- **Failed experiments** that didn't teach us anything new
-- **Temporary workarounds** that were later removed
+- Routine file operations (ls, cd, git status)
+- Tool boilerplate and standard command output
+- Failed experiments that taught nothing new
+- Temporary workarounds that were later removed
 
 ### Special Cases
 
-- **Repeated topics**: Note recurrence, link to previous discussions
-- **Abandoned approaches**: Document why abandoned (future reference)
-- **Security concerns**: Note but don't log secrets (use placeholders)
+- **Repeated topics**: Note recurrence and link to prior discussion
+- **Abandoned approaches**: Document why (useful future reference)
+- **Security concerns**: Note but never log secrets; use placeholders
 
-## Output Format
+## When to Run
 
-The CLI generates these formats; treat them as read-only outputs.
+This skill triggers when:
 
-### RECENT.md Entry Structure
+- User explicitly requests: "consolidate memory", "reflect on recent work"
+- Working agent suggests and user approves
+- Session ends cleanly (`/exit` or `continuum memory session end`)
+- Stale NOW sessions are found during recovery
 
-```markdown
-## Session {date} {time} ({duration})
+## Suggesting Consolidation
 
-**Focus**: One-line summary
+When you notice any of the following, ask the user if they'd like to consolidate:
 
-**Key Decisions**:
-
-- Item 1
-- Item 2
-
-**Discoveries**:
-
-- Discovery 1
-- Discovery 2
-
-**Tasks**: tkt_123, tkt_456
-**Files**: `path/to/file.ts`, `path/to/test.ts`
-**Link**: [Full details](MEMORY-{date}.md#anchor)
-```
-
-### MEMORY.md Index Entry
-
-```markdown
-- **[Session {date} {time}](MEMORY-{date}.md#anchor)** - Brief description
-```
-
-### MEMORY-{date}.md Section
-
-```markdown
-## Session {date} {time} UTC ({session_id})
-
-<a name="{anchor}"></a>
-
-**Focus**: One-line summary
-
-**Decisions**:
-
-- Decision 1
-- Decision 2
-
-**Discoveries**:
-
-- Discovery 1
-- Discovery 2
-
-**Patterns**:
-
-- Pattern 1
-
-**Tasks**: tkt_123, tkt_456
-**Files**: `path/to/file.ts`, `path/to/test.ts`
-```
-
-## Error Handling
-
-### If memory is locked
-
-- If `continuum memory` commands return a lock error, wait briefly and retry.
-- Do not delete lock files manually.
-- If it still fails, log a warning and skip consolidation for now.
-
-### If files are corrupted (invalid YAML, unreadable)
-
-- Create backup: copy corrupted file to `.backup/`
-- Try to parse best-effort, log warnings
-- Continue with available data
-
-### If consolidation fails mid-way
-
-- Transaction log: write before each major step
-- On failure: restore from last checkpoint
-- Log error details for debugging
-
-## Performance Considerations
-
-- **Speed**: Consolidation should complete in <5 seconds for typical sessions
-- **Memory Usage**: Load files incrementally, don't hold everything in memory
-- **Disk Usage**: Compress old log files, GC old NOW files
-- **Git**: If tracked, only commit MEMORY.md and RECENT.md (not NOW files)
-
-## User Customization
-
-Users can override defaults by creating `.continuum/memory/config.yml`:
-
-```yaml
-# Max lines before auto-rollover
-now_max_lines: 200
-now_max_hours: 6
-
-# How many sessions to keep in RECENT
-recent_session_count: 3
-recent_max_lines: 500
-
-# Memory organization
-memory_sections:
-  - Architecture Decisions
-  - Technical Discoveries
-  - Development Patterns
-  - Tooling & Workflow
-
-# Auto-consolidation triggers
-auto_consolidate_on_exit: true
-auto_consolidate_schedule: null # Future: "0 2 * * *"
-```
-
-## Debugging
-
-### Check what would be consolidated
-
-```bash
-continuum memory consolidate --dry-run
-```
-
-### View consolidation history
-
-```bash
-continuum memory log --tail 20
-```
-
-### Search across all memory
-
-```bash
-continuum memory search "auth" --tier=all
-```
-
-## Integration with Working Agent
-
-### Prompt for Working Agent
-
-You should maintain the session transcript using the CLI:
-
-1. Start/resume a session: `continuum memory session start` (optional; `continuum memory append` auto-starts).
-2. For each exchange, append via CLI:
-   - `continuum memory append user "<message>"`
-   - `continuum memory append agent "<message>"`
-   - `continuum memory append tool <tool_name> "<summary>"`
-3. On session end, run `continuum memory session end --consolidate` (or `continuum memory consolidate` if already ended).
-
-### Suggesting Consolidation
-
-When you notice:
-
-- Session >100 lines or >3 hours
-- Important decisions made
-- User mentions "wrap up", "we're done", "let's consolidate"
+- Session is >100 lines or >3 hours old (`continuum memory status`)
+- Important decisions or discoveries were made
+- User says "wrap up", "we're done", "let's consolidate", "call it a day"
+- User expresses frustration about repeating context
 
 Ask:
 
 > This session contains important decisions about X and Y. Should I consolidate the memory now?
 
-If user agrees, trigger: `skill("memory-manager")`
+If the user agrees, trigger: `skill("memory-manager")`
 
 ## Example Trigger Phrases
 
@@ -278,32 +232,34 @@ If user agrees, trigger: `skill("memory-manager")`
 - "update the project memory"
 - "save this for future reference"
 - "we're done for today"
-- "/exit" (if watching for it)
 
-**Agent should recognize**:
+## Error Handling
 
-- "wrap up", "finish up", "call it a day" + session is long
-- Multiple important decisions in one session
-- Discovery of significant bug or pattern
-- User frustration about repeating explanations
+- If a command fails, run `continuum memory validate` to check for structural issues.
+- For stale or abandoned sessions, use `continuum memory recover`.
+- Do not delete lock files or memory files manually; let the CLI manage cleanup.
+- If a consolidation fails partway, re-run `continuum memory consolidate`; the CLI
+  handles partial state.
 
-## Success Metrics
+## User Customization
 
-- [ ] Consolidation completes without errors
-- [ ] Important decisions are captured
-- [ ] RECENT.md stays under 500 lines
-- [ ] MEMORY.md index is navigable
-- [ ] User can find information later via search
-- [ ] No secrets or PII in committed files
-- [ ] Log shows clear audit trail
-- [ ] Recovery process works if something breaks
+Users can override defaults by creating `.continuum/memory/config.yml`:
 
-## Future Enhancements (v1+)
+```yaml
+now_max_lines: 200
+now_max_hours: 6
+recent_session_count: 3
+recent_max_lines: 500
+memory_sections:
+  - Architecture Decisions
+  - Technical Discoveries
+  - Development Patterns
 
-- Vector embeddings for semantic search
-- Cross-project memory sharing
-- Automated importance scoring
-- Memory decay (fade old entries)
-- Conflict resolution UI
-- Web dashboard for memory exploration
-- Integration with external tools (Notion, Obsidian)
+# Optional: LLM-powered narrative consolidation
+consolidation:
+  api_url: https://opencode.ai/zen/v1/chat/completions
+  api_key: sk-...       # or set OPENCODE_ZEN_API_KEY / OPENAI_API_KEY env var
+  model: gpt-4o-mini
+  max_tokens: 4000
+  timeout_ms: 120000
+```

@@ -10,7 +10,7 @@ I work best when the next task is obvious and context is durable, so a reliable 
 
 ## Success criteria
 
-- A task seeding flow builds or updates `continuum task` items from GOAL.md Current focus without duplicates.
+- When no open tasks exist, the loop creates a GOAL-aligned investigation task that explores the repo and generates deduplicated, evidence-backed follow-up tasks.
 - The loop always selects the highest priority open task aligned to GOAL.md and resumes it if a NOW session exists.
 - Each completed step records a concise memory append entry with goal alignment, task and step IDs, files, and tests run.
 - QA policy is enforced (`bun run typecheck`, `bun test`, plus a relevant smoke command) and failures are recorded on the task.
@@ -29,9 +29,3 @@ I work best when the next task is obvious and context is durable, so a reliable 
 - Multi-repo or cross-project task orchestration.
 - Long-running autonomous loops without user control.
 - Replacing existing memory or recall tiers or task history as canonical sources.
-
-## Current focus (next 1-3 iterations)
-
-- Add a GOAL to task seeding command or script to populate open tasks when the queue is empty.
-- Tighten task loop alignment: ensure tasks include intent and plan that cite GOAL sections and auto-generate 1-3 steps.
-- Improve loop reporting: capture last run summary in `.continuum/loop/` and surface it in CLI output.

@@ -34,30 +34,45 @@ If either is missing, stop and ask the user to fix it.
 ## Single-Iteration Loop (Hard Stop After One Step)
 
 1. Read `GOAL.md` and write a one-line alignment statement.
-2. Select a task (avoid creating duplicates; prefer `open`, ordered by priority):
+2. Preflight to avoid redundant work:
+   - List `open` tasks.
+   - If the list is empty, create one `investigation` task focused on discovering GOAL-aligned work in the current repo. This task should explicitly state the exploration criteria and expected outputs (new concrete tasks with priorities and evidence).
+   - For the top priority open task, quickly check whether existing code/tests/docs already implement it.
+   - If already implemented, add a discovery note and skip to the next task.
+   - If all open tasks appear already implemented, complete them with notes and stop.
+3. Select a task (avoid creating duplicates; prefer `open`, ordered by priority):
    - If a `task_id` was provided, use it.
-   - Else list `open` tasks sorted by priority (lowest number first; createdAt only breaks ties) and select the first that references GOAL.md Current focus.
+   - Else list `open` tasks sorted by priority (lowest number first; createdAt only breaks ties) and select the top task.
    - If the latest NOW task is still `open` or `ready` and has a priority number less than or equal to the selected task, resume it.
-   - Else choose the highest-priority `ready` task that references GOAL.md Current focus (only if your workflow explicitly uses `ready`).
-   - If no matching `open` or `ready` task exists, create one from `GOAL.md` (use a Current focus bullet as the title) and assign a priority.
+   - Else choose the highest-priority `ready` task (only if your workflow explicitly uses `ready`).
+   - If no `open` or `ready` tasks exist, create one `investigation` task from `GOAL.md` and assign it a high priority (lower number than build work for the same focus).
    - If an `investigation` task exists for the same focus, ensure it has a lower priority number than build tasks and select it first.
    - Never create a new task if an existing `open`/`ready` task already has the same intent/title.
-3. Ensure task intent references a section of `GOAL.md` and add a minimal plan if missing (update the task before validation).
-4. Pick the first `pending` step.
-   - If no steps exist, add 1-3 concrete steps derived from Current focus (avoid “run the loop” phrasing).
-5. Mark the step `in_progress`.
-6. Do the work (code, docs, config) that completes the step.
-7. Validate (one command at a time, they don't `&&` well):
+4. Ensure task intent references a section of `GOAL.md` and add a minimal plan if missing (update the task before validation).
+5. Pick the first `pending` step.
+   - If no steps exist, add 1-3 concrete steps derived from GOAL.md success criteria (avoid "run the loop" phrasing).
+6. Mark the step `in_progress`.
+7. Do the work (code, docs, config) that completes the step.
+   - If the selected task is `investigation`, perform a focused repo exploration and create 1-5 concrete follow-up tasks directly in `continuum task`.
+   - Every generated task must include GOAL alignment, a concise plan, and evidence (code/test/doc reference) so it is actionable.
+   - De-duplicate against existing `open`/`ready`/`in_progress`/`completed` tasks before creating anything new.
+8. Validate (one command at a time, they don't `&&` well):
    - Run `bun run typecheck`
    - Run `bun test`
    - Run one smoke command relevant to the work (example: `bun run bin/continuum task list --json`)
-8. Add notes (discovery/decision) to the task as needed.
-9. Complete the step with a concise summary.
-10. If all steps are complete, validate and complete the task.
-11. Append a brief entry via `continuum memory append agent "..."` (auto-starts a session if missing).
-12. Stop and return control to the user.
+9. Add notes (discovery/decision) to the task as needed.
+10. Complete the step with a concise summary.
+11. If all steps are complete, validate and complete the task.
+12. Append a brief entry via `continuum memory append agent "..."` (auto-starts a session if missing).
+13. Stop and return control to the user.
 
 ## Commands (Reference)
+
+Create an investigation task when queue is empty:
+
+```bash
+bun run bin/continuum task create --title "Discover next GOAL-aligned work" --type investigation --priority 50 --intent "Aligned to GOAL.md: <section>; investigate repo gaps and generate actionable tasks" --description "Explore code/tests/docs for missing or stale work aligned to GOAL.md success criteria. Create 1-5 deduplicated tasks with evidence and priority." --plan "Plan: 1) Inspect GOAL criteria vs current implementation 2) Identify highest-value gaps with evidence 3) Create prioritized follow-up tasks"
+```
 
 List open tasks (default queue, priority-ordered):
 
@@ -80,7 +95,7 @@ bun run bin/continuum task get <task_id>
 Create task from goal (leave status as default unless you explicitly use a ready queue):
 
 ```bash
-bun run bin/continuum task create --title "<Current focus>" --type feature --priority 100 --intent "Aligned to GOAL.md: <section>" --description "@GOAL.md" --plan "Plan: <1-3 steps>"
+bun run bin/continuum task create --title "<title from GOAL.md success criteria>" --type feature --priority 100 --intent "Aligned to GOAL.md: <section>" --description "@GOAL.md" --plan "Plan: <1-3 steps>"
 ```
 
 List steps:
@@ -140,9 +155,9 @@ Include:
 - Task: `<task_id>`
 - Step: `<step_id>`
 - Summary:
-<summary_of_work_markdown_blob>
+  <summary_of_work_markdown_blob>
 - Discoveries:
-<discoveries_markdown_blob>
+  <discoveries_markdown_blob>
 - Changes: file paths touched
 - Tests: commands run and results
 - Outcome: one sentence
