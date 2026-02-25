@@ -2,30 +2,34 @@
 
 ## Outcome (one sentence)
 
-Continuum provides an agent friendly task loop that keeps me productive by turning GOAL.md focus into a live, prioritized task queue with memory logging and QA for each step.
+Continuum's memory system is complete, reliable, and actively used by agents: session data flows automatically into memory, memory informs task decisions, and task discoveries and decisions flow back into memory.
 
 ## Why it matters
 
-I work best when the next task is obvious and context is durable, so a reliable loop prevents drift, makes progress measurable, and leaves a memory trail for the next session.
+Memory is only valuable if it is written to consistently, accurate when read, and connected to the work being done. Right now the memory system is half-built and siloed from tasks, so context is lost between sessions and agents make decisions without history.
 
 ## Success criteria
 
-- When no open tasks exist, the loop creates a GOAL-aligned investigation task that explores the repo and generates deduplicated, evidence-backed follow-up tasks.
-- The loop always selects the highest priority open task aligned to GOAL.md and resumes it if a NOW session exists.
-- Each completed step records a concise memory append entry with goal alignment, task and step IDs, files, and tests run.
-- QA policy is enforced (`bun run typecheck`, `bun test`, plus a relevant smoke command) and failures are recorded on the task.
-- Loop requests are stable artifacts in `.continuum/loop/` and include selection and QA metadata.
+- NOW file is fully cleared (body wiped, header preserved) after successful consolidation, atomically and without data loss.
+- `memory search` supports `--after <date>` to scope queries to a time window.
+- An agent following the task-loop skill automatically appends a memory entry (via `continuum memory append`) at the start and end of each task step, without being explicitly prompted.
+- When a task step is completed, any discoveries or decisions recorded on that task are also appended to the active NOW file.
+- When an agent selects a task to work on, it first runs `continuum memory search <task-title>` and incorporates relevant results into its plan.
+- `continuum task init` is removed or aliased to `continuum init` to eliminate the duplicate entry point.
 
 ## Constraints
 
 - One focused step per session; stop after completion or block.
 - Use `continuum task` as the single source of truth for work state.
+- Memory writes must be atomic; no partial writes on failure.
 - Do not log secrets or credentials.
 - No automatic model or embedding downloads; local-only workflows.
 - Keep outputs ASCII unless existing context requires otherwise.
 
 ## Non-goals
 
+- Full programmatic task loop implementation (moving skill logic into `src/loop/`).
+- LLM-based consolidation improvements.
+- Recall system changes (OpenCode session import pipeline).
 - Multi-repo or cross-project task orchestration.
 - Long-running autonomous loops without user control.
-- Replacing existing memory or recall tiers or task history as canonical sources.
