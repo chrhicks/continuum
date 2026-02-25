@@ -139,6 +139,10 @@ Include:
 - Goal alignment: one-line summary
 - Task: `<task_id>`
 - Step: `<step_id>`
+- Summary:
+<summary_of_work_markdown_blob>
+- Discoveries:
+<discoveries_markdown_blob>
 - Changes: file paths touched
 - Tests: commands run and results
 - Outcome: one sentence
