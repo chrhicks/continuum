@@ -2,20 +2,19 @@
 
 ## Outcome (one sentence)
 
-Continuum's recall and memory workflows reliably capture, consolidate, and retrieve project context across sessions with deterministic artifacts and usable CLI defaults.
+Continuum provides an agent friendly task loop that keeps me productive by turning GOAL.md focus into a live, prioritized task queue with memory logging and QA for each step.
 
 ## Why it matters
 
-If recall is reliable and memory is easy to manage, sessions resume quickly without manual log scanning or ad-hoc context reconstruction.
+I work best when the next task is obvious and context is durable, so a reliable loop prevents drift, makes progress measurable, and leaves a memory trail for the next session.
 
 ## Success criteria
 
-- `memory` CLI auto-starts or resumes on append, and `memory status` falls back to the latest NOW file.
-- Memory consolidation writes stable NOW/RECENT/MEMORY artifacts with consistent structure and an audit log.
-- Recall import can ingest `.continuum/recall/opencode` outputs using deterministic index/diff/plan/ledger artifacts.
-- `recall` defaults to BM25 and falls back to semantic when needed, with explicit mode reporting and no auto-embedding.
-- Summaries include a deterministic keyword/alias block to improve BM25 hit rate.
-- Recall quality is validated with the qmd evaluation harness.
+- A task seeding flow builds or updates `continuum task` items from GOAL.md Current focus without duplicates.
+- The loop always selects the highest priority open task aligned to GOAL.md and resumes it if a NOW session exists.
+- Each completed step records a concise memory append entry with goal alignment, task and step IDs, files, and tests run.
+- QA policy is enforced (`bun run typecheck`, `bun test`, plus a relevant smoke command) and failures are recorded on the task.
+- Loop requests are stable artifacts in `.continuum/loop/` and include selection and QA metadata.
 
 ## Constraints
 
@@ -27,13 +26,12 @@ If recall is reliable and memory is easy to manage, sessions resume quickly with
 
 ## Non-goals
 
-- Replace tasks, git history, or configs as canonical source of truth.
-- Fully autonomous multi-step execution without user sessions.
-- Cross-repo or multi-project memory sharing.
+- Multi-repo or cross-project task orchestration.
+- Long-running autonomous loops without user control.
+- Replacing existing memory or recall tiers or task history as canonical sources.
 
 ## Current focus (next 1-3 iterations)
 
-- Implement BM25 to semantic fallback for recall lookup with clear flags and mode reporting.
-- Enrich recall summaries with deterministic keywords and re-run qmd eval.
-- Upgrade memory CLI: auto-start/resume, status fallback, list/summary, and recall import flow.
-- Draft the memory CLI roadmap from recall analysis and map to concrete tests.
+- Add a GOAL to task seeding command or script to populate open tasks when the queue is empty.
+- Tighten task loop alignment: ensure tasks include intent and plan that cite GOAL sections and auto-generate 1-3 steps.
+- Improve loop reporting: capture last run summary in `.continuum/loop/` and surface it in CLI output.
