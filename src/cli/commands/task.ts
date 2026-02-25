@@ -428,7 +428,7 @@ export function createTaskCommand(): Command {
     .command('delete')
     .description('Delete a task')
     .argument('<task_id>', 'Task ID to delete')
-    .action(async (taskId: string, command: Command) => {
+    .action(async (taskId: string, _options: unknown, command: Command) => {
       await runCommand(
         command,
         async () => {
@@ -495,25 +495,32 @@ export function createTaskCommand(): Command {
     .description('Query task graph relationships')
     .argument('<query>', 'ancestors, descendants, or children')
     .argument('<task_id>', 'Task ID to query')
-    .action(async (query: string, taskId: string, command: Command) => {
-      await runCommand(
-        command,
-        async () => {
-          const parsed = parseTaskGraphQuery(query)
-          const result = await continuum.task.graph(parsed, taskId)
-          return { query: parsed, taskId, taskIds: result.taskIds }
-        },
-        (result) => {
-          if (result.taskIds.length === 0) {
-            console.log('No tasks found.')
-            return
-          }
-          for (const id of result.taskIds) {
-            console.log(id)
-          }
-        },
-      )
-    })
+    .action(
+      async (
+        query: string,
+        taskId: string,
+        _options: unknown,
+        command: Command,
+      ) => {
+        await runCommand(
+          command,
+          async () => {
+            const parsed = parseTaskGraphQuery(query)
+            const result = await continuum.task.graph(parsed, taskId)
+            return { query: parsed, taskId, taskIds: result.taskIds }
+          },
+          (result) => {
+            if (result.taskIds.length === 0) {
+              console.log('No tasks found.')
+              return
+            }
+            for (const id of result.taskIds) {
+              console.log(id)
+            }
+          },
+        )
+      },
+    )
 
   const templatesCommand = new Command('templates').description(
     'Template helpers',

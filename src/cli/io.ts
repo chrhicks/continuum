@@ -21,10 +21,26 @@ type JsonError = {
 }
 
 export function getGlobalOptions(command: Command): GlobalCliOptions {
+  if (!command || typeof (command as Command).opts !== 'function') {
+    return {
+      json: false,
+      quiet: false,
+      cwd: process.cwd(),
+    }
+  }
+
   let root: Command = command
   while (root.parent) {
     root = root.parent
   }
+  if (typeof root.opts !== 'function') {
+    return {
+      json: false,
+      quiet: false,
+      cwd: process.cwd(),
+    }
+  }
+
   const options = root.opts<{ json?: boolean; quiet?: boolean; cwd?: string }>()
   return {
     json: Boolean(options.json),
