@@ -13,7 +13,8 @@ import { MEMORY_DIR, memoryPath } from './paths'
 import { getMemoryConfig } from './config'
 import { parseFrontmatter, replaceFrontmatter } from '../utils/frontmatter'
 import { resolveCurrentSessionPath } from './session'
-import { withMemoryLock } from './lock'
+import { withMemoryLockAsync } from './lock'
+import { summarizeNow, mechanicalSummary, type NowSummary } from './summarize'
 
 type ConsolidationPreview = {
   recentLines: number
@@ -35,16 +36,17 @@ type ConsolidationOutput = {
 
 const NOW_RETENTION_DAYS = 3
 const LOG_ROTATION_LINES = 1000
+const RECENT_FILE_LIMIT = 8
 
-export function consolidateNow(
+export async function consolidateNow(
   options: {
     nowPath?: string
     dryRun?: boolean
     skipNowCleanup?: boolean
   } = {},
-): ConsolidationOutput {
+): Promise<ConsolidationOutput> {
   const dryRun = options.dryRun ?? false
-  const runConsolidation = (): ConsolidationOutput => {
+  const runConsolidation = async (): Promise<ConsolidationOutput> => {
     if (!dryRun) {
       initMemory()
     } else if (!existsSync(MEMORY_DIR)) {
@@ -79,12 +81,9 @@ export function consolidateNow(
         )
     const tags = normalizeTags(frontmatter.tags)
 
-    const decisions = extractMarkers(body, /@decision\b[:\s-]*(.+)/i)
-    const discoveries = extractMarkers(body, /@discovery\b[:\s-]*(.+)/i)
-    const patterns = extractMarkers(body, /@pattern\b[:\s-]*(.+)/i)
-    const focus = resolveFocus(body, decisions, discoveries, patterns)
-    const tasks = extractTasks(body)
-    const files = extractFiles(body)
+    const summary: NowSummary = config.consolidation
+      ? await summarizeNow(body, config.consolidation)
+      : mechanicalSummary(body)
 
     const dateStamp = formatDate(timestampStart)
     const displayTime = formatDisplayTime(timestampStart)
@@ -103,12 +102,7 @@ export function consolidateNow(
       dateStamp,
       timeStamp: displayTime,
       durationMinutes,
-      focus,
-      decisions,
-      discoveries,
-      patterns,
-      tasks,
-      files,
+      summary,
       memoryFileName: `MEMORY-${dateStamp}.md`,
       anchor: sessionAnchor,
     })
@@ -122,12 +116,7 @@ export function consolidateNow(
       sessionId,
       dateStamp,
       timeStamp: displayTime,
-      focus,
-      decisions,
-      discoveries,
-      patterns,
-      tasks,
-      files,
+      summary,
       anchor: sessionAnchor,
     })
     const updatedMemory = upsertMemoryFile(memoryFilePath, {
@@ -139,15 +128,15 @@ export function consolidateNow(
     const indexEntry = buildIndexEntry({
       dateStamp,
       timeStamp: displayTime,
-      focus,
+      focus: summary.narrative,
       memoryFileName: `MEMORY-${dateStamp}.md`,
       anchor: sessionAnchor,
     })
     const updatedIndex = upsertMemoryIndex(memoryIndexPath, {
       entry: indexEntry,
-      hasDecisions: decisions.length > 0,
-      hasDiscoveries: discoveries.length > 0,
-      hasPatterns: patterns.length > 0,
+      hasDecisions: summary.decisions.length > 0,
+      hasDiscoveries: summary.discoveries.length > 0,
+      hasPatterns: false,
       sections: config.memory_sections,
     })
 
@@ -162,9 +151,9 @@ export function consolidateNow(
       nowFile: nowPath,
       memoryFile: memoryFilePath,
       recentPath,
-      decisions: decisions.length,
-      discoveries: discoveries.length,
-      patterns: patterns.length,
+      decisions: summary.decisions.length,
+      discoveries: summary.discoveries.length,
+      patterns: 0,
     })
 
     if (!dryRun) {
@@ -208,51 +197,59 @@ export function consolidateNow(
     return runConsolidation()
   }
 
-  return withMemoryLock(runConsolidation)
+  return withMemoryLockAsync(runConsolidation)
 }
 
 function buildRecentEntry(options: {
   dateStamp: string
   timeStamp: string
   durationMinutes: number
-  focus: string
-  decisions: string[]
-  discoveries: string[]
-  patterns: string[]
-  tasks: string[]
-  files: string[]
+  summary: NowSummary
   memoryFileName: string
   anchor: string
 }): string {
+  const { summary } = options
   const duration = formatDuration(options.durationMinutes)
   const lines: string[] = []
   lines.push(
     `## Session ${options.dateStamp} ${options.timeStamp} (${duration})`,
   )
   lines.push('')
-  lines.push(`**Focus**: ${options.focus}`)
-  if (options.decisions.length > 0) {
+  lines.push(summary.narrative)
+  if (summary.decisions.length > 0) {
     lines.push('')
-    lines.push('**Key Decisions**:')
-    lines.push(...options.decisions.map((item) => `- ${item}`))
+    lines.push('**Decisions**:')
+    lines.push(...summary.decisions.map((item) => `- ${item}`))
   }
-  if (options.discoveries.length > 0) {
+  if (summary.discoveries.length > 0) {
     lines.push('')
     lines.push('**Discoveries**:')
-    lines.push(...options.discoveries.map((item) => `- ${item}`))
+    lines.push(...summary.discoveries.map((item) => `- ${item}`))
   }
-  if (options.patterns.length > 0) {
+  if (summary.whatWorked.length > 0) {
     lines.push('')
-    lines.push('**Patterns**:')
-    lines.push(...options.patterns.map((item) => `- ${item}`))
+    lines.push('**What worked**:')
+    lines.push(...summary.whatWorked.map((item) => `- ${item}`))
   }
-  lines.push('')
-  lines.push(
-    `**Tasks**: ${options.tasks.length ? options.tasks.join(', ') : 'none'}`,
-  )
-  lines.push(
-    `**Files**: ${options.files.length ? options.files.map((file) => `\`${file}\``).join(', ') : 'none'}`,
-  )
+  if (summary.whatFailed.length > 0) {
+    lines.push('')
+    lines.push("**What didn't work**:")
+    lines.push(...summary.whatFailed.map((item) => `- ${item}`))
+  }
+  if (summary.openQuestions.length > 0) {
+    lines.push('')
+    lines.push('**Open questions**:')
+    lines.push(...summary.openQuestions.map((item) => `- ${item}`))
+  }
+  if (summary.nextSteps.length > 0) {
+    lines.push('')
+    lines.push('**Next steps**:')
+    lines.push(...summary.nextSteps.map((item) => `- ${item}`))
+  }
+  if (summary.tasks.length > 0) {
+    lines.push('')
+    lines.push(`**Tasks**: ${summary.tasks.join(', ')}`)
+  }
   lines.push(
     `**Link**: [Full details](${options.memoryFileName}#${options.anchor})`,
   )
@@ -328,43 +325,55 @@ function buildMemorySection(options: {
   sessionId: string
   dateStamp: string
   timeStamp: string
-  focus: string
-  decisions: string[]
-  discoveries: string[]
-  patterns: string[]
-  tasks: string[]
-  files: string[]
+  summary: NowSummary
   anchor: string
 }): string {
+  const { summary } = options
   const lines: string[] = []
   lines.push(
     `## Session ${options.dateStamp} ${options.timeStamp} UTC (${options.sessionId})`,
   )
   lines.push(`<a name="${options.anchor}"></a>`)
   lines.push('')
-  lines.push(`**Focus**: ${options.focus}`)
-  if (options.decisions.length > 0) {
+  lines.push(summary.narrative)
+  if (summary.decisions.length > 0) {
     lines.push('')
     lines.push('**Decisions**:')
-    lines.push(...options.decisions.map((item) => `- ${item}`))
+    lines.push(...summary.decisions.map((item) => `- ${item}`))
   }
-  if (options.discoveries.length > 0) {
+  if (summary.discoveries.length > 0) {
     lines.push('')
     lines.push('**Discoveries**:')
-    lines.push(...options.discoveries.map((item) => `- ${item}`))
+    lines.push(...summary.discoveries.map((item) => `- ${item}`))
   }
-  if (options.patterns.length > 0) {
+  if (summary.whatWorked.length > 0) {
     lines.push('')
-    lines.push('**Patterns**:')
-    lines.push(...options.patterns.map((item) => `- ${item}`))
+    lines.push('**What worked**:')
+    lines.push(...summary.whatWorked.map((item) => `- ${item}`))
   }
-  lines.push('')
-  lines.push(
-    `**Tasks**: ${options.tasks.length ? options.tasks.join(', ') : 'none'}`,
-  )
-  lines.push(
-    `**Files**: ${options.files.length ? options.files.map((file) => `\`${file}\``).join(', ') : 'none'}`,
-  )
+  if (summary.whatFailed.length > 0) {
+    lines.push('')
+    lines.push("**What didn't work**:")
+    lines.push(...summary.whatFailed.map((item) => `- ${item}`))
+  }
+  if (summary.openQuestions.length > 0) {
+    lines.push('')
+    lines.push('**Open questions**:')
+    lines.push(...summary.openQuestions.map((item) => `- ${item}`))
+  }
+  if (summary.nextSteps.length > 0) {
+    lines.push('')
+    lines.push('**Next steps**:')
+    lines.push(...summary.nextSteps.map((item) => `- ${item}`))
+  }
+  if (summary.tasks.length > 0) {
+    lines.push('')
+    lines.push(`**Tasks**: ${summary.tasks.join(', ')}`)
+  }
+  if (summary.files.length > 0) {
+    lines.push('')
+    lines.push(`**Files**: ${formatFileList(summary.files)}`)
+  }
   return lines.join('\n')
 }
 
@@ -590,18 +599,6 @@ export function dedupeEntriesByAnchor(entries: string[]): string[] {
   return output
 }
 
-function extractMarkers(body: string, pattern: RegExp): string[] {
-  const lines = body.split('\n')
-  const matches: string[] = []
-  for (const line of lines) {
-    const match = line.match(pattern)
-    if (match && match[1]) {
-      matches.push(match[1].trim())
-    }
-  }
-  return unique(matches)
-}
-
 function buildClearedNowContent(
   frontmatter: Record<string, unknown>,
   keys: string[],
@@ -626,45 +623,6 @@ function extractSessionHeader(body: string): string {
   return '# Session: unknown'
 }
 
-function extractFocus(body: string): string | null {
-  const lines = body.split('\n')
-  for (const line of lines) {
-    if (line.startsWith('## User: ')) {
-      return line.replace('## User: ', '').trim()
-    }
-  }
-  return null
-}
-
-function resolveFocus(
-  body: string,
-  decisions: string[],
-  discoveries: string[],
-  patterns: string[],
-): string {
-  const userFocus = extractFocus(body)
-  if (userFocus) {
-    return userFocus
-  }
-  const markerFocus = decisions[0] ?? discoveries[0] ?? patterns[0]
-  if (markerFocus) {
-    return markerFocus
-  }
-  return 'No markers provided'
-}
-
-function extractTasks(body: string): string[] {
-  const matches = body.match(/\btkt_[a-zA-Z0-9_-]+\b/g)
-  return unique(matches ?? [])
-}
-
-function extractFiles(body: string): string[] {
-  const matches = body.match(
-    /\b[\w./-]+\.(ts|tsx|js|jsx|json|md|yaml|yml|sql|sh|go|py|rs)\b/g,
-  )
-  return unique(matches ?? [])
-}
-
 function unique(items: string[]): string[] {
   return Array.from(new Set(items))
 }
@@ -676,6 +634,19 @@ function mergeUnique(current: unknown, incoming: string[]): string[] {
 
 function normalizeTags(tags: unknown): string[] {
   return Array.isArray(tags) ? tags.map(String) : []
+}
+
+function formatFileList(files: string[], limit?: number): string {
+  if (files.length === 0) {
+    return 'none'
+  }
+  const wrapped = files.map((file) => `\`${file}\``)
+  if (!limit || files.length <= limit) {
+    return wrapped.join(', ')
+  }
+  const shown = wrapped.slice(0, limit).join(', ')
+  const remaining = files.length - limit
+  return `${shown} (+${remaining} more)`
 }
 
 function formatDate(date: Date): string {

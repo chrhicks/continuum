@@ -75,9 +75,9 @@ const NOW_FRONTMATTER_ORDER = [
   'memory_type',
 ]
 
-export function importOpencodeRecall(
+export async function importOpencodeRecall(
   options: RecallImportOptions = {},
-): RecallImportResult {
+): Promise<RecallImportResult> {
   const summaryDir = resolveOpencodeOutputDir(
     process.cwd(),
     options.summaryDir ?? options.outDir ?? null,
@@ -151,7 +151,7 @@ export function importOpencodeRecall(
     writeFileSync(tempPath, nowContent, 'utf-8')
 
     try {
-      consolidateNow({
+      await consolidateNow({
         nowPath: tempPath,
         dryRun,
         skipNowCleanup: true,

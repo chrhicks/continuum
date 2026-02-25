@@ -94,11 +94,11 @@ export function createMemoryCommand(): Command {
     .command('end')
     .description('End the current session')
     .option('--consolidate', 'Consolidate after ending session')
-    .action((options: { consolidate?: boolean }) => {
+    .action(async (options: { consolidate?: boolean }) => {
       const path = endSession()
       console.log(`Session ended: ${path}`)
       if (options.consolidate) {
-        const result = consolidateNow()
+        const result = await consolidateNow()
         logConsolidationResult(result)
       }
     })
@@ -390,15 +390,15 @@ export function createMemoryCommand(): Command {
   return memoryCommand
 }
 
-export function endSessionIfActive(options: {
+export async function endSessionIfActive(options: {
   consolidate: boolean
-}): string | null {
+}): Promise<string | null> {
   if (!resolveCurrentSessionPath({ allowFallback: true })) {
     return null
   }
   const path = endSession()
   if (options.consolidate) {
-    const result = consolidateNow()
+    const result = await consolidateNow()
     logConsolidationResult(result)
   }
   return path
@@ -439,14 +439,14 @@ function handleList(): void {
   }
 }
 
-function handleConsolidate(dryRun: boolean): void {
-  const result = consolidateNow({ dryRun })
+async function handleConsolidate(dryRun: boolean): Promise<void> {
+  const result = await consolidateNow({ dryRun })
   logConsolidationResult(result)
 }
 
-function logConsolidationResult(
-  result: ReturnType<typeof consolidateNow>,
-): void {
+type ConsolidationResult = Awaited<ReturnType<typeof consolidateNow>>
+
+function logConsolidationResult(result: ConsolidationResult): void {
   if (result.dryRun && result.preview) {
     console.log('Consolidation dry run (no files written):')
     console.log(
@@ -460,9 +460,6 @@ function logConsolidationResult(
     )
     console.log(`- LOG: ${result.logPath} (+${result.preview.logLines} lines)`)
     console.log(`- NOW: ${result.nowPath} (${result.preview.nowLines} lines)`)
-    console.log(
-      'Note: Consolidation uses @decision/@discovery/@pattern markers from NOW.',
-    )
     return
   }
 
@@ -471,9 +468,6 @@ function logConsolidationResult(
   console.log(`- MEMORY: ${result.memoryPath}`)
   console.log(`- INDEX: ${result.memoryIndexPath}`)
   console.log(`- LOG: ${result.logPath}`)
-  console.log(
-    'Note: Consolidation uses @decision/@discovery/@pattern markers from NOW.',
-  )
 }
 
 function handleSearch(
@@ -524,15 +518,15 @@ function handleValidate(): void {
   process.exitCode = 1
 }
 
-function handleRecallImport(options: {
+async function handleRecallImport(options: {
   summaryDir?: string
   out?: string
   db?: string
   project?: string
   session?: string
   dryRun?: boolean
-}): void {
-  const result = importOpencodeRecall({
+}): Promise<void> {
+  const result = await importOpencodeRecall({
     summaryDir: options.summaryDir,
     outDir: options.out,
     dbPath: options.db,
@@ -917,11 +911,11 @@ function handleLog(tail?: number): void {
   console.log(result.lines.join('\n'))
 }
 
-function handleRecover(
+async function handleRecover(
   maxHours: number | undefined,
   consolidate: boolean,
-): void {
-  const result = recoverStaleNowFiles({ maxHours, consolidate })
+): Promise<void> {
+  const result = await recoverStaleNowFiles({ maxHours, consolidate })
   if (result.totalNowFiles === 0) {
     console.log('No NOW files found.')
     return
@@ -954,7 +948,9 @@ async function handleAppend(kind: string, textParts: string[]): Promise<void> {
   if (kind === 'user') {
     const exitCommand = parseExitCommand(message)
     if (exitCommand) {
-      const path = endSessionIfActive({ consolidate: exitCommand.consolidate })
+      const path = await endSessionIfActive({
+        consolidate: exitCommand.consolidate,
+      })
       if (!path) {
         throw new Error('No active NOW session found.')
       }

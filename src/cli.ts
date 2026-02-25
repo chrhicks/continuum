@@ -88,17 +88,19 @@ function installExitHandlers(): void {
   }
   exitHandlersInstalled = true
   process.once('SIGINT', () => {
-    try {
-      const path = endSessionIfActive({ consolidate: false })
-      if (path) {
-        console.log(`Session ended: ${path}`)
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      console.error(message)
-    } finally {
-      exitHandlersInstalled = false
-      process.exitCode = 130
-    }
+    endSessionIfActive({ consolidate: false })
+      .then((path) => {
+        if (path) {
+          console.log(`Session ended: ${path}`)
+        }
+      })
+      .catch((error) => {
+        const message = error instanceof Error ? error.message : String(error)
+        console.error(message)
+      })
+      .finally(() => {
+        exitHandlersInstalled = false
+        process.exitCode = 130
+      })
   })
 }

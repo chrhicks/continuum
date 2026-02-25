@@ -22,12 +22,12 @@ function withTempMemory(run: (memoryDir: string) => void): void {
   }
 }
 
-function withTempCwd(run: () => void): void {
+async function withTempCwd(run: () => Promise<void>): Promise<void> {
   const root = mkdtempSync(join(tmpdir(), 'continuum-recover-cwd-'))
   const previous = process.cwd()
   try {
     process.chdir(root)
-    run()
+    await run()
   } finally {
     process.chdir(previous)
     rmSync(root, { recursive: true, force: true })
@@ -63,8 +63,8 @@ describe('memory recover scan', () => {
 })
 
 describe('memory recover consolidate', () => {
-  test('does not delete other stale NOW files during recovery', () => {
-    withTempCwd(() => {
+  test('does not delete other stale NOW files during recovery', async () => {
+    await withTempCwd(async () => {
       const memoryDir = join(process.cwd(), '.continuum', 'memory')
       mkdirSync(memoryDir, { recursive: true })
 
@@ -96,7 +96,7 @@ describe('memory recover consolidate', () => {
       writeFileSync(nowOne, buildNow('sess_one'), 'utf-8')
       writeFileSync(nowTwo, buildNow('sess_two'), 'utf-8')
 
-      recoverStaleNowFiles({ maxHours: 1, consolidate: true })
+      await recoverStaleNowFiles({ maxHours: 1, consolidate: true })
 
       expect(existsSync(nowOne)).toBe(true)
       expect(existsSync(nowTwo)).toBe(true)

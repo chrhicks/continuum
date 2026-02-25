@@ -77,12 +77,12 @@ const SUMMARY_CONTENT = [
   '',
 ].join('\n')
 
-function withTempCwd(run: () => void): void {
+async function withTempCwd(run: () => Promise<void>): Promise<void> {
   const root = mkdtempSync(join(tmpdir(), 'continuum-cli-'))
   const previous = process.cwd()
   try {
     process.chdir(root)
-    run()
+    await run()
   } finally {
     process.chdir(previous)
     rmSync(root, { recursive: true, force: true })
@@ -90,8 +90,8 @@ function withTempCwd(run: () => void): void {
 }
 
 describe('recall import', () => {
-  test('imports opencode summaries into memory files', () => {
-    withTempCwd(() => {
+  test('imports opencode summaries into memory files', async () => {
+    await withTempCwd(async () => {
       const recallDir = join(process.cwd(), '.continuum', 'recall', 'opencode')
       mkdirSync(recallDir, { recursive: true })
       const summaryPath = join(
@@ -100,16 +100,16 @@ describe('recall import', () => {
       )
       writeFileSync(summaryPath, SUMMARY_CONTENT, 'utf-8')
 
-      const result = importOpencodeRecall()
+      const result = await importOpencodeRecall()
 
       expect(result.imported).toBe(1)
 
       const memoryDir = join(process.cwd(), '.continuum', 'memory')
       const recent = readFileSync(join(memoryDir, 'RECENT.md'), 'utf-8')
       expect(recent).toContain('Session 2026-02-10 10:00 (30m)')
-      expect(recent).toContain('**Focus**: Implement recall import flow.')
-      expect(recent).toContain('**Tasks**: tkt_abc123')
-      expect(recent).toContain('`src/memory/recall-import.ts`')
+      // With the mechanical fallback, decisions from @decision: markers are captured
+      expect(recent).toContain('Use consolidate pipeline')
+      expect(recent).toContain('**Decisions**:')
 
       const memoryFile = readFileSync(
         join(memoryDir, 'MEMORY-2026-02-10.md'),
@@ -121,8 +121,8 @@ describe('recall import', () => {
     })
   })
 
-  test('skips already imported sessions', () => {
-    withTempCwd(() => {
+  test('skips already imported sessions', async () => {
+    await withTempCwd(async () => {
       const recallDir = join(process.cwd(), '.continuum', 'recall', 'opencode')
       mkdirSync(recallDir, { recursive: true })
       const summaryPath = join(
@@ -131,12 +131,12 @@ describe('recall import', () => {
       )
       writeFileSync(summaryPath, SUMMARY_CONTENT, 'utf-8')
 
-      importOpencodeRecall()
+      await importOpencodeRecall()
 
       const memoryDir = join(process.cwd(), '.continuum', 'memory')
       const memoryPath = join(memoryDir, 'MEMORY-2026-02-10.md')
       const before = readFileSync(memoryPath, 'utf-8')
-      const result = importOpencodeRecall()
+      const result = await importOpencodeRecall()
       const after = readFileSync(memoryPath, 'utf-8')
 
       expect(result.skippedExisting).toBe(1)

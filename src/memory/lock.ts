@@ -63,6 +63,50 @@ export function withMemoryLock<T>(
   throw new Error('Memory operations are locked. Try again shortly.')
 }
 
+export async function withMemoryLockAsync<T>(
+  action: () => Promise<T>,
+  options: MemoryLockOptions = {},
+): Promise<T> {
+  ensureMemoryDir()
+  const retries = options.retries ?? DEFAULT_RETRIES
+  const retryDelayMs = options.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS
+  const staleLockMs = options.staleLockMs ?? DEFAULT_STALE_LOCK_MS
+  let attempt = 0
+
+  while (attempt < retries) {
+    try {
+      const descriptor = openSync(MEMORY_LOCK_PATH, 'wx')
+      closeSync(descriptor)
+      writeFileSync(
+        MEMORY_LOCK_PATH,
+        JSON.stringify({
+          pid: process.pid,
+          timestamp: new Date().toISOString(),
+        }),
+        'utf-8',
+      )
+      try {
+        return await action()
+      } finally {
+        if (existsSync(MEMORY_LOCK_PATH)) {
+          unlinkSync(MEMORY_LOCK_PATH)
+        }
+      }
+    } catch {
+      if (tryClearStaleLock(staleLockMs)) {
+        continue
+      }
+      attempt += 1
+      if (attempt >= retries) {
+        throw new Error('Memory operations are locked. Try again shortly.')
+      }
+      sleep(retryDelayMs)
+    }
+  }
+
+  throw new Error('Memory operations are locked. Try again shortly.')
+}
+
 function tryClearStaleLock(staleLockMs: number): boolean {
   if (!existsSync(MEMORY_LOCK_PATH)) {
     return false

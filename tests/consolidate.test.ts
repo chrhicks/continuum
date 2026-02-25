@@ -16,12 +16,12 @@ import {
   insertEntryInSection,
 } from '../src/memory/consolidate'
 
-function withTempCwd(run: () => void): void {
+async function withTempCwd(run: () => Promise<void>): Promise<void> {
   const root = mkdtempSync(join(tmpdir(), 'continuum-cli-'))
   const previous = process.cwd()
   try {
     process.chdir(root)
-    run()
+    await run()
   } finally {
     process.chdir(previous)
     rmSync(root, { recursive: true, force: true })
@@ -102,8 +102,8 @@ describe('memory index de-duplication', () => {
     expect(updated).toContain(additional)
   })
 
-  test('consolidateNow removes duplicate anchors already in MEMORY.md', () => {
-    withTempCwd(() => {
+  test('consolidateNow removes duplicate anchors already in MEMORY.md', async () => {
+    await withTempCwd(async () => {
       const memoryDir = join(process.cwd(), '.continuum', 'memory')
       mkdirSync(memoryDir, { recursive: true })
 
@@ -143,7 +143,7 @@ describe('memory index de-duplication', () => {
       ].join('\n')
       writeFileSync(memoryIndexPath, indexContent, 'utf-8')
 
-      consolidateNow({ nowPath })
+      await consolidateNow({ nowPath })
 
       const updatedIndex = readFileSync(memoryIndexPath, 'utf-8')
       const matches =
@@ -154,8 +154,8 @@ describe('memory index de-duplication', () => {
 })
 
 describe('memory consolidation dry run', () => {
-  test('does not write files', () => {
-    withTempCwd(() => {
+  test('does not write files', async () => {
+    await withTempCwd(async () => {
       const memoryDir = join(process.cwd(), '.continuum', 'memory')
       mkdirSync(memoryDir, { recursive: true })
       const nowPath = join(memoryDir, 'NOW-2026-02-02T16-00-00.md')
@@ -181,7 +181,7 @@ describe('memory consolidation dry run', () => {
       writeFileSync(nowPath, content, 'utf-8')
 
       const before = readFileSync(nowPath, 'utf-8')
-      const result = consolidateNow({ nowPath, dryRun: true })
+      const result = await consolidateNow({ nowPath, dryRun: true })
       const after = readFileSync(nowPath, 'utf-8')
 
       expect(result.dryRun).toBe(true)
@@ -193,8 +193,8 @@ describe('memory consolidation dry run', () => {
 })
 
 describe('memory consolidation focus', () => {
-  test('avoids generic focus when no markers exist', () => {
-    withTempCwd(() => {
+  test('produces narrative when no markers exist', async () => {
+    await withTempCwd(async () => {
       const memoryDir = join(process.cwd(), '.continuum', 'memory')
       mkdirSync(memoryDir, { recursive: true })
       const nowPath = join(memoryDir, 'NOW-2026-02-02T16-00-00.md')
@@ -216,15 +216,17 @@ describe('memory consolidation focus', () => {
       ].join('\n')
       writeFileSync(nowPath, content, 'utf-8')
 
-      consolidateNow({ nowPath })
+      await consolidateNow({ nowPath })
 
       const recent = readFileSync(join(memoryDir, 'RECENT.md'), 'utf-8')
-      expect(recent).toContain('**Focus**: No markers provided')
+      // With the mechanical path, sparse sessions produce a minimal narrative
+      expect(recent).toContain('## Session 2026-02-02 16:00')
+      expect(recent).toContain('No summary available.')
     })
   })
 
-  test('clears NOW content after consolidation', () => {
-    withTempCwd(() => {
+  test('clears NOW content after consolidation', async () => {
+    await withTempCwd(async () => {
       const memoryDir = join(process.cwd(), '.continuum', 'memory')
       mkdirSync(memoryDir, { recursive: true })
       const nowPath = join(memoryDir, 'NOW-2026-02-02T16-00-00.md')
@@ -248,7 +250,7 @@ describe('memory consolidation focus', () => {
       ].join('\n')
       writeFileSync(nowPath, content, 'utf-8')
 
-      consolidateNow({ nowPath })
+      await consolidateNow({ nowPath })
 
       const updated = readFileSync(nowPath, 'utf-8')
       expect(updated).toContain('# Session: sess_test - 2026-02-02 16:00 UTC')
@@ -258,8 +260,8 @@ describe('memory consolidation focus', () => {
 })
 
 describe('memory consolidation backups', () => {
-  test('writes backup files before replacing outputs', () => {
-    withTempCwd(() => {
+  test('writes backup files before replacing outputs', async () => {
+    await withTempCwd(async () => {
       const memoryDir = join(process.cwd(), '.continuum', 'memory')
       mkdirSync(memoryDir, { recursive: true })
 
@@ -294,7 +296,7 @@ describe('memory consolidation backups', () => {
       writeFileSync(memoryFilePath, 'old memory', 'utf-8')
       writeFileSync(logPath, 'old log', 'utf-8')
 
-      consolidateNow({ nowPath })
+      await consolidateNow({ nowPath })
 
       expect(readFileSync(`${recentPath}.bak`, 'utf-8')).toBe('old recent')
       expect(readFileSync(`${memoryIndexPath}.bak`, 'utf-8')).toBe('old index')

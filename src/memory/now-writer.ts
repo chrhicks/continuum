@@ -58,7 +58,7 @@ async function appendEntry(
 
     if (shouldRolloverNow(content, frontmatter, config)) {
       endSession()
-      consolidateNow()
+      await consolidateNow()
       currentPath = startSession().filePath
       content = readFileSync(currentPath, 'utf-8')
       ;({ frontmatter, keys } = parseFrontmatter(content))

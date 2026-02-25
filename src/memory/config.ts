@@ -2,12 +2,22 @@ import { existsSync, readFileSync } from 'node:fs'
 import { parse } from 'yaml'
 import { memoryPath } from './paths'
 
+export type ConsolidationLlmConfig = {
+  api_url: string
+  api_key: string
+  model: string
+  max_tokens: number
+  timeout_ms: number
+}
+
 export type MemoryConfig = {
   now_max_lines: number
   now_max_hours: number
   recent_session_count: number
   recent_max_lines: number
   memory_sections: string[]
+  /** When present, consolidation uses an LLM to produce narrative summaries. */
+  consolidation?: ConsolidationLlmConfig
 }
 
 const DEFAULT_SECTIONS = [
@@ -15,6 +25,11 @@ const DEFAULT_SECTIONS = [
   'Technical Discoveries',
   'Development Patterns',
 ]
+
+const DEFAULT_CONSOLIDATION_MAX_TOKENS = 4000
+const DEFAULT_CONSOLIDATION_TIMEOUT_MS = 120000
+const DEFAULT_CONSOLIDATION_API_URL =
+  'https://opencode.ai/zen/v1/chat/completions'
 
 const DEFAULT_CONFIG: MemoryConfig = {
   now_max_lines: 200,
@@ -63,7 +78,53 @@ function normalizeConfig(raw: Record<string, unknown>): MemoryConfig {
       DEFAULT_CONFIG.recent_max_lines,
     ),
     memory_sections: normalizeSections(raw.memory_sections),
+    consolidation: normalizeConsolidationConfig(raw.consolidation),
   }
+}
+
+function normalizeConsolidationConfig(
+  raw: unknown,
+): ConsolidationLlmConfig | undefined {
+  if (!raw || typeof raw !== 'object') {
+    return undefined
+  }
+  const rec = raw as Record<string, unknown>
+
+  // api_key is required — fall back to env vars
+  const api_key =
+    readNonEmptyString(rec.api_key) ??
+    process.env.OPENCODE_ZEN_API_KEY ??
+    process.env.CONSOLIDATION_API_KEY ??
+    process.env.OPENAI_API_KEY ??
+    null
+
+  const model = readNonEmptyString(rec.model)
+
+  if (!api_key || !model) {
+    return undefined
+  }
+
+  return {
+    api_url: readNonEmptyString(rec.api_url) ?? DEFAULT_CONSOLIDATION_API_URL,
+    api_key,
+    model,
+    max_tokens: readPositiveInt(
+      rec.max_tokens,
+      DEFAULT_CONSOLIDATION_MAX_TOKENS,
+    ),
+    timeout_ms: readPositiveInt(
+      rec.timeout_ms,
+      DEFAULT_CONSOLIDATION_TIMEOUT_MS,
+    ),
+  }
+}
+
+function readNonEmptyString(value: unknown): string | null {
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    return trimmed.length > 0 ? trimmed : null
+  }
+  return null
 }
 
 function readPositiveInt(value: unknown, fallback: number): number {

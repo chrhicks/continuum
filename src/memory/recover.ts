@@ -61,14 +61,14 @@ export function scanStaleNowFiles(
   }
 }
 
-export function recoverStaleNowFiles(
+export async function recoverStaleNowFiles(
   options: { maxHours?: number; consolidate?: boolean } = {},
-): RecoverResult {
+): Promise<RecoverResult> {
   const scan = scanStaleNowFiles({ maxHours: options.maxHours })
   const recovered: string[] = []
   if (options.consolidate) {
     for (const stale of scan.staleNowFiles) {
-      consolidateNow({ nowPath: stale.filePath, skipNowCleanup: true })
+      await consolidateNow({ nowPath: stale.filePath, skipNowCleanup: true })
       recovered.push(stale.filePath)
     }
   }
