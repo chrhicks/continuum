@@ -52,7 +52,6 @@ import { readConsolidationLog } from '../../memory/log'
 import { recoverStaleNowFiles } from '../../memory/recover'
 import { listMemoryEntries } from '../../memory/list'
 import { importOpencodeRecall } from '../../memory/recall-import'
-import { handleLoop } from './loop'
 
 const DEFAULT_SYNC_PROCESSED_VERSION = 1
 
@@ -376,15 +375,6 @@ export function createMemoryCommand(): Command {
     .description('Validate memory structure')
     .action(() => {
       handleValidate()
-    })
-
-  memoryCommand
-    .command('loop')
-    .description('Run loop request')
-    .requiredOption('-n, --count <count>', 'Number of iterations')
-    .action(async (options: { count: string }) => {
-      const count = parseLoopCount(options.count)
-      await handleLoop(count)
     })
 
   return memoryCommand
@@ -1083,14 +1073,6 @@ function parseHours(value: string): number {
     throw new Error('Hours must be a positive number.')
   }
   return hours
-}
-
-function parseLoopCount(value: string): number {
-  const count = Number(value)
-  if (!Number.isInteger(count) || count <= 0) {
-    throw new Error('Count must be a positive integer.')
-  }
-  return count
 }
 
 function resolveDiffReportPath(dataRoot: string, value: string | null): string {

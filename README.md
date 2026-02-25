@@ -252,22 +252,6 @@ The import expects `OPENCODE-SUMMARY-*.md` files produced by the recall prototyp
 in `.continuum/recall/opencode` and skips sessions already consolidated into
 MEMORY files.
 
-## Agent Loop (Batch Mode)
-
-Run an autonomous loop that picks tasks, works them, runs QA, and consolidates memory between sessions.
-
-```bash
-# Run up to 5 tasks
-bun run bin/continuum loop -n 5
-```
-
-How it works:
-
-- Writes a loop request to `.continuum/loop/request.json`
-- The Agent Loop Skill (`skills/agent-loop/SKILL.md`) consumes the request
-- Each task runs in a fresh NOW session with consolidation after completion
-- QA policy: `bun test` + task-specific steps (if provided) + minimal smoke test
-
 ## How It Works
 
 ### Auto-Documentation
