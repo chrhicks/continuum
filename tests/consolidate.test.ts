@@ -225,6 +225,122 @@ describe('memory consolidation focus', () => {
     })
   })
 
+  test('preserves the valid session header when clearing NOW content', async () => {
+    await withTempCwd(async () => {
+      const memoryDir = join(process.cwd(), '.continuum', 'memory')
+      mkdirSync(memoryDir, { recursive: true })
+      const nowPath = join(memoryDir, 'NOW-2026-02-02T16-00-00.md')
+      const content = [
+        '---',
+        'session_id: sess_valid',
+        'timestamp_start: 2026-02-02T16:00:00.000Z',
+        'timestamp_end: 2026-02-02T16:05:00.000Z',
+        'duration_minutes: null',
+        `project_path: ${process.cwd()}`,
+        'tags: []',
+        'parent_session: null',
+        'related_tasks: []',
+        'memory_type: NOW',
+        '---',
+        '',
+        '# Session: sess_valid - 2026-02-02 16:00 UTC',
+        '',
+        '# Notes',
+        'this should be cleared',
+        '@decision: should be cleared',
+        '',
+      ].join('\n')
+      writeFileSync(nowPath, content, 'utf-8')
+
+      await consolidateNow({ nowPath })
+
+      const updated = readFileSync(nowPath, 'utf-8')
+      expect(updated).toContain('# Session: sess_valid - 2026-02-02 16:00 UTC')
+      expect(updated).not.toContain('# Notes')
+      expect(updated).not.toContain('@decision: should be cleared')
+    })
+  })
+
+  test('preserves first level-1 header when session header is absent', async () => {
+    await withTempCwd(async () => {
+      const memoryDir = join(process.cwd(), '.continuum', 'memory')
+      mkdirSync(memoryDir, { recursive: true })
+      const nowPath = join(memoryDir, 'NOW-2026-02-02T16-00-00.md')
+      const content = [
+        '---',
+        'session_id: sess_no_session_header',
+        'timestamp_start: 2026-02-02T16:00:00.000Z',
+        'timestamp_end: 2026-02-02T16:05:00.000Z',
+        'duration_minutes: null',
+        `project_path: ${process.cwd()}`,
+        'tags: []',
+        'parent_session: null',
+        'related_tasks: []',
+        'memory_type: NOW',
+        '---',
+        '',
+        '# Notes from Session',
+        '',
+        '@decision: should be cleared',
+        'detail line should be cleared',
+        '',
+      ].join('\n')
+      writeFileSync(nowPath, content, 'utf-8')
+
+      await consolidateNow({ nowPath })
+
+      const updated = readFileSync(nowPath, 'utf-8')
+      expect(updated).toContain('# Notes from Session')
+      expect(updated).not.toContain('@decision: should be cleared')
+      expect(updated).not.toContain('detail line should be cleared')
+    })
+  })
+
+  test('consolidateNow is idempotent for cleared NOW files', async () => {
+    await withTempCwd(async () => {
+      const memoryDir = join(process.cwd(), '.continuum', 'memory')
+      mkdirSync(memoryDir, { recursive: true })
+      const nowPath = join(memoryDir, 'NOW-2026-02-02T16-00-00.md')
+      const content = [
+        '---',
+        'session_id: sess_idempotent',
+        'timestamp_start: 2026-02-02T16:00:00.000Z',
+        'timestamp_end: 2026-02-02T16:05:00.000Z',
+        'duration_minutes: null',
+        `project_path: ${process.cwd()}`,
+        'tags: []',
+        'parent_session: null',
+        'related_tasks: []',
+        'memory_type: NOW',
+        '---',
+        '',
+        '# Session: sess_idempotent - 2026-02-02 16:00 UTC',
+        '',
+        '@decision: should be cleared once',
+        'body line should be cleared once',
+        '',
+      ].join('\n')
+      writeFileSync(nowPath, content, 'utf-8')
+
+      await consolidateNow({ nowPath })
+      const afterFirstConsolidation = readFileSync(nowPath, 'utf-8')
+
+      await consolidateNow({ nowPath })
+      const afterSecondConsolidation = readFileSync(nowPath, 'utf-8')
+
+      expect(afterSecondConsolidation).toBe(afterFirstConsolidation)
+      expect(afterSecondConsolidation).toContain(
+        '# Session: sess_idempotent - 2026-02-02 16:00 UTC',
+      )
+      expect(afterSecondConsolidation).not.toContain(
+        '@decision: should be cleared once',
+      )
+      expect(afterSecondConsolidation).not.toContain(
+        'body line should be cleared once',
+      )
+    })
+  })
+
   test('clears NOW content after consolidation', async () => {
     await withTempCwd(async () => {
       const memoryDir = join(process.cwd(), '.continuum', 'memory')

@@ -620,6 +620,11 @@ function extractSessionHeader(body: string): string {
       return line
     }
   }
+  for (const line of lines) {
+    if (line.startsWith('# ')) {
+      return line
+    }
+  }
   return '# Session: unknown'
 }
 
