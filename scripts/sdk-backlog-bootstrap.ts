@@ -26,7 +26,7 @@ const run = async () => {
   const epic = await continuum.task.create({
     title: `Epic: SDK backlog ${new Date().toISOString()}`,
     type: 'epic',
-    description: 'Seed an epic with blocked features.',
+    description: 'Bootstrap an epic with blocked features.',
   })
 
   const featureA = await continuum.task.create({
@@ -62,7 +62,7 @@ const run = async () => {
     limit: 10,
   })
 
-  console.log('sdk-seed-backlog: ok')
+  console.log('sdk-backlog-bootstrap: ok')
   console.log(`epic: ${epic.id}`)
   console.log(`featureA: ${featureA.id}`)
   console.log(`featureB: ${featureB.id}`)
@@ -75,7 +75,7 @@ const run = async () => {
     await continuum.task.delete(featureB.id)
     await continuum.task.delete(featureA.id)
     await continuum.task.delete(epic.id)
-    console.log('sdk-seed-backlog: cleaned up')
+    console.log('sdk-backlog-bootstrap: cleaned up')
   }
 }
 
