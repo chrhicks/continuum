@@ -339,15 +339,20 @@ export function createMemoryCommand(): Command {
     .argument('<query...>')
     .option('--tier <tier>', 'Search tier: NOW, RECENT, MEMORY, or all')
     .option('--tags <tags>', 'Filter by tags (comma-separated)')
+    .option('--after <date>', 'Only search entries on or after a date')
     .action(
-      (queryParts: string[], options: { tier?: string; tags?: string }) => {
+      (
+        queryParts: string[],
+        options: { tier?: string; tags?: string; after?: string },
+      ) => {
         const query = queryParts.join(' ').trim()
         if (!query) {
           throw new Error('Missing search query.')
         }
         const tier = options.tier ? parseSearchTier(options.tier) : 'all'
         const tags = options.tags ? parseSearchTags(options.tags) : []
-        handleSearch(query, tier, tags)
+        const afterDate = options.after ? parseAfterDate(options.after) : null
+        handleSearch(query, tier, tags, afterDate)
       },
     )
 
@@ -464,8 +469,9 @@ function handleSearch(
   query: string,
   tier: MemorySearchTier | 'all',
   tags: string[],
+  afterDate: Date | null,
 ): void {
-  const result = searchMemory(query, tier, tags)
+  const result = searchMemory(query, tier, tags, afterDate ?? undefined)
   if (result.filesSearched === 0) {
     console.log('No memory files found.')
     return
@@ -1008,6 +1014,16 @@ function parseSearchTags(value: string): string[] {
     )
   }
   return tags
+}
+
+function parseAfterDate(value: string): Date {
+  const parsedMs = Date.parse(value)
+  if (Number.isNaN(parsedMs)) {
+    throw new Error(
+      'Invalid --after date. Use an ISO date like 2026-02-25 or 2026-02-25T12:00:00Z.',
+    )
+  }
+  return new Date(parsedMs)
 }
 
 function parseRecallMode(value?: string): RecallSearchMode {

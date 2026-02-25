@@ -1,3 +1,4 @@
+import { describe, expect, test } from 'bun:test'
 import {
   mkdirSync,
   mkdtempSync,
@@ -81,6 +82,47 @@ describe('searchMemory', () => {
 
       const result = searchMemory('hello', 'all')
       expect(result.filesSearched).toBe(1)
+    })
+  })
+
+  test('filters by --after timestamp window', () => {
+    withTempCwd(() => {
+      const memoryDir = join(process.cwd(), '.continuum', 'memory')
+      mkdirSync(memoryDir, { recursive: true })
+
+      writeFileSync(
+        join(memoryDir, 'NOW-2026-02-02T00-00-00-early.md'),
+        [
+          '---',
+          'timestamp_start: 2026-02-02T00:00:00.000Z',
+          '---',
+          'hello early',
+          '',
+        ].join('\n'),
+        'utf-8',
+      )
+      writeFileSync(
+        join(memoryDir, 'NOW-2026-02-03T00-00-00-late.md'),
+        [
+          '---',
+          'timestamp_start: 2026-02-03T00:00:00.000Z',
+          '---',
+          'hello late',
+          '',
+        ].join('\n'),
+        'utf-8',
+      )
+
+      const result = searchMemory(
+        'hello',
+        'all',
+        [],
+        new Date('2026-02-02T12:00:00.000Z'),
+      )
+
+      expect(result.filesSearched).toBe(2)
+      expect(result.matches).toHaveLength(1)
+      expect(result.matches[0].filePath).toContain('late.md')
     })
   })
 })

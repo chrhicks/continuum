@@ -1,6 +1,9 @@
 import { Command } from 'commander'
 import continuum, { isValidTaskType, TASK_TYPES } from '../../sdk'
+import { appendAgentMessage } from '../../memory/now-writer'
 import type {
+  TaskDecision,
+  TaskDiscovery,
   Task,
   TaskGraphQuery,
   TaskStatus,
@@ -110,32 +113,6 @@ export function createTaskCommand(): Command {
   taskCommand.action(() => {
     taskCommand.outputHelp()
   })
-
-  taskCommand
-    .command('init')
-    .description('Initialize continuum database in current directory')
-    .action(async (_options: unknown, command: Command) => {
-      await runCommand(
-        command,
-        async () => {
-          const status = await continuum.task.init()
-          return { status }
-        },
-        ({ status }) => {
-          if (!status.created) {
-            console.log('Continuum is already initialized in this directory.')
-            console.log(`Database: ${process.cwd()}/.continuum/continuum.db`)
-            return
-          }
-          console.log('Initialized continuum in current directory.')
-          console.log(`Database: ${process.cwd()}/.continuum/continuum.db`)
-          renderNextSteps([
-            'continuum task list              List tasks',
-            'continuum task get <task_id>     View task details',
-          ])
-        },
-      )
-    })
 
   taskCommand
     .command('list')
@@ -768,6 +745,69 @@ export function createTaskCommand(): Command {
     )
   taskCommand.addCommand(noteCommand)
 
+  const notesCommand = new Command('notes').description(
+    'Bulk task note operations',
+  )
+  notesCommand.action(() => {
+    notesCommand.outputHelp()
+  })
+  notesCommand
+    .command('flush')
+    .description('Flush task discoveries and decisions to NOW memory')
+    .argument('<task_id>', 'Task ID')
+    .action(async (taskId: string, _options: unknown, command: Command) => {
+      await runCommand(
+        command,
+        async () => {
+          const task = await continuum.task.get(taskId)
+          if (!task) {
+            throw new Error(`Task '${taskId}' not found.`)
+          }
+
+          const discoveryCount = task.discoveries.length
+          const decisionCount = task.decisions.length
+          const total = discoveryCount + decisionCount
+
+          if (total === 0) {
+            return {
+              taskId: task.id,
+              discoveriesFlushed: 0,
+              decisionsFlushed: 0,
+              flushed: false,
+            }
+          }
+
+          for (const note of task.discoveries) {
+            await appendAgentMessage(formatDiscovery(task.id, note), {
+              tags: [task.id],
+            })
+          }
+          for (const note of task.decisions) {
+            await appendAgentMessage(formatDecision(task.id, note), {
+              tags: [task.id],
+            })
+          }
+
+          return {
+            taskId: task.id,
+            discoveriesFlushed: discoveryCount,
+            decisionsFlushed: decisionCount,
+            flushed: true,
+          }
+        },
+        ({ discoveriesFlushed, decisionsFlushed, flushed }) => {
+          if (!flushed) {
+            console.log('No notes to flush.')
+            return
+          }
+          console.log(
+            `Flushed ${discoveriesFlushed} discovery(s) and ${decisionsFlushed} decision(s) to NOW.`,
+          )
+        },
+      )
+    })
+  taskCommand.addCommand(notesCommand)
+
   return taskCommand
 }
 
@@ -936,6 +976,25 @@ function parseNoteSource(value?: string): 'user' | 'agent' | 'system' {
     return normalized
   }
   throw new Error('Invalid source. Use: user, agent, or system.')
+}
+
+function formatDiscovery(taskId: string, note: TaskDiscovery): string {
+  const lines = [`[Discovery from ${taskId}] ${note.content}`]
+  if (note.impact) {
+    lines.push(`Impact: ${note.impact}`)
+  }
+  return lines.join('\n')
+}
+
+function formatDecision(taskId: string, note: TaskDecision): string {
+  const lines = [`[Decision from ${taskId}] ${note.content}`]
+  if (note.rationale) {
+    lines.push(`Rationale: ${note.rationale}`)
+  }
+  if (note.impact) {
+    lines.push(`Impact: ${note.impact}`)
+  }
+  return lines.join('\n')
 }
 
 function renderNextSteps(steps: string[]): void {

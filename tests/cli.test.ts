@@ -3,6 +3,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   rmSync,
   writeFileSync,
 } from 'node:fs'
@@ -174,6 +175,77 @@ describe('memory search CLI', () => {
         expect(
           logs.some((line) => line.includes('NOW-2026-02-02T16-10-00-beta.md')),
         ).toBe(false)
+      } finally {
+        process.argv = originalArgv
+      }
+    })
+  })
+
+  test('filters results with --after', async () => {
+    await withTempCwd(async () => {
+      const memoryDir = join(process.cwd(), '.continuum', 'memory')
+      mkdirSync(memoryDir, { recursive: true })
+      writeFileSync(
+        join(memoryDir, 'NOW-2026-02-01T16-10-00-old.md'),
+        [
+          '---',
+          'timestamp_start: 2026-02-01T16:10:00.000Z',
+          '---',
+          'hello old',
+          '',
+        ].join('\n'),
+        'utf-8',
+      )
+      writeFileSync(
+        join(memoryDir, 'NOW-2026-02-03T16-10-00-new.md'),
+        [
+          '---',
+          'timestamp_start: 2026-02-03T16:10:00.000Z',
+          '---',
+          'hello new',
+          '',
+        ].join('\n'),
+        'utf-8',
+      )
+
+      const originalArgv = process.argv
+      process.argv = [
+        'node',
+        'continuum',
+        'memory',
+        'search',
+        'hello',
+        '--after',
+        '2026-02-02T00:00:00.000Z',
+      ]
+
+      try {
+        const logs = await withCapturedLogs(async () => {
+          await main()
+        })
+        expect(logs.some((line) => line.includes('old.md'))).toBe(false)
+        expect(logs.some((line) => line.includes('new.md'))).toBe(true)
+      } finally {
+        process.argv = originalArgv
+      }
+    })
+  })
+
+  test('rejects invalid --after value', async () => {
+    await withTempCwd(async () => {
+      const originalArgv = process.argv
+      process.argv = [
+        'node',
+        'continuum',
+        'memory',
+        'search',
+        'hello',
+        '--after',
+        'not-a-date',
+      ]
+
+      try {
+        await expect(main()).rejects.toThrow('Invalid --after date')
       } finally {
         process.argv = originalArgv
       }
@@ -585,6 +657,109 @@ describe('task CLI', () => {
         const output = logs.join('\n')
         expect(output).toContain('Warning:')
         expect(output).toContain('already completed')
+      } finally {
+        process.argv = originalArgv
+      }
+    })
+  })
+
+  test('task notes flush appends all discoveries and decisions to NOW', async () => {
+    await withTempCwd(async () => {
+      await continuum.task.init()
+      const task = await continuum.task.create({
+        title: 'Flush notes task',
+        type: 'feature',
+        description: 'Verify task notes flush writes to NOW.',
+      })
+      await continuum.task.notes.add(task.id, {
+        kind: 'discovery',
+        content: 'Found an API edge case',
+        impact: 'Adds a validation requirement',
+        source: 'agent',
+      })
+      await continuum.task.notes.add(task.id, {
+        kind: 'decision',
+        content: 'Use explicit parsing',
+        rationale: 'Avoid implicit coercion bugs',
+        impact: 'Improves reliability',
+        source: 'agent',
+      })
+
+      const originalArgv = process.argv
+      process.argv = ['node', 'continuum', 'task', 'notes', 'flush', task.id]
+
+      try {
+        const logs = await withCapturedLogs(async () => {
+          await main()
+        })
+        const output = logs.join('\n')
+        expect(output).toContain(
+          'Flushed 1 discovery(s) and 1 decision(s) to NOW.',
+        )
+
+        const nowPath = getCurrentSessionPath()
+        expect(nowPath).not.toBeNull()
+        if (!nowPath) {
+          throw new Error('Expected NOW session file after flushing notes')
+        }
+        const content = readFileSync(nowPath, 'utf-8')
+        expect(content).toContain(`[Discovery from ${task.id}]`)
+        expect(content).toContain(`[Decision from ${task.id}]`)
+        expect(content).toContain('Rationale: Avoid implicit coercion bugs')
+        expect(content).toContain('Impact: Improves reliability')
+      } finally {
+        process.argv = originalArgv
+      }
+    })
+  })
+
+  test('task notes flush with empty notes prints nothing-to-flush', async () => {
+    await withTempCwd(async () => {
+      await continuum.task.init()
+      const task = await continuum.task.create({
+        title: 'Flush empty notes task',
+        type: 'feature',
+        description: 'Verify no-op flush behavior.',
+      })
+
+      const originalArgv = process.argv
+      process.argv = ['node', 'continuum', 'task', 'notes', 'flush', task.id]
+
+      try {
+        const logs = await withCapturedLogs(async () => {
+          await main()
+        })
+        const output = logs.join('\n')
+        expect(output).toContain('No notes to flush.')
+        expect(getCurrentSessionPath()).toBeNull()
+      } finally {
+        process.argv = originalArgv
+      }
+    })
+  })
+
+  test('task notes flush with unknown task id returns error', async () => {
+    await withTempCwd(async () => {
+      await continuum.task.init()
+
+      const originalArgv = process.argv
+      process.argv = [
+        'node',
+        'continuum',
+        '--json',
+        'task',
+        'notes',
+        'flush',
+        'tkt-doesnotexist',
+      ]
+
+      try {
+        const logs = await withCapturedLogs(async () => {
+          await main()
+        })
+        const output = logs.join('\n')
+        expect(output).toContain('"ok": false')
+        expect(output).toContain("Task 'tkt-doesnotexist' not found.")
       } finally {
         process.argv = originalArgv
       }

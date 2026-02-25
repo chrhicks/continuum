@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, readdirSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { MEMORY_DIR } from './paths'
 import { parseFrontmatter } from '../utils/frontmatter'
@@ -20,6 +20,7 @@ export function searchMemory(
   query: string,
   tier: MemorySearchTier = 'all',
   tags: string[] = [],
+  afterDate?: Date,
 ): MemorySearchResult {
   if (!existsSync(MEMORY_DIR)) {
     return { matches: [], filesSearched: 0 }
@@ -28,6 +29,7 @@ export function searchMemory(
   const files = listMemoryFiles(tier)
   const normalizedTags = normalizeTags(tags)
   const normalizedQuery = query.toLowerCase()
+  const afterMs = afterDate ? afterDate.getTime() : null
   const matches: MemorySearchMatch[] = []
   let filesSearched = 0
 
@@ -37,8 +39,14 @@ export function searchMemory(
     }
     const content = readFileSync(filePath, 'utf-8')
     filesSearched += 1
+    const { frontmatter } = parseFrontmatter(content)
+    if (afterMs !== null) {
+      const fileDate = resolveFileDate(filePath, content)
+      if (fileDate.getTime() < afterMs) {
+        continue
+      }
+    }
     if (normalizedTags.length > 0) {
-      const { frontmatter } = parseFrontmatter(content)
       const fileTags = normalizeTags(frontmatter.tags)
       if (!hasAllTags(fileTags, normalizedTags)) {
         continue
@@ -53,6 +61,27 @@ export function searchMemory(
   }
 
   return { matches, filesSearched }
+}
+
+function resolveFileDate(filePath: string, content: string): Date {
+  const { frontmatter } = parseFrontmatter(content)
+  const fileName = filePath.split('/').pop() ?? ''
+
+  if (frontmatter && typeof frontmatter === 'object') {
+    const data = frontmatter as Record<string, unknown>
+    const dateField = /^NOW-.*\.md$/.test(fileName)
+      ? data.timestamp_start
+      : data.consolidation_date
+    if (dateField) {
+      const parsed = Date.parse(String(dateField))
+      if (!Number.isNaN(parsed)) {
+        return new Date(parsed)
+      }
+    }
+  }
+
+  const stats = statSync(filePath)
+  return stats.mtime
 }
 
 function listMemoryFiles(tier: MemorySearchTier): string[] {
