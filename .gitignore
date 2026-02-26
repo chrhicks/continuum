@@ -12,6 +12,7 @@ dist/
 .agents/
 
 runs/
+task-loop-opencode.json
 
 *.tmp
 *.lock
