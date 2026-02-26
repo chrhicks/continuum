@@ -26,6 +26,18 @@ Several source files have grown into monoliths (1000+ lines) that mix registrati
 
 See `GOAL-ROADMAP.md` for the phased execution plan with specific file references, implementation guidance, and a success criteria check.
 
+## Code Standard Principles
+
+These principles govern how the success criteria above are applied. They exist to prevent the refactoring work from trading one problem (large files) for another (fragmentation, confusion, duplication).
+
+- **Size limits serve clarity, not compliance.** A file or function should be split when the split makes each part easier to understand and maintain independently. A split that exists only to pass a line-count check — where the resulting pieces have no coherent domain boundary — is worse than the original.
+- **No duplication as a side-effect of splitting.** Extracting a file must not create a copy of logic that already exists elsewhere. If splitting requires a shared function, that function must be extracted to a single shared location and imported by both files. Identical private implementations in sibling files are a defect.
+- **Single source of truth for constants and types.** A constant, type, or interface must be defined in exactly one place. Re-exporting from a second file is acceptable only where required for a public API boundary (e.g., the SDK surface). Internal barrel files that exist only to reshuffle imports add indirection without value and must not be created.
+- **No circular dependencies.** Types and functions must not flow in opposite directions between two modules. If module A imports types from B and B imports functions from A, one of them is in the wrong file.
+- **Nested re-export chains are a defect.** `A → re-exports B → re-exports C → actual definition` forces a developer to open multiple files to find where something is defined. Prefer direct imports from the defining module.
+- **File names must describe what the code does, not its relationship to another file.** `*-helpers.ts`, `*-utils.ts`, and `*-misc.ts` are signs that code was moved without identifying its real concern. A file named after its relationship to another file (`consolidate-helpers.ts`) is a dumping ground. A file named after its domain (`memory-content-builders.ts`) is navigable.
+- **Generic utilities belong in shared modules.** If a helper function is used in more than one domain, it belongs in a shared utility module (`src/util/`, `src/shared/`, or a domain-level `util.ts`), not copy-pasted across domain files.
+
 ## Constraints
 
 - No behavioral changes: all existing CLI outputs, SDK interfaces, and test expectations remain identical.
