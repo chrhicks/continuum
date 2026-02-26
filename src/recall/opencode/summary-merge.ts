@@ -1,4 +1,5 @@
 import { type RecallSummaryResult } from './summary-schema'
+import { normalizeLimit } from './recall-util'
 
 export type RecallSummaryItem = {
   summary: RecallSummaryResult
@@ -107,7 +108,11 @@ export async function mergeRecallSummaryItems(
   if (items.length === 0) {
     throw new Error('No summary items provided for merge.')
   }
-  const maxTokens = normalizeLimit(options.maxTokens, 'maxTokens')
+  const maxTokens = normalizeLimit(
+    options.maxTokens,
+    'maxTokens',
+    'Summary merge',
+  )
 
   let pass = 1
   let current = items
@@ -181,11 +186,4 @@ function normalizeMergeResult(
     }
   }
   return { summary: value as RecallSummaryResult, maxTokensUsed: null }
-}
-
-function normalizeLimit(value: number, label: string): number {
-  if (!Number.isFinite(value) || value <= 0) {
-    throw new Error(`Summary merge ${label} must be a positive number.`)
-  }
-  return Math.floor(value)
 }

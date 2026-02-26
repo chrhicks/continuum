@@ -8,13 +8,16 @@ import {
 } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { consolidateNow } from './consolidate'
+import { buildNowContent } from './recall-import-content'
 import { initMemory } from './init'
 import { memoryPath } from './paths'
-import { parseFrontmatter, serializeFrontmatter } from '../utils/frontmatter'
+import { parseFrontmatter } from '../utils/frontmatter'
 import {
+  SUMMARY_PREFIX,
   resolveOpencodeDbPath,
   resolveOpencodeOutputDir,
 } from '../recall/opencode/paths'
+import { parseOpencodeSummary } from '../recall/opencode/summary-parse'
 
 export type RecallImportOptions = {
   summaryDir?: string
@@ -44,36 +47,8 @@ export type RecallImportResult = {
   skipped: RecallImportSkipped[]
 }
 
-type RecallSummary = {
-  sessionId: string
-  projectId: string | null
-  createdAt: string
-  updatedAt: string
-  directory: string | null
-  title: string | null
-  focus: string
-  decisions: string[]
-  discoveries: string[]
-  patterns: string[]
-  tasks: string[]
-  files: string[]
-}
-
 const DEFAULT_SUMMARY_DIR = join('.continuum', 'recall', 'opencode')
 const TEMP_IMPORT_DIR = join('.tmp', 'recall-import')
-const SUMMARY_PREFIX = 'OPENCODE-SUMMARY-'
-
-const NOW_FRONTMATTER_ORDER = [
-  'session_id',
-  'timestamp_start',
-  'timestamp_end',
-  'duration_minutes',
-  'project_path',
-  'tags',
-  'parent_session',
-  'related_tasks',
-  'memory_type',
-]
 
 export async function importOpencodeRecall(
   options: RecallImportOptions = {},
@@ -213,246 +188,6 @@ function loadImportedSessions(memoryDir: string): Set<string> {
     }
   }
   return sessions
-}
-
-function parseOpencodeSummary(content: string): RecallSummary | null {
-  const { frontmatter, body, hasFrontmatter } = parseFrontmatter(content)
-  if (!hasFrontmatter) {
-    return null
-  }
-  const sessionId = readString(frontmatter.session_id)
-  if (!sessionId) {
-    return null
-  }
-  const projectId = readString(frontmatter.project_id)
-  const createdAt =
-    readTimestamp(frontmatter.created_at) ??
-    readTimestamp(frontmatter.updated_at) ??
-    new Date().toISOString()
-  let updatedAt = readTimestamp(frontmatter.updated_at) ?? createdAt
-  if (Date.parse(updatedAt) < Date.parse(createdAt)) {
-    updatedAt = createdAt
-  }
-
-  const summaryTitle = extractSummaryTitle(body)
-  const title = readString(frontmatter.title) ?? summaryTitle
-  const sections = parseSections(body)
-  const focus = resolveFocus(
-    parseFocus(sections.get('Focus')),
-    title,
-    sessionId,
-  )
-
-  return {
-    sessionId,
-    projectId,
-    createdAt,
-    updatedAt,
-    directory: readString(frontmatter.directory),
-    title,
-    focus,
-    decisions: parseList(sections.get('Decisions')),
-    discoveries: parseList(sections.get('Discoveries')),
-    patterns: parseList(sections.get('Patterns')),
-    tasks: parseList(sections.get('Tasks')),
-    files: parseList(sections.get('Files')),
-  }
-}
-
-function buildNowContent(summary: RecallSummary): string {
-  const focus = summary.focus
-  const tags = ['opencode', 'recall']
-  const relatedTasks = extractTaskIds(summary.tasks)
-  const durationMinutes = computeDurationMinutes(
-    summary.createdAt,
-    summary.updatedAt,
-  )
-  const frontmatter = serializeFrontmatter(
-    {
-      session_id: summary.sessionId,
-      timestamp_start: summary.createdAt,
-      timestamp_end: summary.updatedAt,
-      duration_minutes: durationMinutes,
-      project_path: summary.directory ?? process.cwd(),
-      tags,
-      parent_session: null,
-      related_tasks: relatedTasks,
-      memory_type: 'NOW',
-    },
-    NOW_FRONTMATTER_ORDER,
-  )
-
-  const lines: string[] = []
-  lines.push(frontmatter)
-  lines.push('')
-  lines.push(
-    `# Session: ${summary.sessionId} - ${formatTimestampForHeader(summary.createdAt)}`,
-  )
-  lines.push('')
-  lines.push(`## User: ${focus}`)
-
-  if (summary.decisions.length > 0) {
-    lines.push('')
-    summary.decisions.forEach((decision) => {
-      lines.push(`@decision: ${decision}`)
-    })
-  }
-  if (summary.discoveries.length > 0) {
-    lines.push('')
-    summary.discoveries.forEach((discovery) => {
-      lines.push(`@discovery: ${discovery}`)
-    })
-  }
-  if (summary.patterns.length > 0) {
-    lines.push('')
-    summary.patterns.forEach((pattern) => {
-      lines.push(`@pattern: ${pattern}`)
-    })
-  }
-  if (summary.tasks.length > 0) {
-    lines.push('')
-    lines.push('## Tasks')
-    summary.tasks.forEach((task) => {
-      lines.push(`- ${task}`)
-    })
-  }
-  if (summary.files.length > 0) {
-    lines.push('')
-    lines.push('## Files')
-    summary.files.forEach((file) => {
-      lines.push(`- ${file}`)
-    })
-  }
-
-  lines.push('')
-  return lines.join('\n')
-}
-
-function extractSummaryTitle(body: string): string | null {
-  const match = body.match(/^#\s+Session Summary:\s*(.+)$/m)
-  if (!match || !match[1]) {
-    return null
-  }
-  return normalizeWhitespace(match[1])
-}
-
-function parseSections(body: string): Map<string, string[]> {
-  const sections = new Map<string, string[]>()
-  let current: string | null = null
-  for (const line of body.split('\n')) {
-    const match = line.match(/^##\s+(.+)/)
-    if (match) {
-      current = match[1].trim()
-      if (!sections.has(current)) {
-        sections.set(current, [])
-      }
-      continue
-    }
-    if (!current) {
-      continue
-    }
-    sections.get(current)?.push(line)
-  }
-  return sections
-}
-
-function parseFocus(lines?: string[]): string {
-  if (!lines) {
-    return ''
-  }
-  for (const line of lines) {
-    const normalized = normalizeWhitespace(line.replace(/^-+\s*/, ''))
-    if (!normalized) {
-      continue
-    }
-    if (normalized.toLowerCase() === 'none') {
-      return ''
-    }
-    return normalized
-  }
-  return ''
-}
-
-function resolveFocus(
-  focus: string,
-  title: string | null,
-  sessionId: string,
-): string {
-  if (focus) {
-    return focus
-  }
-  if (title) {
-    return title
-  }
-  return `Recall import ${sessionId}`
-}
-
-function parseList(lines?: string[]): string[] {
-  if (!lines) {
-    return []
-  }
-  const items: string[] = []
-  for (const line of lines) {
-    const normalized = normalizeWhitespace(line.replace(/^-+\s*/, ''))
-    if (!normalized) {
-      continue
-    }
-    if (normalized.toLowerCase() === 'none') {
-      continue
-    }
-    items.push(normalized)
-  }
-  return items
-}
-
-function extractTaskIds(items: string[]): string[] {
-  const matches: string[] = []
-  for (const item of items) {
-    const found = item.match(/\btkt_[a-zA-Z0-9_-]+\b/g)
-    if (found) {
-      matches.push(...found)
-    }
-  }
-  return Array.from(new Set(matches))
-}
-
-function readString(value: unknown): string | null {
-  if (typeof value === 'string') {
-    const trimmed = value.trim()
-    return trimmed.length > 0 ? trimmed : null
-  }
-  return null
-}
-
-function readTimestamp(value: unknown): string | null {
-  if (typeof value !== 'string') {
-    return null
-  }
-  return Number.isNaN(Date.parse(value)) ? null : value
-}
-
-function computeDurationMinutes(start: string, end: string): number | null {
-  const startMs = Date.parse(start)
-  const endMs = Date.parse(end)
-  if (Number.isNaN(startMs) || Number.isNaN(endMs)) {
-    return null
-  }
-  if (endMs <= startMs) {
-    return 1
-  }
-  return Math.max(1, Math.round((endMs - startMs) / 60000))
-}
-
-function formatTimestampForHeader(timestamp: string): string {
-  const date = new Date(timestamp)
-  const safe = Number.isNaN(date.getTime()) ? new Date() : date
-  const iso = safe.toISOString()
-  const [day, time] = iso.split('T')
-  return `${day} ${time.slice(0, 5)} UTC`
-}
-
-function normalizeWhitespace(value: string): string {
-  return value.replace(/\s+/g, ' ').trim()
 }
 
 function ensureTempDir(): void {

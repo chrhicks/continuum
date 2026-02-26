@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { MEMORY_DIR } from './paths'
+import { normalizeTags } from './util'
 import { parseFrontmatter } from '../utils/frontmatter'
 
 export type MemorySearchTier = 'NOW' | 'RECENT' | 'MEMORY' | 'all'
@@ -27,7 +28,7 @@ export function searchMemory(
   }
 
   const files = listMemoryFiles(tier)
-  const normalizedTags = normalizeTags(tags)
+  const normalizedTags = normalizeTags(tags, { trim: true, dropEmpty: true })
   const normalizedQuery = query.toLowerCase()
   const afterMs = afterDate ? afterDate.getTime() : null
   const matches: MemorySearchMatch[] = []
@@ -47,7 +48,10 @@ export function searchMemory(
       }
     }
     if (normalizedTags.length > 0) {
-      const fileTags = normalizeTags(frontmatter.tags)
+      const fileTags = normalizeTags(frontmatter.tags, {
+        trim: true,
+        dropEmpty: true,
+      })
       if (!hasAllTags(fileTags, normalizedTags)) {
         continue
       }
@@ -119,13 +123,6 @@ function matchesTier(
     return fileName === 'RECENT.md'
   }
   return fileName === 'MEMORY.md' || /^MEMORY-.*\.md$/.test(fileName)
-}
-
-function normalizeTags(value: unknown): string[] {
-  if (!Array.isArray(value)) {
-    return []
-  }
-  return value.map((tag) => String(tag).trim()).filter((tag) => tag.length > 0)
 }
 
 function hasAllTags(fileTags: string[], requiredTags: string[]): boolean {

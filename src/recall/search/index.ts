@@ -1,10 +1,9 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { parseFrontmatter } from '../../utils/frontmatter'
-import { resolveOpencodeOutputDir } from '../opencode/paths'
+import { SUMMARY_PREFIX, resolveOpencodeOutputDir } from '../opencode/paths'
 
 const DEFAULT_LIMIT = 5
-const SUMMARY_PREFIX = 'OPENCODE-SUMMARY-'
 const SUMMARY_SUFFIX = '.md'
 const WORD_PATTERN = /[a-z0-9]+/g
 

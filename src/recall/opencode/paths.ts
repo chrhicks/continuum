@@ -16,6 +16,8 @@ const ARTIFACT_PREFIXES: Record<OpencodeArtifactKind, string> = {
   summaryMeta: 'OPENCODE-SUMMARY-META',
 }
 
+export const SUMMARY_PREFIX = `${ARTIFACT_PREFIXES.summary}-`
+
 const ARTIFACT_EXTENSIONS: Record<OpencodeArtifactKind, string> = {
   session: 'md',
   normalized: 'md',

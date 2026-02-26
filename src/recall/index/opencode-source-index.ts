@@ -3,9 +3,7 @@ import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { Database } from 'bun:sqlite'
-
 import { resolveOpencodeDbPath } from '../opencode/paths'
-
 const SOURCE_INDEX_VERSION = 2
 const DEFAULT_SOURCE_INDEX_FILE = join(
   'recall',
@@ -97,6 +95,27 @@ export type OpencodeSourceIndex = {
   }
 }
 
+function toIso(value?: number | null): string | null {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null
+  return new Date(value).toISOString()
+}
+function indexBySessionId<T extends { session_id: string }>(
+  rows: T[],
+): Record<string, T> {
+  return Object.fromEntries(rows.map((row) => [row.session_id, row]))
+}
+function buildSessionStats(
+  messageStats: OpencodeMessageStatsRow | null,
+  partStats: OpencodePartStatsRow | null,
+): OpencodeSessionStats {
+  return {
+    message_count: messageStats?.message_count ?? 0,
+    part_count: partStats?.part_count ?? 0,
+    message_latest_ms: messageStats?.message_latest_ms ?? null,
+    part_latest_ms: partStats?.part_latest_ms ?? null,
+  }
+}
+
 export function resolveRecallDataRoot(value?: string | null): string {
   if (value) return resolvePath(value) as string
   const dataHome = process.env.XDG_DATA_HOME
@@ -183,18 +202,12 @@ export function buildOpencodeSourceIndex(
     const projectRows = sqlite
       .query('SELECT id, worktree FROM project')
       .all() as OpencodeProjectIndexRecord[]
-    const projects = projectRows.reduce<
-      Record<string, OpencodeProjectIndexRecord>
-    >(
-      (acc, row) => ({
-        ...acc,
-        [row.id]: {
-          id: row.id,
-          worktree: row.worktree ?? null,
-        },
-      }),
-      {},
-    )
+    const projects = Object.fromEntries(
+      projectRows.map((row) => [
+        row.id,
+        { id: row.id, worktree: row.worktree ?? null },
+      ]),
+    ) as Record<string, OpencodeProjectIndexRecord>
 
     const sessionConditions: string[] = []
     const sessionParams: string[] = []
@@ -235,18 +248,17 @@ export function buildOpencodeSourceIndex(
     const messageStatsBySession = indexBySessionId(messageStatsRows)
     const partStatsBySession = indexBySessionId(partStatsRows)
 
-    const entries = sessions.map((session) => {
-      const stats = buildSessionStats(
-        messageStatsBySession[session.id] ?? null,
-        partStatsBySession[session.id] ?? null,
-      )
-      return buildOpencodeSessionIndexEntry(
+    const entries = sessions.map((session) =>
+      buildOpencodeSessionIndexEntry(
         session,
         projects[session.project_id] ?? null,
-        stats,
+        buildSessionStats(
+          messageStatsBySession[session.id] ?? null,
+          partStatsBySession[session.id] ?? null,
+        ),
         dbPath,
-      )
-    })
+      ),
+    )
 
     entries.sort((left, right) => {
       const leftTime = left.created_at ?? ''
@@ -285,31 +297,4 @@ export function buildOpencodeSourceIndex(
 function resolvePath(value: string): string {
   if (isAbsolute(value)) return value
   return resolve(process.cwd(), value)
-}
-
-function toIso(value?: number | null): string | null {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return null
-  return new Date(value).toISOString()
-}
-
-function indexBySessionId<T extends { session_id: string }>(rows: T[]) {
-  return rows.reduce<Record<string, T>>(
-    (acc, row) => ({
-      ...acc,
-      [row.session_id]: row,
-    }),
-    {},
-  )
-}
-
-function buildSessionStats(
-  messageStats: OpencodeMessageStatsRow | null,
-  partStats: OpencodePartStatsRow | null,
-): OpencodeSessionStats {
-  return {
-    message_count: messageStats?.message_count ?? 0,
-    part_count: partStats?.part_count ?? 0,
-    message_latest_ms: messageStats?.message_latest_ms ?? null,
-    part_latest_ms: partStats?.part_latest_ms ?? null,
-  }
 }

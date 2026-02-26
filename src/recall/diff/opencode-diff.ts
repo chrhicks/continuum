@@ -2,13 +2,12 @@ import { createHash } from 'node:crypto'
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { parseFrontmatter } from '../../utils/frontmatter'
+import { SUMMARY_PREFIX } from '../opencode/paths'
 import type {
   OpencodeProjectIndexRecord,
   OpencodeSourceIndex,
   OpencodeSourceIndexEntry,
 } from '../index/opencode-source-index'
-
-const SUMMARY_PREFIX = 'OPENCODE-SUMMARY-'
 
 export type OpencodeSummaryEntry = {
   key: string

@@ -1,3 +1,5 @@
+import { normalizeLimit } from './recall-util'
+
 export type RecallSummaryChunkOptions = {
   maxChars: number
   maxLines: number
@@ -28,8 +30,8 @@ export function planRecallSummaryChunks(
   if (!Array.isArray(blocks)) {
     throw new Error('Summary blocks must be an array.')
   }
-  const maxChars = normalizeLimit(options.maxChars, 'maxChars')
-  const maxLines = normalizeLimit(options.maxLines, 'maxLines')
+  const maxChars = normalizeLimit(options.maxChars, 'maxChars', 'Summary chunk')
+  const maxLines = normalizeLimit(options.maxLines, 'maxLines', 'Summary chunk')
 
   if (blocks.length === 0) {
     return []
@@ -86,11 +88,4 @@ export function planRecallSummaryChunks(
 function countLines(value: string): number {
   if (!value) return 0
   return value.split('\n').length
-}
-
-function normalizeLimit(value: number, label: string): number {
-  if (!Number.isFinite(value) || value <= 0) {
-    throw new Error(`Summary chunk ${label} must be a positive number.`)
-  }
-  return Math.floor(value)
 }
