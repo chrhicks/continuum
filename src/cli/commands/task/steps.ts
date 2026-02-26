@@ -33,12 +33,22 @@ type TaskStepsCompleteOptions = {
 }
 
 type TaskStepUpdateInput = Parameters<typeof continuum.task.steps.update>[2]
+type TaskGetResult = Awaited<ReturnType<typeof continuum.task.get>>
+type TaskSteps = NonNullable<TaskGetResult>['steps']
 
 export function registerStepsCommands(taskCommand: Command): void {
   const stepsCommand = new Command('steps')
     .alias('step')
     .description('Manage task steps')
+  registerTemplateCommand(stepsCommand)
+  registerAddCommand(stepsCommand)
+  registerUpdateCommand(stepsCommand)
+  registerCompleteCommand(stepsCommand)
+  registerListCommand(stepsCommand)
+  taskCommand.addCommand(stepsCommand)
+}
 
+function registerTemplateCommand(stepsCommand: Command): void {
   stepsCommand
     .command('template')
     .description('Print steps JSON template')
@@ -61,7 +71,9 @@ export function registerStepsCommands(taskCommand: Command): void {
         )
       },
     )
+}
 
+function registerAddCommand(stepsCommand: Command): void {
   stepsCommand
     .command('add')
     .description('Add steps to a task')
@@ -72,18 +84,10 @@ export function registerStepsCommands(taskCommand: Command): void {
         taskId: string,
         options: TaskStepsAddOptions,
         command: Command,
-      ) => {
+      ): Promise<void> => {
         await runCommand(
           command,
-          async () => {
-            const rawSteps = await readJsonInput<unknown>(options.steps)
-            if (rawSteps === undefined) {
-              throw new Error('Missing required option: --steps')
-            }
-            const steps = validateTaskStepsInput(rawSteps)
-            const task = await continuum.task.steps.add(taskId, { steps })
-            return { task }
-          },
+          async () => ({ task: await addTaskSteps(taskId, options) }),
           ({ task }) => {
             console.log(`Updated steps for ${task.id}`)
             renderNextSteps([
@@ -94,7 +98,9 @@ export function registerStepsCommands(taskCommand: Command): void {
         )
       },
     )
+}
 
+function registerUpdateCommand(stepsCommand: Command): void {
   stepsCommand
     .command('update')
     .description('Update a task step')
@@ -113,43 +119,19 @@ export function registerStepsCommands(taskCommand: Command): void {
         stepId: string,
         options: TaskStepsUpdateOptions,
         command: Command,
-      ) => {
+      ): Promise<void> => {
         await runCommand(
           command,
-          async () => {
-            const patchFromFile = await readJsonInput<TaskStepUpdateInput>(
-              options.patch,
-            )
-            const description = await readInput(options.description)
-            const summary = await readInput(options.summary)
-            const notes = await readInput(options.notes)
-            const update: TaskStepUpdateInput = {
-              ...(patchFromFile ?? {}),
-            }
-            if (options.title !== undefined) update.title = options.title
-            if (description !== undefined) update.description = description
-            if (options.status !== undefined) {
-              update.status = parseTaskStepStatus(options.status)
-            }
-            if (options.position !== undefined) {
-              update.position = parsePosition(options.position)
-            }
-            if (summary !== undefined) update.summary = summary
-            if (notes !== undefined) update.notes = notes
-            const task = await continuum.task.steps.update(
-              taskId,
-              stepId,
-              update,
-            )
-            return { task }
-          },
+          async () => ({ task: await updateTaskStep(taskId, stepId, options) }),
           ({ task }) => {
             console.log(`Updated steps for ${task.id}`)
           },
         )
       },
     )
+}
 
+function registerCompleteCommand(stepsCommand: Command): void {
   stepsCommand
     .command('complete')
     .description('Complete a step')
@@ -161,30 +143,19 @@ export function registerStepsCommands(taskCommand: Command): void {
         taskId: string,
         options: TaskStepsCompleteOptions,
         command: Command,
-      ) => {
+      ): Promise<void> => {
         await runCommand(
           command,
-          async () => {
-            const notes = await readInput(options.notes)
-            const result = await continuum.task.steps.complete(taskId, {
-              stepId: options.stepId,
-              notes,
-            })
-            return result
-          },
-          ({ task, warnings }) => {
-            if (warnings && warnings.length > 0) {
-              for (const warning of warnings) {
-                console.log(`Warning: ${warning}`)
-              }
-              return
-            }
-            console.log(`Updated steps for ${task.id}`)
+          async () => ({ result: await completeTaskStep(taskId, options) }),
+          ({ result }) => {
+            renderTaskStepCompleteResult(result)
           },
         )
       },
     )
+}
 
+function registerListCommand(stepsCommand: Command): void {
   stepsCommand
     .command('list')
     .description('List task steps')
@@ -192,25 +163,93 @@ export function registerStepsCommands(taskCommand: Command): void {
     .action(async (taskId: string, _options: unknown, command: Command) => {
       await runCommand(
         command,
-        async () => {
-          const task = await continuum.task.get(taskId)
-          if (!task) {
-            throw new Error(`Task '${taskId}' not found.`)
-          }
-          return { taskId: task.id, steps: task.steps }
-        },
-        (result) => {
-          if (result.steps.length === 0) {
-            console.log('No steps found.')
-            return
-          }
-          for (const step of result.steps) {
-            const marker = formatStepMarker(step.status)
-            console.log(`${marker} ${step.id} ${step.title}`)
-          }
+        async () => ({ steps: await getTaskSteps(taskId) }),
+        ({ steps }) => {
+          renderTaskStepsList(steps)
         },
       )
     })
+}
 
-  taskCommand.addCommand(stepsCommand)
+async function addTaskSteps(
+  taskId: string,
+  options: TaskStepsAddOptions,
+): Promise<Awaited<ReturnType<typeof continuum.task.steps.add>>> {
+  const rawSteps = await readJsonInput<unknown>(options.steps)
+  if (rawSteps === undefined) {
+    throw new Error('Missing required option: --steps')
+  }
+  const steps = validateTaskStepsInput(rawSteps)
+  return continuum.task.steps.add(taskId, { steps })
+}
+
+async function updateTaskStep(
+  taskId: string,
+  stepId: string,
+  options: TaskStepsUpdateOptions,
+): Promise<Awaited<ReturnType<typeof continuum.task.steps.update>>> {
+  const update = await buildTaskStepUpdateInput(options)
+  return continuum.task.steps.update(taskId, stepId, update)
+}
+
+async function buildTaskStepUpdateInput(
+  options: TaskStepsUpdateOptions,
+): Promise<TaskStepUpdateInput> {
+  const patchFromFile = await readJsonInput<TaskStepUpdateInput>(options.patch)
+  const update: TaskStepUpdateInput = { ...(patchFromFile ?? {}) }
+  const description = await readInput(options.description)
+  const summary = await readInput(options.summary)
+  const notes = await readInput(options.notes)
+
+  if (options.title !== undefined) update.title = options.title
+  if (description !== undefined) update.description = description
+  if (options.status !== undefined)
+    update.status = parseTaskStepStatus(options.status)
+  if (options.position !== undefined)
+    update.position = parsePosition(options.position)
+  if (summary !== undefined) update.summary = summary
+  if (notes !== undefined) update.notes = notes
+  return update
+}
+
+async function completeTaskStep(
+  taskId: string,
+  options: TaskStepsCompleteOptions,
+): Promise<Awaited<ReturnType<typeof continuum.task.steps.complete>>> {
+  const notes = await readInput(options.notes)
+  return continuum.task.steps.complete(taskId, {
+    stepId: options.stepId,
+    notes,
+  })
+}
+
+async function getTaskSteps(taskId: string): Promise<TaskSteps> {
+  const task = await continuum.task.get(taskId)
+  if (!task) {
+    throw new Error(`Task '${taskId}' not found.`)
+  }
+  return task.steps
+}
+
+function renderTaskStepCompleteResult(
+  result: Awaited<ReturnType<typeof continuum.task.steps.complete>>,
+): void {
+  if (result.warnings && result.warnings.length > 0) {
+    for (const warning of result.warnings) {
+      console.log(`Warning: ${warning}`)
+    }
+    return
+  }
+  console.log(`Updated steps for ${result.task.id}`)
+}
+
+function renderTaskStepsList(steps: TaskSteps): void {
+  if (steps.length === 0) {
+    console.log('No steps found.')
+    return
+  }
+  for (const step of steps) {
+    const marker = formatStepMarker(step.status)
+    console.log(`${marker} ${step.id} ${step.title}`)
+  }
 }

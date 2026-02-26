@@ -17,10 +17,6 @@ import type {
   UpdateTaskInput,
 } from './types'
 import {
-  add_decision,
-  add_discovery,
-  add_steps,
-  complete_step,
   complete_task,
   create_task,
   delete_task,
@@ -28,9 +24,10 @@ import {
   list_tasks,
   list_tasks_by_statuses,
   has_open_blockers,
-  update_step,
   update_task,
 } from './tasks.repository'
+import { add_decision, add_discovery } from './notes.repository'
+import { add_steps, complete_step, update_step } from './steps.repository'
 
 async function get_task_db(directory: string) {
   const status = await init_status({ directory })

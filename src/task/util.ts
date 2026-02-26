@@ -39,7 +39,11 @@ export async function init_status({
   }
 }
 
-export async function init_project({ directory }: { directory: string }) {
+export async function init_project({
+  directory,
+}: {
+  directory: string
+}): Promise<void> {
   const { pluginDirExists, dbFileExists } = await init_status({ directory })
 
   if (!pluginDirExists) {

@@ -47,7 +47,10 @@ export function validate_status_transition(
   return missing
 }
 
-export function validate_blocker_list(task_id: string, blockers: string[]) {
+export function validate_blocker_list(
+  task_id: string,
+  blockers: string[],
+): void {
   if (blockers.length === 0) return
   const seen = new Set<string>()
   for (const blocker of blockers) {

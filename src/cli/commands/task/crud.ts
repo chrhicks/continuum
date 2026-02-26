@@ -40,9 +40,28 @@ type TaskCompleteOptions = {
   outcome?: string
 }
 
+type TaskCreateInputFile = Partial<{
+  title: string
+  type: TaskType
+  status: TaskStatus
+  priority: number | null
+  intent: string | null
+  description: string
+  plan: string | null
+  parentId: string | null
+  blockedBy: string[] | null
+}>
+
 type TaskUpdateInput = NonNullable<Parameters<typeof continuum.task.update>[1]>
 
 export function registerCrudCommands(taskCommand: Command): void {
+  registerCreateCommand(taskCommand)
+  registerUpdateCommand(taskCommand)
+  registerCompleteCommand(taskCommand)
+  registerDeleteCommand(taskCommand)
+}
+
+function registerCreateCommand(taskCommand: Command): void {
   taskCommand
     .command('create')
     .description('Create a task')
@@ -62,62 +81,9 @@ export function registerCrudCommands(taskCommand: Command): void {
         await runCommand(
           command,
           async () => {
-            const initStatus = await continuum.task.init()
-            initCreated = initStatus.created
-            const inputFromFile = await readJsonInput<
-              Partial<{
-                title: string
-                type: TaskType
-                status: TaskStatus
-                priority: number | null
-                intent: string | null
-                description: string
-                plan: string | null
-                parentId: string | null
-                blockedBy: string[] | null
-              }>
-            >(options.input)
-            const title = options.title ?? inputFromFile?.title
-            const typeValue = options.type ?? inputFromFile?.type
-            const descriptionRaw =
-              options.description ?? inputFromFile?.description
-            const description = await readInput(descriptionRaw)
-            const intentRaw =
-              options.intent ?? inputFromFile?.intent ?? undefined
-            const intent = await readInput(intentRaw)
-            const planRaw = options.plan ?? inputFromFile?.plan ?? undefined
-            const plan = await readInput(planRaw)
-
-            if (!title?.trim()) {
-              throw new Error('Missing required field: title')
-            }
-            if (!typeValue?.trim()) {
-              throw new Error('Missing required field: type')
-            }
-            const type = parseTaskType(typeValue)
-            const status = options.status
-              ? parseTaskStatus(options.status)
-              : inputFromFile?.status
-            const priority =
-              options.priority !== undefined
-                ? parsePriority(options.priority)
-                : parsePriorityValue(inputFromFile?.priority)
-            const parentId = options.parent ?? inputFromFile?.parentId
-            const blockedBy =
-              parseIdList(options.blockedBy) ??
-              parseIdList(inputFromFile?.blockedBy ?? undefined)
-
-            const task = await continuum.task.create({
-              title,
-              type,
-              status,
-              priority,
-              intent: intent ?? null,
-              description: description ?? '',
-              plan: plan ?? null,
-              parentId: parentId ?? null,
-              blockedBy: blockedBy ?? null,
-            })
+            const payload = await buildCreateInput(options)
+            initCreated = payload.initCreated
+            const task = await continuum.task.create(payload.input)
             return { task }
           },
           ({ task }) => {
@@ -136,7 +102,9 @@ export function registerCrudCommands(taskCommand: Command): void {
         )
       },
     )
+}
 
+function registerUpdateCommand(taskCommand: Command): void {
   taskCommand
     .command('update')
     .description('Update a task')
@@ -160,42 +128,7 @@ export function registerCrudCommands(taskCommand: Command): void {
         await runCommand(
           command,
           async () => {
-            const patchFromFile = await readJsonInput<TaskUpdateInput>(
-              options.patch,
-            )
-            const descriptionRaw = options.description
-            const description = await readInput(descriptionRaw)
-            const intentRaw = options.intent
-            const intent = await readInput(intentRaw)
-            const planRaw = options.plan
-            const plan = await readInput(planRaw)
-            const priorityFromPatch = parsePriorityValue(
-              patchFromFile?.priority,
-            )
-
-            const update: TaskUpdateInput = {
-              ...(patchFromFile ?? {}),
-            }
-            if (options.title !== undefined) update.title = options.title
-            if (options.type !== undefined) {
-              update.type = parseTaskType(options.type)
-            }
-            if (options.status !== undefined) {
-              update.status = parseTaskStatus(options.status)
-            }
-            if (priorityFromPatch !== undefined) {
-              update.priority = priorityFromPatch
-            }
-            if (options.priority !== undefined) {
-              update.priority = parsePriority(options.priority)
-            }
-            if (intent !== undefined) update.intent = intent
-            if (description !== undefined) update.description = description
-            if (plan !== undefined) update.plan = plan
-            if (options.parent !== undefined) update.parentId = options.parent
-            const blockedBy = parseIdList(options.blockedBy)
-            if (blockedBy !== undefined) update.blockedBy = blockedBy
-
+            const update = await buildTaskUpdateInput(options)
             const task = await continuum.task.update(taskId, update)
             return { task }
           },
@@ -205,7 +138,9 @@ export function registerCrudCommands(taskCommand: Command): void {
         )
       },
     )
+}
 
+function registerCompleteCommand(taskCommand: Command): void {
   taskCommand
     .command('complete')
     .description('Complete a task')
@@ -233,7 +168,9 @@ export function registerCrudCommands(taskCommand: Command): void {
         )
       },
     )
+}
 
+function registerDeleteCommand(taskCommand: Command): void {
   taskCommand
     .command('delete')
     .description('Delete a task')
@@ -250,4 +187,95 @@ export function registerCrudCommands(taskCommand: Command): void {
         },
       )
     })
+}
+
+async function buildCreateInput(options: TaskCreateOptions): Promise<{
+  initCreated: boolean
+  input: Parameters<typeof continuum.task.create>[0]
+}> {
+  const initStatus = await continuum.task.init()
+  const inputFromFile = await readJsonInput<TaskCreateInputFile>(options.input)
+  const title = requireTextValue('title', options.title ?? inputFromFile?.title)
+  const type = parseTaskType(
+    requireTextValue('type', options.type ?? inputFromFile?.type),
+  )
+  const description = await readInput(
+    options.description ?? inputFromFile?.description,
+  )
+  const intent = await readInput(
+    options.intent ?? inputFromFile?.intent ?? undefined,
+  )
+  const plan = await readInput(options.plan ?? inputFromFile?.plan ?? undefined)
+
+  return {
+    initCreated: initStatus.created,
+    input: {
+      title,
+      type,
+      status: options.status
+        ? parseTaskStatus(options.status)
+        : inputFromFile?.status,
+      priority:
+        options.priority !== undefined
+          ? parsePriority(options.priority)
+          : parsePriorityValue(inputFromFile?.priority),
+      intent: intent ?? null,
+      description: description ?? '',
+      plan: plan ?? null,
+      parentId: options.parent ?? inputFromFile?.parentId ?? null,
+      blockedBy:
+        parseIdList(options.blockedBy) ??
+        parseIdList(inputFromFile?.blockedBy ?? undefined) ??
+        null,
+    },
+  }
+}
+
+function requireTextValue(field: string, value: string | undefined): string {
+  if (!value?.trim()) {
+    throw new Error(`Missing required field: ${field}`)
+  }
+  return value
+}
+
+async function buildTaskUpdateInput(
+  options: TaskUpdateOptions,
+): Promise<TaskUpdateInput> {
+  const patchFromFile = await readJsonInput<TaskUpdateInput>(options.patch)
+  const description = await readInput(options.description)
+  const intent = await readInput(options.intent)
+  const plan = await readInput(options.plan)
+  const update: TaskUpdateInput = { ...(patchFromFile ?? {}) }
+
+  applyUpdateOptionOverrides(update, options)
+  applyUpdateTextOverrides(update, { description, intent, plan })
+  return update
+}
+
+function applyUpdateOptionOverrides(
+  update: TaskUpdateInput,
+  options: TaskUpdateOptions,
+): void {
+  if (options.title !== undefined) update.title = options.title
+  if (options.type !== undefined) update.type = parseTaskType(options.type)
+  if (options.status !== undefined)
+    update.status = parseTaskStatus(options.status)
+
+  const priorityFromPatch = parsePriorityValue(update.priority)
+  if (priorityFromPatch !== undefined) update.priority = priorityFromPatch
+  if (options.priority !== undefined)
+    update.priority = parsePriority(options.priority)
+  if (options.parent !== undefined) update.parentId = options.parent
+
+  const blockedBy = parseIdList(options.blockedBy)
+  if (blockedBy !== undefined) update.blockedBy = blockedBy
+}
+
+function applyUpdateTextOverrides(
+  update: TaskUpdateInput,
+  text: { description?: string; intent?: string; plan?: string },
+): void {
+  if (text.intent !== undefined) update.intent = text.intent
+  if (text.description !== undefined) update.description = text.description
+  if (text.plan !== undefined) update.plan = text.plan
 }

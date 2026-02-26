@@ -1,5 +1,6 @@
 import { isValidTaskType } from '../../../sdk'
 import type {
+  ListTasksOptions,
   TaskGraphQuery,
   TaskStatus,
   TaskStepStatus,
@@ -24,7 +25,9 @@ export type ExpandOptions = {
   blockers: boolean
 }
 
-export function parseTaskListOptions(options: TaskListOptionsInput) {
+export function parseTaskListOptions(
+  options: TaskListOptionsInput,
+): ListTasksOptions {
   return {
     status: options.status ? parseTaskStatus(options.status) : undefined,
     type: options.type ? parseTaskType(options.type) : undefined,

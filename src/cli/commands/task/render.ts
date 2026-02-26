@@ -151,64 +151,70 @@ export function renderTaskDetails(task: Task): void {
     console.log(`Blocked by: ${task.blockedBy.join(', ')}`)
   }
 
-  if (task.intent) {
-    console.log('')
-    console.log('Intent:')
-    console.log(task.intent)
-  }
-
-  if (task.description) {
-    console.log('')
-    console.log('Description:')
-    console.log(task.description)
-  }
-
-  if (task.plan) {
-    console.log('')
-    console.log('Plan:')
-    console.log(task.plan)
-  }
-
-  if (task.steps.length > 0) {
-    console.log('')
-    console.log('Steps:')
-    for (const step of task.steps) {
-      const marker = formatStepMarker(step.status)
-      console.log(`  ${marker} ${step.title || `Step ${step.id}`}`)
-      if (step.summary) {
-        console.log(`      ${step.summary}`)
-      }
-      if (step.notes) {
-        console.log(`      Notes: ${step.notes}`)
-      }
-    }
-  }
-
-  if (task.discoveries.length > 0) {
-    console.log('')
-    console.log('Discoveries:')
-    for (const discovery of task.discoveries) {
-      console.log(`  - ${discovery.content}`)
-      console.log(`    ${formatTaskDate(discovery.createdAt)}`)
-    }
-  }
-
-  if (task.decisions.length > 0) {
-    console.log('')
-    console.log('Decisions:')
-    for (const decision of task.decisions) {
-      console.log(`  - ${decision.content}`)
-      if (decision.rationale) {
-        console.log(`    Rationale: ${decision.rationale}`)
-      }
-      console.log(`    ${formatTaskDate(decision.createdAt)}`)
-    }
-  }
+  renderTaskTextSection('Intent', task.intent)
+  renderTaskTextSection('Description', task.description)
+  renderTaskTextSection('Plan', task.plan)
+  renderTaskSteps(task)
+  renderTaskDiscoveries(task)
+  renderTaskDecisions(task)
 
   if (task.outcome) {
     console.log('')
     console.log('Outcome:')
     console.log(task.outcome)
+  }
+}
+
+function renderTaskTextSection(
+  title: 'Intent' | 'Description' | 'Plan',
+  content?: string | null,
+): void {
+  if (!content) return
+
+  console.log('')
+  console.log(`${title}:`)
+  console.log(content)
+}
+
+function renderTaskSteps(task: Task): void {
+  if (task.steps.length === 0) return
+
+  console.log('')
+  console.log('Steps:')
+  for (const step of task.steps) {
+    const marker = formatStepMarker(step.status)
+    console.log(`  ${marker} ${step.title || `Step ${step.id}`}`)
+    if (step.summary) {
+      console.log(`      ${step.summary}`)
+    }
+    if (step.notes) {
+      console.log(`      Notes: ${step.notes}`)
+    }
+  }
+}
+
+function renderTaskDiscoveries(task: Task): void {
+  if (task.discoveries.length === 0) return
+
+  console.log('')
+  console.log('Discoveries:')
+  for (const discovery of task.discoveries) {
+    console.log(`  - ${discovery.content}`)
+    console.log(`    ${formatTaskDate(discovery.createdAt)}`)
+  }
+}
+
+function renderTaskDecisions(task: Task): void {
+  if (task.decisions.length === 0) return
+
+  console.log('')
+  console.log('Decisions:')
+  for (const decision of task.decisions) {
+    console.log(`  - ${decision.content}`)
+    if (decision.rationale) {
+      console.log(`    Rationale: ${decision.rationale}`)
+    }
+    console.log(`    ${formatTaskDate(decision.createdAt)}`)
   }
 }
 
