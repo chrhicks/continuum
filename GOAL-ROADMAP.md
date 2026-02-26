@@ -1,315 +1,404 @@
-# Goal Roadmap: Close the Memory Loop
+# Goal Roadmap: Code Quality Refactoring
 
-Execution plan for the goal in `GOAL.md`. Three phases, ordered by dependency. Each phase includes the exact files, functions, and changes needed.
-
----
-
-## Phase 1: Foundation Fixes
-
-Three independent changes. No inter-dependencies; can be done in any order.
+Execution plan for the goal in `GOAL.md`. Four phases, ordered by risk and dependency. Each phase leaves `bun test` and `bun run typecheck` passing.
 
 ---
 
-### 1a. Verify and harden NOW clearing after consolidation
+## Phase 1: Eliminate Duplication
 
-**What:** After `continuum memory consolidate`, the NOW file body should be fully wiped (header preserved, body cleared). The logic exists but has no regression test and an edge-case gap.
-
-**Files to change:**
-
-- `src/memory/consolidate.ts`
-  - `buildClearedNowContent` (line 602–614): builds cleared content — logic is present
-  - `extractSessionHeader` (line 616–624): extracts `# Session: ` line from body; falls back to `# Session: unknown` if not found — the fallback is silent and wrong if a NOW file was created without this header. Add a branch that preserves the first `#` heading found (not just `# Session:`), or raise a warning when the fallback fires.
-  - The cleared NOW is already included in the `writeFilesAtomically` call at line 161–171 — no change needed there.
-
-- `tests/consolidate.test.ts` (new or extend existing):
-  - Add a test: consolidate a NOW file that has a valid `# Session:` header → assert the resulting NOW body contains only that header line and a trailing blank line, no other content.
-  - Add a test: consolidate a NOW file whose body has no `# Session:` header → assert fallback fires without data loss (frontmatter preserved, body is not `undefined`).
-  - Add a test: consolidate twice on the same (already-cleared) NOW file → assert it is idempotent.
-
-**Gotcha:** `skipNowCleanup` option (line 172) is passed in some call paths (e.g., `recover`). This skips cleanup of old NOW files but does NOT affect whether the active NOW is cleared. Verify this option does not accidentally suppress the clearing write.
+Four independent changes — no inter-dependencies, any order, all low-risk. Each is a pure addition (new helper) followed by replacement of usage sites. No logic changes.
 
 ---
 
-### 1b. Add `--after <date>` to `memory search`
+### 1a. Consolidate step-status marker logic
 
-**What:** Add a date-range filter so agents can scope searches to recent sessions only.
-
-**Files to change:**
-
-- `src/memory/search.ts`
-  - Extend `searchMemory` signature:
-    ```ts
-    export function searchMemory(
-      query: string,
-      tier: MemorySearchTier = 'all',
-      tags: string[] = [],
-      after?: Date,
-    ): MemorySearchResult
-    ```
-  - Add a date filter step in the file loop (after line 34, before reading content). For each file:
-    - If `after` is set and the file is a NOW file (`NOW-*.md`): parse the frontmatter `timestamp_start` field. If absent or unparseable, fall back to filesystem `statSync(filePath).mtimeMs`.
-    - If `after` is set and the file is RECENT or MEMORY: use filesystem mtime (these files are continuously updated; frontmatter `consolidation_date` is also available on MEMORY files).
-    - Skip the file entirely if its resolved date is before `after`.
-  - Helper: `function resolveFileDate(filePath: string, content: string): Date` — parses frontmatter `timestamp_start` or `consolidation_date`, falls back to `statSync(filePath).mtime`.
-
-- `src/cli/commands/memory.ts`
-  - In the `memory search` command registration (line 337–352), add:
-    ```ts
-    .option('--after <date>', 'Only search files modified after this ISO date (e.g. 2026-02-01)')
-    ```
-  - In the options type and `handleSearch` call, parse the `--after` string into a `Date`:
-    ```ts
-    const after = options.after ? parseAfterDate(options.after) : undefined
-    handleSearch(query, tier, tags, after)
-    ```
-  - Add `parseAfterDate(value: string): Date` helper — parse ISO date string; throw a clear error if invalid.
-  - Update `handleSearch` signature to accept `after?: Date` and pass through to `searchMemory`.
-
-- `src/sdk/index.ts`
-  - Check whether `searchMemory` is exposed in the SDK. If it is, update the SDK wrapper to accept and pass through `after`. If it is not, no SDK change needed.
-
-**Tests:** Add to `tests/memory-search.test.ts` (or existing search tests):
-
-- Create two NOW files with different `timestamp_start` values. Search with `--after` set to a date between them. Assert only the newer file's content is returned.
-- Test with an invalid `--after` value → assert a descriptive error is thrown.
-
----
-
-### 1c. Remove `continuum task init` duplicate
-
-**What:** `continuum task init` is an exact duplicate of `continuum init`. `task create` auto-initializes anyway. Remove it.
+**What:** The mapping of a step's status to a display marker (`[x]`, `[>]`, `[~]`, `[ ]`) appears three times in `src/cli/commands/task.ts` with minor variations (lines 691–697, 1149–1156, 1212–1216). Extract a single shared helper.
 
 **Files to change:**
 
 - `src/cli/commands/task.ts`
-  - Delete lines 114–138 (the entire `.command('init')` block under `taskCommand`). This is 25 lines.
-  - No other changes needed. The `continuum.task.init()` SDK method stays — it is used by `task create` for auto-init.
+  - Add helper (near line 1000, with other render utilities):
+    ```ts
+    function formatStepMarker(status: TaskStepStatus): string {
+      if (status === 'completed') return '[x]'
+      if (status === 'in_progress') return '[>]'
+      if (status === 'skipped') return '[~]'
+      return '[ ]'
+    }
+    ```
+  - Replace the three inline marker blocks at lines 691–697, 1149–1156, 1212–1216 with calls to `formatStepMarker(step.status)`.
+  - The `formatTaskCompact` variant at line 1212–1216 uses single-char markers (`x`, `>`, `~`, `.`) — preserve this by adding a second parameter: `formatStepMarker(status, { compact: true })` returning the single-char form.
 
-- No test changes needed. No existing test exercises `continuum task init` via CLI argv (confirmed). Direct SDK calls to `continuum.task.init()` in test setup are unaffected.
-
-**Backward compat note:** Any script calling `continuum task init` will get `error: unknown command 'init'` after this change. The replacement is `continuum init`.
+**Verification:** `bun test` passes; `grep -n 'status.*completed.*x\|in_progress.*>' src/cli/commands/task.ts` returns no inline marker logic.
 
 ---
 
-## Phase 2: Task → Memory Bridge
+### 1b. Consolidate parse-positive-integer pattern
 
-Depends on: nothing in Phase 1 (can run in parallel).
-
----
-
-### 2a. Add `continuum task notes flush <task_id>`
-
-**What:** A new CLI command that reads all discoveries and decisions from a task and appends each as a structured entry to the active NOW memory file. This is the plumbing required by Phase 3 step 13.
+**What:** In `src/cli/commands/memory.ts`, the pattern "parse a string as a positive integer, throw if invalid" appears four times as separate named functions (lines 1042–1083): `parseRecallLimit`, `parseDiffLimit`, `parseSyncLimit`, `parseTail`. A fifth instance, `parseLimit`, also exists in `src/cli/commands/task.ts:909`. Extract a single shared utility.
 
 **Files to change:**
 
-**`src/cli/commands/task.ts`**
+- `src/cli/io.ts`
+  - Add a shared `parsePositiveInt(value: string | undefined, label: string, allowNull?: false): number` overload that consolidates the shared body. Signature:
+    ```ts
+    export function parsePositiveInt(
+      value: string | undefined,
+      label: string,
+    ): number
+    ```
+  - Throw `new Error(\`${label} must be a positive integer\`)` on invalid input.
+  - A nullable variant (used by `parseSyncLimit`) can be: if `value` is undefined/empty return `Infinity` (or the caller handles it).
 
-Add a new `notesCommand` group after line 769 (`taskCommand.addCommand(noteCommand)`):
+- `src/cli/commands/memory.ts`
+  - Delete `parseRecallLimit`, `parseDiffLimit`, `parseSyncLimit`, `parseTail` (lines 1042–1083).
+  - Replace all four call sites with `parsePositiveInt(value, '<label>')`.
 
-```ts
-const notesCommand = new Command('notes').description(
-  'Bulk task note operations',
-)
-notesCommand.action(() => {
-  notesCommand.outputHelp()
-})
+- `src/cli/commands/task.ts`
+  - Replace `parseLimit` (lines 909–923) with an import of `parsePositiveInt` from `../io`.
 
-notesCommand
-  .command('flush')
-  .description('Flush task discoveries and decisions to NOW memory')
-  .argument('<task_id>', 'Task ID')
-  .action(async (taskId: string, _options: unknown, command: Command) => {
-    await runCommand(
-      command,
-      async () => {
-        const task = await continuum.task.get(taskId)
-        if (!task) throw new Error(`Task '${taskId}' not found.`)
-        return { task }
-      },
-      async ({ task }) => {
-        const total = task.discoveries.length + task.decisions.length
-        if (total === 0) {
-          console.log('No notes to flush.')
-          return
-        }
-        // import appendAgentMessage at top of file
-        for (const note of task.discoveries) {
-          await appendAgentMessage(formatDiscovery(task.id, note), {
-            tags: [task.id],
-          })
-        }
-        for (const note of task.decisions) {
-          await appendAgentMessage(formatDecision(task.id, note), {
-            tags: [task.id],
-          })
-        }
-        console.log(
-          `Flushed ${task.discoveries.length} discovery(s) and ${task.decisions.length} decision(s) to NOW.`,
-        )
-      },
-    )
-  })
-
-taskCommand.addCommand(notesCommand)
-```
-
-Add these two formatter helpers near the bottom of the file (alongside `renderTaskDetails`):
-
-```ts
-function formatDiscovery(
-  taskId: string,
-  note: { content: string; impact?: string | null },
-): string {
-  const lines = [`[Discovery from ${taskId}] ${note.content}`]
-  if (note.impact) lines.push(`Impact: ${note.impact}`)
-  return lines.join('\n')
-}
-
-function formatDecision(
-  taskId: string,
-  note: { content: string; rationale?: string | null; impact?: string | null },
-): string {
-  const lines = [`[Decision from ${taskId}] ${note.content}`]
-  if (note.rationale) lines.push(`Rationale: ${note.rationale}`)
-  if (note.impact) lines.push(`Impact: ${note.impact}`)
-  return lines.join('\n')
-}
-```
-
-Add import at the top of the file:
-
-```ts
-import { appendAgentMessage } from '../../memory/now-writer'
-```
-
-**`src/sdk/types.ts`** (optional but recommended for consistency):
-
-Extend the `notes` namespace interface to document the flush path. The flush itself can be done entirely in the CLI (no new SDK method strictly required since `task.get()` already returns all notes inline at `task.discoveries` and `task.decisions`).
-
-**Note on note shapes** (from codebase exploration):
-
-- `task.discoveries: TaskDiscovery[]` — each has `id: string`, `content`, `source`, `impact: string | null`, `createdAt`; `rationale` is always `null`.
-- `task.decisions: TaskDecision[]` — same shape but `rationale: string | null` is populated.
-- Both are returned inline on every `task.get()` call; no separate query needed.
-
-**Tests:**
-
-Add to `tests/cli.test.ts` (after the existing task CLI tests, around line 593):
-
-- `task notes flush appends all discoveries and decisions to NOW` — create task, add one discovery with impact and one decision with rationale, run flush, read NOW file, assert content includes `[Discovery from`, `[Decision from`, `Impact:`, `Rationale:`.
-- `task notes flush with empty notes prints nothing-to-flush` — create task with no notes, run flush, assert output is "No notes to flush." and NOW file is not modified.
-- `task notes flush with unknown task id returns error` — assert `ok: false` in JSON output.
+**Verification:** `bun test` passes; `grep -n 'function parse.*Limit\|function parseTail' src/` returns nothing.
 
 ---
 
-## Phase 3: Skill Refinement
+### 1c. Consolidate resolve-recall-path helpers
 
-Depends on: Phase 2 (step 13 calls `task notes flush`). Phase 2 must ship first or the new step 13 must include a guard.
+**What:** In `src/cli/commands/memory.ts` lines 1094–1120, four functions (`resolveDiffReportPath`, `resolveSyncPlanPath`, `resolveSyncLedgerPath`, `resolveSyncLogPath`) share the identical body — they differ only in their fallback filename. Replace with one generic helper.
+
+**Files to change:**
+
+- `src/cli/commands/memory.ts`
+  - Delete the four functions at lines 1094–1120 (27 lines total).
+  - Add a single helper in their place:
+    ```ts
+    function resolveRecallPath(
+      dataRoot: string,
+      value: string | null | undefined,
+      filename: string,
+    ): string {
+      if (value) return resolve(process.cwd(), value)
+      return join(dataRoot, 'recall', 'opencode', filename)
+    }
+    ```
+  - Update the four call sites (inside `handleRecallDiff` and `handleRecallSync`) to use `resolveRecallPath(dataRoot, options.report, 'diff-report.json')` etc.
+
+**Verification:** `bun test` passes; four old function names no longer appear in the file.
 
 ---
 
-### 3a–c. Update task-loop skill with three new behaviors
+### 1d. Extract parent-exists validation helper
 
-**What:** Add memory search before planning, a step-start memory append, and a task-notes flush after step completion. These are all changes to a single Markdown file.
+**What:** `create_task` (lines 212–228) and `update_task` (lines 280–301) in `src/task/tasks.repository.ts` contain the identical block that validates a parent task exists before writing. Extract it.
 
-**File to change:** `.agents/skills/task-loop/SKILL.md`
+**Files to change:**
 
-**Replace the entire "Single-Iteration Loop" section** (lines 34–67) with the following. All other sections (Entry Point, Preconditions, Commands, NOW Memory Entry, Stop Conditions) are unchanged except for the one-sentence addition noted below.
-
-````markdown
-## Single-Iteration Loop (Hard Stop After One Step)
-
-1. Read `GOAL.md` and write a one-line alignment statement.
-2. Search memory for prior context on this goal area:
-   ```bash
-   bun run bin/continuum memory search "<GOAL keyword or active task title>"
-   ```
-````
-
-Note any prior task IDs, known failures, or decisions for this area. Proceed regardless of results. 3. Preflight to avoid redundant work:
-
-- List `open` tasks.
-- If the list is empty, create one `investigation` task focused on discovering GOAL-aligned work in the current repo. This task should explicitly state the exploration criteria and expected outputs (new concrete tasks with priorities and evidence).
-- For the top priority open task, quickly check whether existing code/tests/docs already implement it.
-- If already implemented, add a discovery note and skip to the next task.
-- If all open tasks appear already implemented, complete them with notes and stop.
-
-4. Select a task (avoid creating duplicates; prefer `open`, ordered by priority):
-   - If a `task_id` was provided, use it.
-   - Else list `open` tasks sorted by priority (lowest number first; createdAt only breaks ties) and select the top task.
-   - If the latest NOW task is still `open` or `ready` and has a priority number less than or equal to the selected task, resume it.
-   - Else choose the highest-priority `ready` task (only if your workflow explicitly uses `ready`).
-   - If no `open` or `ready` tasks exist, create one `investigation` task from `GOAL.md` and assign it a high priority (lower number than build work for the same focus).
-   - If an `investigation` task exists for the same focus, ensure it has a lower priority number than build tasks and select it first.
-   - Never create a new task if an existing `open`/`ready` task already has the same intent/title.
-5. Ensure task intent references a section of `GOAL.md` and add a minimal plan if missing (update the task before validation).
-6. Pick the first `pending` step.
-   - If no steps exist, add 1-3 concrete steps derived from GOAL.md success criteria (avoid "run the loop" phrasing).
-7. Append a step-start memory entry (run before beginning work):
-   ```bash
-   bun run bin/continuum memory append agent "Task: <task_id>; Step: <step_id>; Status: starting; Intent: <one-line step goal>"
-   ```
-8. Mark the step `in_progress`.
-9. Do the work (code, docs, config) that completes the step.
-   - If the selected task is `investigation`, perform a focused repo exploration and create 1-5 concrete follow-up tasks directly in `continuum task`.
-   - Every generated task must include GOAL alignment, a concise plan, and evidence (code/test/doc reference) so it is actionable.
-   - De-duplicate against existing `open`/`ready`/`in_progress`/`completed` tasks before creating anything new.
-10. Validate (one command at a time, they don't `&&` well):
-    - Run `bun run typecheck`
-    - Run `bun test`
-    - Run one smoke command relevant to the work (example: `bun run bin/continuum task list --json`)
-11. Add notes (discovery/decision) to the task as needed.
-12. Complete the step with a concise summary.
-13. Flush task notes to NOW memory:
-    ```bash
-    bun run bin/continuum task notes flush <task_id>
+- `src/task/tasks.repository.ts`
+  - Add a private async helper after the imports:
+    ```ts
+    async function validate_parent_exists(
+      db: Database,
+      parent_id: string,
+    ): Promise<void> {
+      const exists = await task_exists(db, parent_id)
+      if (!exists) {
+        throw new ContinuumError('PARENT_NOT_FOUND', 'Parent task not found', {
+          parent_id,
+        })
+      }
+    }
     ```
-    Skip this step if Phase 2 has not shipped yet (`task notes flush` command does not exist).
-14. If all steps are complete, validate and complete the task.
-15. Append the full loop-end memory entry (auto-starts a session if missing):
-    ```bash
-    bun run bin/continuum memory append agent "..."
+  - Replace the two duplicated blocks (lines 212–228 in `create_task`, lines 280–301 in `update_task`) with `await validate_parent_exists(db, input.parent_id)`.
+
+**Verification:** `bun test` passes; `PARENT_NOT_FOUND` error cases in the test suite still pass.
+
+---
+
+## Phase 2: Extract Structural Clones
+
+Two changes. Independent of each other, can run in any order. Both reduce duplication in the larger domain files.
+
+---
+
+### 2a. Shared `buildSummaryLines` helper in consolidate.ts
+
+**What:** `buildRecentEntry` (lines 203–257) and `buildMemorySection` (lines 324–378) in `src/memory/consolidate.ts` are structural clones — same field ordering, same conditional push pattern, same `items.map(i => \`- ${i}\`)`mapping. The only differences are the header format and an extra`files`field in`buildMemorySection`.
+
+**Files to change:**
+
+- `src/memory/consolidate.ts`
+  - Extract a shared helper:
+    ```ts
+    function buildSummaryLines(
+      summary: ConsolidationSummary,
+      header: string,
+      includeFiles: boolean,
+    ): string[] {
+      const lines: string[] = [header, '']
+      if (summary.narrative) lines.push(summary.narrative, '')
+      if (summary.decisions?.length) { ... }
+      if (summary.discoveries?.length) { ... }
+      // ... same pattern for each field
+      if (includeFiles && summary.files?.length) { ... }
+      return lines
+    }
     ```
-16. Stop and return control to the user.
+  - Rewrite `buildRecentEntry` as: `return buildSummaryLines(summary, header, false).join('\n')`
+  - Rewrite `buildMemorySection` as: `return buildSummaryLines(summary, header, true).join('\n')`
+  - Both original functions keep their signatures — callers do not change.
+
+**Verification:** `bun test` passes; existing consolidation tests cover the output format.
+
+---
+
+### 2b. Generic collection-patch helper in tasks.repository.ts
+
+**What:** Inside `update_task` (lines 262–550 in `src/task/tasks.repository.ts`), the delete/update/add pattern for steps (lines 326–407), discoveries (lines 409–469), and decisions (lines 472–533) is structurally identical. All three spread existing items, process `.delete` using a `Set`, process `.update` by `findIndex` + splice, and process `.add` by computing the next ID + appending.
+
+**Files to change:**
+
+- `src/task/tasks.repository.ts`
+  - Extract a generic helper (typed with a generic `T extends { id: string }`):
+    ```ts
+    function patch_collection<T extends { id: string }>(
+      existing: T[],
+      patch: CollectionPatch<Omit<T, 'id'>, Partial<Omit<T, 'id'>>> | undefined,
+      make_id: (index: number) => string,
+      apply_update: (item: T, update: Partial<Omit<T, 'id'>>) => T,
+    ): T[]
+    ```
+  - `patch_collection` handles delete, update, and add in sequence, returning the new array.
+  - Replace the three inline blocks in `update_task` with three calls to `patch_collection`.
+  - Note: each collection uses a different ID prefix (`step-`, `disc-`, `dec-`) — pass `make_id` as a parameter.
+
+**Verification:** All `task update` tests pass, especially add/update/delete variants for steps, discoveries, and decisions.
+
+---
+
+## Phase 3: Type Safety
+
+Two independent changes. Low risk — adding types, not changing logic. Can be done alongside or after Phases 1–2.
+
+---
+
+### 3a. Remove `as any` casts in task.ts
+
+**What:** Two `as any` casts in `src/cli/commands/task.ts` (lines 366 and 624) bypass the type system when building an update payload. Both stem from building a `Record<string, unknown>` object and casting to `SdkUpdateTaskInput`.
+
+**Root cause:** `map_update_input` in `src/sdk/index.ts:128` has an inferred return type. The CLI builds a partial update object and passes it `as any` to avoid a type error from the loose inferred type.
+
+**Files to change:**
+
+- `src/sdk/index.ts`
+  - Add explicit return type to `map_update_input`:
+    ```ts
+    function map_update_input(input: SdkUpdateTaskInput): UpdateTaskInput { ... }
+    ```
+  - This propagates the correct type through `continuum.task.update(id, input)`.
+
+- `src/cli/commands/task.ts`
+  - At lines 366 and 624, replace `update as any` with a properly typed object. Build `update` as `SdkUpdateTaskInput` from the start by using the correct typed fields (title, type, status, etc.) directly instead of a `Record<string, unknown>`.
+  - Import `SdkUpdateTaskInput` (or the equivalent type) from the SDK types.
+
+**Verification:** `grep -r 'as any' src/` returns nothing. `bun run typecheck` passes.
+
+---
+
+### 3b. Explicit return types on exported functions
+
+**What:** Several exported and module-level functions are missing explicit return type annotations.
+
+**Files to change:**
+
+- `src/sdk/index.ts`
+  - Add `): CreateTaskInput` return type to `map_create_input` (line ~114).
+  - Add `): UpdateTaskInput` return type to `map_update_input` (line ~128) — done in 3a, included here for completeness.
+  - Add `): SdkTask` return type to `map_task` (line ~57).
+  - Add `): SdkStep` return type to `map_step`.
+  - Add `): SdkNote` return type to `map_note`.
+
+- `src/task/validation.ts`
+  - Add `): void` return type to `validate_blocker_list` (line ~50).
+
+- `src/task/util.ts`
+  - Add `): Promise<void>` return type to `init_project` (line ~42).
+
+**Verification:** `bun run typecheck` passes. No new type errors introduced.
+
+---
+
+## Phase 4: Decompose Monolith Files
+
+The four largest files each need to be split. Ordered from least to most invasive within the phase; complete each file fully before starting the next.
+
+**Prerequisite:** Phases 1–3 complete (so duplication and type issues are resolved before restructuring).
+
+---
+
+### 4a. Split `src/cli/commands/task.ts` (1251 lines → directory)
+
+**Target structure:**
 
 ```
+src/cli/commands/task/
+  index.ts       # createTaskCommand: parent Command + addCommand calls only (~40 lines)
+  parse.ts       # all input parsing utilities (~170 lines)
+  render.ts      # all rendering / formatting utilities (~240 lines)
+  crud.ts        # list, get, create, update, complete, delete, validate, graph handlers (~400 lines)
+  steps.ts       # steps sub-command handlers (~200 lines)
+  notes.ts       # note add + notes flush handlers (~120 lines)
+```
 
-**Also update the "NOW Memory Entry" section** — add one sentence after the opening line (after "Append a short entry via CLI (auto-starts a NOW session if missing):"):
+**Steps:**
 
-> Run a shorter version (Task, Step, Status, Intent only) at step 7 (start); run the full version at step 15 (end).
+1. Create `src/cli/commands/task/` directory.
+2. Move parsing functions (`parseTaskStatus`, `parseTaskType`, `parseNoteKind`, `parseExpandOptions`, `parseLimit`/`parsePositiveInt`, `parseTaskId`, `parseIdList`) to `parse.ts`. Export all.
+3. Move rendering functions (`renderTaskList`, `renderTaskTree`, `renderTaskDetails`, `formatTaskCompact`, `renderNextSteps`, `formatStepMarker`) to `render.ts`. Export all.
+4. Extract each sub-command group into its own file. Each sub-command registration function receives the parent `Command` as its argument:
+   - `crud.ts` exports `registerCrudCommands(taskCommand: Command): void` — registers list, get, create, update, complete, delete, validate, graph.
+   - `steps.ts` exports `registerStepsCommands(taskCommand: Command): void`.
+   - `notes.ts` exports `registerNotesCommands(taskCommand: Command): void`.
+5. `index.ts` creates the `taskCommand` parent, calls the four `register*` functions, and exports `createTaskCommand`. This file should be under 50 lines.
+6. Delete the original `src/cli/commands/task.ts`.
+7. Verify `src/cli.ts` import of `./cli/commands/task` still resolves (it will, via `index.ts`).
 
-**Design notes:**
-- Two memory writes per loop: step 7 (lightweight, intent capture) and step 15 (full summary). No redundancy.
-- `memory append` auto-starts a NOW session if none exists — no manual `session start` needed.
-- Step 2 (memory search) is read-only context enrichment — it informs deduplication in steps 3–4, surfacing prior completed tasks and known failures before any new task creation.
-- Step 13 (notes flush) writes verbatim task notes to NOW. The step-15 summary should therefore omit or condense the Discoveries field to avoid duplication.
+**Verification:** `bun test` passes; `bun run bin/continuum task list --json` works; `bun run bin/continuum task create --title test --type chore` works.
+
+---
+
+### 4b. Split `src/cli/commands/memory.ts` (1173 lines → directory)
+
+**Target structure:**
+
+```
+src/cli/commands/memory/
+  index.ts       # createMemoryCommand: parent + addCommand calls only (~50 lines)
+  handlers.ts    # memory domain handlers: status, list, consolidate, search, validate, log, recover, append (~400 lines)
+  recall.ts      # all recall handlers + recall-specific utilities (~450 lines)
+```
+
+**Steps:**
+
+1. Create `src/cli/commands/memory/` directory.
+2. Move the five recall handler functions (`handleRecallImport`, `handleRecallIndex`, `handleRecallDiff`, `handleRecallSync`, `handleRecallSearch`) and their helpers (`resolveRecallPath` from phase 1c, `writeJsonFile`, `appendJsonLine`, `resolveDiffReportPath` etc.) to `recall.ts`. This file also registers all `recall` sub-commands via `registerRecallCommands(memoryCommand: Command): void`.
+3. Move the eight memory domain handlers (`handleStatus`, `handleList`, `handleConsolidate`, `handleSearch`, `handleValidate`, `handleLog`, `handleRecover`, `handleAppend`) plus their utilities (`formatBytes`, `formatAgeMinutes`, `formatScore`) to `handlers.ts`.
+4. `index.ts` creates the `memoryCommand` parent, calls `registerMemoryHandlers(memoryCommand)` and `registerRecallCommands(memoryCommand)`, and exports `createMemoryCommand`.
+5. Delete the original `src/cli/commands/memory.ts`.
+6. Verify the import in `src/cli.ts` still resolves.
+
+**Verification:** `bun test` passes; `bun run bin/continuum memory status` works; `bun run bin/continuum memory recall diff --help` works.
+
+---
+
+### 4c. Split `src/task/tasks.repository.ts` (962 lines → multiple files)
+
+**Target structure:**
+
+```
+src/task/
+  tasks.repository.ts     # core task CRUD: create, get, list, complete, delete, exists (~300 lines)
+  steps.repository.ts     # step operations: add_steps, update_step, complete_step, list_steps (~250 lines)
+  notes.repository.ts     # discovery + decision operations (~200 lines)
+  collection-patch.ts     # generic patch_collection helper (from phase 2b) (~60 lines)
+```
+
+**Steps:**
+
+1. Extract `patch_collection` helper (phase 2b) to `collection-patch.ts` first.
+2. Move step-specific functions (`add_steps`, `update_step`, `complete_step`, list_steps) to `steps.repository.ts`. These functions receive `db` and `task_id` as parameters, same as the originals.
+3. Move discovery/decision functions to `notes.repository.ts`.
+4. `tasks.repository.ts` retains `create_task`, `get_task`, `list_tasks`, `complete_task`, `delete_task`, `task_exists`, `update_task` (now much smaller after phase 2b + step/note extraction).
+5. Update `src/task/tasks.service.ts` imports accordingly.
+
+**Verification:** `bun test` passes; all existing repository-level tests pass.
+
+---
+
+### 4d. Split `src/memory/consolidate.ts` (840 lines → multiple files)
+
+**Target structure:**
+
+```
+src/memory/
+  consolidate.ts          # orchestration: consolidateNow, runConsolidation (~200 lines)
+  consolidate-build.ts    # entry builders: buildRecentEntry, buildMemorySection, buildSummaryLines, summarizeForTier (~250 lines)
+  consolidate-index.ts    # index operations: upsertMemoryIndex, buildDefaultIndexContent, insertEntryInSection, dedupeIndexEntries (~200 lines)
+  consolidate-write.ts    # atomic write: writeFilesAtomically, backup helpers (~120 lines)
+```
+
+**Steps:**
+
+1. Move `writeFilesAtomically` and its backup helpers to `consolidate-write.ts`.
+2. Move `upsertMemoryIndex`, `buildDefaultIndexContent`, `insertEntryInSection`, `dedupeIndexEntries` to `consolidate-index.ts`.
+3. Move `buildRecentEntry`, `buildMemorySection`, `buildSummaryLines` (from phase 2a), and any other entry-building helpers to `consolidate-build.ts`.
+4. `consolidate.ts` retains `consolidateNow` and `runConsolidation` only, importing from the three new files.
+5. Update callers: `src/memory/recover.ts` and `src/cli/commands/memory/handlers.ts` import from `consolidate.ts` (top-level function is unchanged).
+
+**Verification:** `bun test` passes, particularly `tests/consolidate.test.ts`.
+
+---
+
+## Phase 5: Verify All Targets Met
+
+After all phases complete, run a final check against every success criterion.
+
+```bash
+# No file over 300 lines
+wc -l src/**/*.ts | sort -rn | head -20
+
+# No function over 80 lines (manual review of any file still near 300 lines)
+
+# Zero as any casts
+grep -r 'as any' src/
+
+# All exports have return types (typecheck catches missing annotations)
+bun run typecheck
+
+# All tests pass
+bun test
+
+# Smoke tests
+bun run bin/continuum task list --json
+bun run bin/continuum task create --title "smoke" --type chore --json
+bun run bin/continuum memory status
+```
 
 ---
 
 ## Execution Order
 
 ```
-
 Phase 1a ─┐
-Phase 1b ─┼─ independent, any order
-Phase 1c ─┘
+Phase 1b ─┤
+Phase 1c ─┼─ independent, any order
+Phase 1d ─┘
 
-Phase 2a ─── can run in parallel with Phase 1
+Phase 2a ─┐
+Phase 2b ─┘─ independent of each other, run after Phase 1
 
-Phase 3 ─── after Phase 2 ships (step 13 depends on `task notes flush`)
+Phase 3a ─┐
+Phase 3b ─┘─ independent, can run in parallel with Phase 2
 
+Phase 4 ─── after Phases 1–3 (decomposition is easier on clean code)
+  4a (task/) → 4b (memory/) → 4c (repository) → 4d (consolidate)
+
+Phase 5 ─── final verification after all changes
 ```
+
+---
 
 ## Success Criteria Check
 
-| Criterion | Phase |
-|-----------|-------|
-| NOW file fully cleared after consolidation, with regression test | 1a |
-| `memory search --after <date>` works | 1b |
-| `continuum task init` removed | 1c |
-| `continuum task notes flush` command exists | 2a |
-| Agent appends memory at start and end of each step | 3 (step 7 + step 15) |
-| Task notes flow to NOW after step completion | 3 (step 13) |
-| Agent runs memory search before planning | 3 (step 2) |
-```
+| Criterion                                                           | Phase                                                |
+| ------------------------------------------------------------------- | ---------------------------------------------------- |
+| No file in `src/` exceeds 300 lines                                 | 4a–4d + verify in 5                                  |
+| No function exceeds 80 lines                                        | 4a–4d (decompose large functions during file splits) |
+| Zero `as any` casts                                                 | 3a                                                   |
+| Exported functions have explicit return types                       | 3b                                                   |
+| Step-status marker consolidated into `formatStepMarker`             | 1a                                                   |
+| Parse-positive-int consolidated into `parsePositiveInt`             | 1b                                                   |
+| `resolve*Path` consolidated into `resolveRecallPath`                | 1c                                                   |
+| Parent-exists validation extracted into helper                      | 1d                                                   |
+| `buildRecentEntry` / `buildMemorySection` share `buildSummaryLines` | 2a                                                   |
+| Collection-patch logic extracted into `patch_collection`            | 2b                                                   |
+| `createTaskCommand` decomposed into per-sub-command functions       | 4a                                                   |
+| `bun run typecheck` and `bun test` pass throughout                  | all phases                                           |
