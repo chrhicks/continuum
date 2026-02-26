@@ -8,15 +8,22 @@ import type {
   AddDecisionInput,
   AddDiscoveryInput,
   AddStepsInput,
+  CollectionPatch,
   CompleteStepInput,
   CompleteStepResult,
   CompleteTaskInput,
   CreateTaskInput,
+  DecisionInput,
+  DecisionPatch,
   Decision,
+  DiscoveryInput,
+  DiscoveryPatch,
   Discovery,
   ListTaskFilters,
   ListTasksResult,
   Step,
+  StepInput,
+  StepPatch,
   Task,
   TaskStatus,
   TaskType,
@@ -133,6 +140,73 @@ function normalize_id(id: number | string, label: string): number {
   return value
 }
 
+function patch_collection<
+  TItem extends { id: number },
+  TAdd,
+  TUpdate extends { id: number | string },
+>(
+  items: TItem[],
+  patch: CollectionPatch<TAdd, TUpdate> | undefined,
+  options: {
+    label: string
+    apply_update: (current: TItem, update: TUpdate) => TItem
+    apply_add: (item: TAdd, index: number, nextId: number) => TItem
+  },
+): { items: TItem[]; deleted_ids: Set<number> } {
+  const next = [...items]
+  const deleted_ids = new Set<number>()
+
+  if (!patch) {
+    return { items: next, deleted_ids }
+  }
+
+  if (patch.delete && patch.delete.length > 0) {
+    const deleteIds = new Set(
+      patch.delete.map((id) => normalize_id(id, options.label)),
+    )
+    for (const itemId of deleteIds) {
+      const exists = next.some((item) => item.id === itemId)
+      if (!exists) {
+        throw new ContinuumError(
+          'ITEM_NOT_FOUND',
+          `${options.label} ${itemId} not found`,
+        )
+      }
+    }
+    const filtered = next.filter((item) => !deleteIds.has(item.id))
+    next.length = 0
+    next.push(...filtered)
+    for (const deletedId of deleteIds) {
+      deleted_ids.add(deletedId)
+    }
+  }
+
+  if (patch.update && patch.update.length > 0) {
+    for (const update of patch.update) {
+      const itemId = normalize_id(update.id, options.label)
+      const index = next.findIndex((item) => item.id === itemId)
+      if (index === -1) {
+        throw new ContinuumError(
+          'ITEM_NOT_FOUND',
+          `${options.label} ${itemId} not found`,
+        )
+      }
+      const current = next[index]!
+      next[index] = options.apply_update(current, update)
+    }
+  }
+
+  if (patch.add && patch.add.length > 0) {
+    const maxId = next.reduce((max, item) => Math.max(max, item.id), 0)
+    const added = patch.add.map((item, index) =>
+      options.apply_add(item, index, maxId),
+    )
+    next.push(...added)
+  }
+
+  return { items: next, deleted_ids }
+}
+
 function row_to_task(row: TaskRow): Task {
   return {
     id: row.id,
@@ -181,6 +255,19 @@ async function validate_blockers(
   return unique.filter((id) => !found.has(id))
 }
 
+async function validate_parent_exists(
+  db: DbClient,
+  parent_id: string | null | undefined,
+): Promise<void> {
+  if (!parent_id) return
+  const parentExists = await task_exists(db, parent_id)
+  if (!parentExists) {
+    throw new ContinuumError('PARENT_NOT_FOUND', 'Parent task not found', [
+      'Verify parent_id and try again.',
+    ])
+  }
+}
+
 export async function has_open_blockers(
   db: DbClient,
   task: Task,
@@ -208,15 +295,7 @@ export async function create_task(
   const priority = normalize_priority(input.priority)
 
   validate_blocker_list(id, blocked_by)
-
-  if (input.parent_id) {
-    const parentExists = await task_exists(db, input.parent_id)
-    if (!parentExists) {
-      throw new ContinuumError('PARENT_NOT_FOUND', 'Parent task not found', [
-        'Verify parent_id and try again.',
-      ])
-    }
-  }
+  await validate_parent_exists(db, input.parent_id)
 
   const missingBlockers = await validate_blockers(db, blocked_by)
   if (missingBlockers.length > 0) {
@@ -278,14 +357,7 @@ export async function update_task(
   }
 
   if (input.parent_id !== undefined) {
-    if (input.parent_id) {
-      const parentExists = await task_exists(db, input.parent_id)
-      if (!parentExists) {
-        throw new ContinuumError('PARENT_NOT_FOUND', 'Parent task not found', [
-          'Verify parent_id and try again.',
-        ])
-      }
-    }
+    await validate_parent_exists(db, input.parent_id)
   }
 
   if (input.blocked_by !== undefined) {
@@ -320,73 +392,51 @@ export async function update_task(
 
   if (input.steps) {
     const currentTask = await ensure_task()
-    const existingSteps = [...currentTask.steps]
+    const collection = patch_collection<Step, StepInput, StepPatch>(
+      currentTask.steps,
+      input.steps,
+      {
+        label: 'Step',
+        apply_update: (existing, patch) => {
+          const description =
+            patch.description !== undefined
+              ? patch.description
+              : patch.details !== undefined
+                ? patch.details
+                : (existing.description ?? existing.details ?? '')
+          const details =
+            patch.details !== undefined ? patch.details : existing.details
+          return {
+            id: existing.id,
+            title: patch.title ?? existing.title,
+            description,
+            position:
+              patch.position !== undefined ? patch.position : existing.position,
+            summary: patch.summary ?? existing.summary,
+            details,
+            status: patch.status ?? existing.status,
+            notes: patch.notes !== undefined ? patch.notes : existing.notes,
+          }
+        },
+        apply_add: (step, index, maxId) => ({
+          id: maxId + index + 1,
+          title: step.title,
+          description: step.description ?? step.details ?? '',
+          position: step.position ?? 0,
+          summary: step.summary,
+          details: step.details,
+          status: step.status ?? 'pending',
+          notes: step.notes ?? null,
+        }),
+      },
+    )
     let currentStep = currentTask.current_step
 
-    if (input.steps.delete && input.steps.delete.length > 0) {
-      const deleteIds = new Set(
-        input.steps.delete.map((id) => normalize_id(id, 'Step')),
-      )
-      for (const stepId of deleteIds) {
-        const exists = existingSteps.some((step) => step.id === stepId)
-        if (!exists) {
-          throw new ContinuumError('ITEM_NOT_FOUND', `Step ${stepId} not found`)
-        }
-      }
-      const filtered = existingSteps.filter((step) => !deleteIds.has(step.id))
-      existingSteps.length = 0
-      existingSteps.push(...filtered)
-      if (currentStep !== null && deleteIds.has(currentStep)) {
-        currentStep = null
-      }
+    if (currentStep !== null && collection.deleted_ids.has(currentStep)) {
+      currentStep = null
     }
 
-    if (input.steps.update && input.steps.update.length > 0) {
-      for (const patch of input.steps.update) {
-        const stepId = normalize_id(patch.id, 'Step')
-        const index = existingSteps.findIndex((step) => step.id === stepId)
-        if (index === -1) {
-          throw new ContinuumError('ITEM_NOT_FOUND', `Step ${stepId} not found`)
-        }
-        const existing = existingSteps[index]!
-        const description =
-          patch.description !== undefined
-            ? patch.description
-            : patch.details !== undefined
-              ? patch.details
-              : (existing.description ?? existing.details ?? '')
-        const details =
-          patch.details !== undefined ? patch.details : existing.details
-        existingSteps[index] = {
-          id: existing.id,
-          title: patch.title ?? existing.title,
-          description,
-          position:
-            patch.position !== undefined ? patch.position : existing.position,
-          summary: patch.summary ?? existing.summary,
-          details,
-          status: patch.status ?? existing.status,
-          notes: patch.notes !== undefined ? patch.notes : existing.notes,
-        }
-      }
-    }
-
-    if (input.steps.add && input.steps.add.length > 0) {
-      const maxId = existingSteps.reduce((max, s) => Math.max(max, s.id), 0)
-      const newSteps: Step[] = input.steps.add.map((step, index) => ({
-        id: maxId + index + 1,
-        title: step.title,
-        description: step.description ?? step.details ?? '',
-        position: step.position ?? 0,
-        summary: step.summary,
-        details: step.details,
-        status: step.status ?? 'pending',
-        notes: step.notes ?? null,
-      }))
-      existingSteps.push(...newSteps)
-    }
-
-    const normalized = existingSteps.map((step) => ({
+    const normalized = collection.items.map((step) => ({
       id: step.id,
       title: step.title,
       description: step.description ?? step.details ?? '',
@@ -408,101 +458,40 @@ export async function update_task(
 
   if (input.discoveries) {
     const currentTask = await ensure_task()
-    const existing = [...currentTask.discoveries]
+    const collection = patch_collection<
+      Discovery,
+      DiscoveryInput,
+      DiscoveryPatch
+    >(currentTask.discoveries, input.discoveries, {
+      label: 'Discovery',
+      apply_update: (current, patch) => ({
+        id: current.id,
+        content: patch.content ?? current.content,
+        source: patch.source ?? current.source ?? 'system',
+        impact:
+          patch.impact !== undefined ? patch.impact : (current.impact ?? null),
+        created_at: current.created_at,
+      }),
+      apply_add: (item, index, maxId) => ({
+        id: maxId + index + 1,
+        content: item.content,
+        source: item.source ?? 'system',
+        impact: item.impact ?? null,
+        created_at: new Date().toISOString(),
+      }),
+    })
 
-    if (input.discoveries.delete && input.discoveries.delete.length > 0) {
-      const deleteIds = new Set(
-        input.discoveries.delete.map((id) => normalize_id(id, 'Discovery')),
-      )
-      for (const discoveryId of deleteIds) {
-        const exists = existing.some((item) => item.id === discoveryId)
-        if (!exists) {
-          throw new ContinuumError(
-            'ITEM_NOT_FOUND',
-            `Discovery ${discoveryId} not found`,
-          )
-        }
-      }
-      const filtered = existing.filter((item) => !deleteIds.has(item.id))
-      existing.length = 0
-      existing.push(...filtered)
-    }
-
-    if (input.discoveries.update && input.discoveries.update.length > 0) {
-      for (const patch of input.discoveries.update) {
-        const discoveryId = normalize_id(patch.id, 'Discovery')
-        const index = existing.findIndex((item) => item.id === discoveryId)
-        if (index === -1) {
-          throw new ContinuumError(
-            'ITEM_NOT_FOUND',
-            `Discovery ${discoveryId} not found`,
-          )
-        }
-        const current = existing[index]!
-        existing[index] = {
-          id: current.id,
-          content: patch.content ?? current.content,
-          source: patch.source ?? current.source ?? 'system',
-          impact:
-            patch.impact !== undefined
-              ? patch.impact
-              : (current.impact ?? null),
-          created_at: current.created_at,
-        }
-      }
-    }
-
-    if (input.discoveries.add && input.discoveries.add.length > 0) {
-      const maxId = existing.reduce((max, item) => Math.max(max, item.id), 0)
-      const newItems: Discovery[] = input.discoveries.add.map(
-        (item, index) => ({
-          id: maxId + index + 1,
-          content: item.content,
-          source: item.source ?? 'system',
-          impact: item.impact ?? null,
-          created_at: new Date().toISOString(),
-        }),
-      )
-      existing.push(...newItems)
-    }
-
-    updates.discoveries = JSON.stringify(existing)
+    updates.discoveries = JSON.stringify(collection.items)
   }
 
   if (input.decisions) {
     const currentTask = await ensure_task()
-    const existing = [...currentTask.decisions]
-
-    if (input.decisions.delete && input.decisions.delete.length > 0) {
-      const deleteIds = new Set(
-        input.decisions.delete.map((id) => normalize_id(id, 'Decision')),
-      )
-      for (const decisionId of deleteIds) {
-        const exists = existing.some((item) => item.id === decisionId)
-        if (!exists) {
-          throw new ContinuumError(
-            'ITEM_NOT_FOUND',
-            `Decision ${decisionId} not found`,
-          )
-        }
-      }
-      const filtered = existing.filter((item) => !deleteIds.has(item.id))
-      existing.length = 0
-      existing.push(...filtered)
-    }
-
-    if (input.decisions.update && input.decisions.update.length > 0) {
-      for (const patch of input.decisions.update) {
-        const decisionId = normalize_id(patch.id, 'Decision')
-        const index = existing.findIndex((item) => item.id === decisionId)
-        if (index === -1) {
-          throw new ContinuumError(
-            'ITEM_NOT_FOUND',
-            `Decision ${decisionId} not found`,
-          )
-        }
-        const current = existing[index]!
-        existing[index] = {
+    const collection = patch_collection<Decision, DecisionInput, DecisionPatch>(
+      currentTask.decisions,
+      input.decisions,
+      {
+        label: 'Decision',
+        apply_update: (current, patch) => ({
           id: current.id,
           content: patch.content ?? current.content,
           rationale:
@@ -513,24 +502,19 @@ export async function update_task(
               ? patch.impact
               : (current.impact ?? null),
           created_at: current.created_at,
-        }
-      }
-    }
+        }),
+        apply_add: (item, index, maxId) => ({
+          id: maxId + index + 1,
+          content: item.content,
+          rationale: item.rationale ?? null,
+          source: item.source ?? 'system',
+          impact: item.impact ?? null,
+          created_at: new Date().toISOString(),
+        }),
+      },
+    )
 
-    if (input.decisions.add && input.decisions.add.length > 0) {
-      const maxId = existing.reduce((max, item) => Math.max(max, item.id), 0)
-      const newItems: Decision[] = input.decisions.add.map((item, index) => ({
-        id: maxId + index + 1,
-        content: item.content,
-        rationale: item.rationale ?? null,
-        source: item.source ?? 'system',
-        impact: item.impact ?? null,
-        created_at: new Date().toISOString(),
-      }))
-      existing.push(...newItems)
-    }
-
-    updates.decisions = JSON.stringify(existing)
+    updates.decisions = JSON.stringify(collection.items)
   }
 
   if (Object.keys(updates).length === 0) {

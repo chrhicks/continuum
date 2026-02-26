@@ -54,6 +54,9 @@ type SdkUpdateTaskInput = {
   decisions?: SdkCollectionPatch<SdkTaskNoteInput, Partial<SdkTaskDecision>>
 }
 
+type ServiceCreateTaskInput = Parameters<typeof create_task_for_directory>[1]
+type ServiceUpdateTaskInput = Parameters<typeof update_task_for_directory>[2]
+
 function map_step(step: Step): SdkTaskStep {
   return {
     id: String(step.id),
@@ -111,7 +114,7 @@ function map_list_status(
   return value as TaskStatus | 'deleted' | undefined
 }
 
-function map_create_input(input: SdkCreateTaskInput) {
+function map_create_input(input: SdkCreateTaskInput): ServiceCreateTaskInput {
   return {
     title: input.title,
     type: input.type,
@@ -125,7 +128,7 @@ function map_create_input(input: SdkCreateTaskInput) {
   }
 }
 
-function map_update_input(input: SdkUpdateTaskInput) {
+function map_update_input(input: SdkUpdateTaskInput): ServiceUpdateTaskInput {
   return {
     title: input.title,
     description: input.description,

@@ -52,6 +52,7 @@ import { readConsolidationLog } from '../../memory/log'
 import { recoverStaleNowFiles } from '../../memory/recover'
 import { listMemoryEntries } from '../../memory/list'
 import { importOpencodeRecall } from '../../memory/recall-import'
+import { parseOptionalPositiveInteger, parsePositiveInteger } from './shared'
 
 const DEFAULT_SYNC_PROCESSED_VERSION = 1
 
@@ -610,13 +611,15 @@ function handleRecallDiff(options: {
   const summaryDir = resolveOpencodeOutputDir(repoPath, summaryDirArg)
   const reportEnabled = options.report !== false
   const planEnabled = options.plan !== false
-  const reportPath = resolveDiffReportPath(
+  const reportPath = resolveRecallPath(
     dataRoot,
     typeof options.report === 'string' ? options.report : null,
+    'diff-report.json',
   )
-  const planPath = resolveSyncPlanPath(
+  const planPath = resolveRecallPath(
     dataRoot,
     typeof options.plan === 'string' ? options.plan : null,
+    'sync-plan.json',
   )
 
   if (!existsSync(indexFile)) {
@@ -699,8 +702,16 @@ function handleRecallSync(options: {
   verbose?: boolean
 }): void {
   const dataRoot = resolveRecallDataRoot(options.dataRoot)
-  const ledgerPath = resolveSyncLedgerPath(dataRoot, options.ledger ?? null)
-  const logPath = resolveSyncLogPath(dataRoot, options.log ?? null)
+  const ledgerPath = resolveRecallPath(
+    dataRoot,
+    options.ledger ?? null,
+    'state.json',
+  )
+  const logPath = resolveRecallPath(
+    dataRoot,
+    options.log ?? null,
+    'sync-log.jsonl',
+  )
   const limit = parseSyncLimit(options.limit)
   const processedVersion = parseProcessedVersion(options.processedVersion)
 
@@ -1040,47 +1051,39 @@ function parseRecallMode(value?: string): RecallSearchMode {
 }
 
 function parseRecallLimit(value?: string): number {
-  if (!value) return 5
-  const count = Number(value)
-  if (!Number.isInteger(count) || count <= 0) {
-    throw new Error('Limit must be a positive integer.')
-  }
-  return count
+  return parseOptionalPositiveInteger(
+    value,
+    5,
+    'Limit must be a positive integer.',
+  )
 }
 
 function parseDiffLimit(value?: string): number {
-  if (!value) return 10
-  const count = Number(value)
-  if (!Number.isInteger(count) || count <= 0) {
-    throw new Error('Limit must be a positive integer.')
-  }
-  return count
+  return parseOptionalPositiveInteger(
+    value,
+    10,
+    'Limit must be a positive integer.',
+  )
 }
 
 function parseSyncLimit(value?: string): number | null {
-  if (!value) return null
-  const count = Number(value)
-  if (!Number.isInteger(count) || count <= 0) {
-    throw new Error('Limit must be a positive integer.')
-  }
-  return count
+  return parseOptionalPositiveInteger(
+    value,
+    null,
+    'Limit must be a positive integer.',
+  )
 }
 
 function parseProcessedVersion(value?: string): number {
-  if (!value) return DEFAULT_SYNC_PROCESSED_VERSION
-  const count = Number(value)
-  if (!Number.isInteger(count) || count <= 0) {
-    throw new Error('Processed version must be a positive integer.')
-  }
-  return count
+  return parseOptionalPositiveInteger(
+    value,
+    DEFAULT_SYNC_PROCESSED_VERSION,
+    'Processed version must be a positive integer.',
+  )
 }
 
 function parseTail(value: string): number {
-  const count = Number(value)
-  if (!Number.isInteger(count) || count <= 0) {
-    throw new Error('Tail count must be a positive integer.')
-  }
-  return count
+  return parsePositiveInteger(value, 'Tail count must be a positive integer.')
 }
 
 function parseHours(value: string): number {
@@ -1091,32 +1094,15 @@ function parseHours(value: string): number {
   return hours
 }
 
-function resolveDiffReportPath(dataRoot: string, value: string | null): string {
+function resolveRecallPath(
+  dataRoot: string,
+  value: string | null,
+  defaultFileName: string,
+): string {
   if (value) {
     return resolve(process.cwd(), value)
   }
-  return join(dataRoot, 'recall', 'opencode', 'diff-report.json')
-}
-
-function resolveSyncPlanPath(dataRoot: string, value: string | null): string {
-  if (value) {
-    return resolve(process.cwd(), value)
-  }
-  return join(dataRoot, 'recall', 'opencode', 'sync-plan.json')
-}
-
-function resolveSyncLedgerPath(dataRoot: string, value: string | null): string {
-  if (value) {
-    return resolve(process.cwd(), value)
-  }
-  return join(dataRoot, 'recall', 'opencode', 'state.json')
-}
-
-function resolveSyncLogPath(dataRoot: string, value: string | null): string {
-  if (value) {
-    return resolve(process.cwd(), value)
-  }
-  return join(dataRoot, 'recall', 'opencode', 'sync-log.jsonl')
+  return join(dataRoot, 'recall', 'opencode', defaultFileName)
 }
 
 function writeJsonFile(filePath: string, payload: unknown): void {

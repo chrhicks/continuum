@@ -208,52 +208,56 @@ function buildRecentEntry(options: {
   memoryFileName: string
   anchor: string
 }): string {
-  const { summary } = options
   const duration = formatDuration(options.durationMinutes)
   const lines: string[] = []
   lines.push(
     `## Session ${options.dateStamp} ${options.timeStamp} (${duration})`,
   )
   lines.push('')
-  lines.push(summary.narrative)
-  if (summary.decisions.length > 0) {
-    lines.push('')
-    lines.push('**Decisions**:')
-    lines.push(...summary.decisions.map((item) => `- ${item}`))
-  }
-  if (summary.discoveries.length > 0) {
-    lines.push('')
-    lines.push('**Discoveries**:')
-    lines.push(...summary.discoveries.map((item) => `- ${item}`))
-  }
-  if (summary.whatWorked.length > 0) {
-    lines.push('')
-    lines.push('**What worked**:')
-    lines.push(...summary.whatWorked.map((item) => `- ${item}`))
-  }
-  if (summary.whatFailed.length > 0) {
-    lines.push('')
-    lines.push("**What didn't work**:")
-    lines.push(...summary.whatFailed.map((item) => `- ${item}`))
-  }
-  if (summary.openQuestions.length > 0) {
-    lines.push('')
-    lines.push('**Open questions**:')
-    lines.push(...summary.openQuestions.map((item) => `- ${item}`))
-  }
-  if (summary.nextSteps.length > 0) {
-    lines.push('')
-    lines.push('**Next steps**:')
-    lines.push(...summary.nextSteps.map((item) => `- ${item}`))
-  }
-  if (summary.tasks.length > 0) {
-    lines.push('')
-    lines.push(`**Tasks**: ${summary.tasks.join(', ')}`)
-  }
+  lines.push(
+    ...buildSummaryLines({ summary: options.summary, includeFiles: false }),
+  )
   lines.push(
     `**Link**: [Full details](${options.memoryFileName}#${options.anchor})`,
   )
   return lines.join('\n')
+}
+
+function buildSummaryLines(options: {
+  summary: NowSummary
+  includeFiles: boolean
+}): string[] {
+  const { summary } = options
+  const lines = [summary.narrative]
+  const sections: Array<{ heading: string; items: string[] }> = [
+    { heading: '**Decisions**:', items: summary.decisions },
+    { heading: '**Discoveries**:', items: summary.discoveries },
+    { heading: '**What worked**:', items: summary.whatWorked },
+    { heading: "**What didn't work**:", items: summary.whatFailed },
+    { heading: '**Open questions**:', items: summary.openQuestions },
+    { heading: '**Next steps**:', items: summary.nextSteps },
+  ]
+
+  for (const section of sections) {
+    if (section.items.length === 0) {
+      continue
+    }
+    lines.push('')
+    lines.push(section.heading)
+    lines.push(...section.items.map((item) => `- ${item}`))
+  }
+
+  if (summary.tasks.length > 0) {
+    lines.push('')
+    lines.push(`**Tasks**: ${summary.tasks.join(', ')}`)
+  }
+
+  if (options.includeFiles && summary.files.length > 0) {
+    lines.push('')
+    lines.push(`**Files**: ${formatFileList(summary.files)}`)
+  }
+
+  return lines
 }
 
 function upsertRecent(
@@ -328,52 +332,15 @@ function buildMemorySection(options: {
   summary: NowSummary
   anchor: string
 }): string {
-  const { summary } = options
   const lines: string[] = []
   lines.push(
     `## Session ${options.dateStamp} ${options.timeStamp} UTC (${options.sessionId})`,
   )
   lines.push(`<a name="${options.anchor}"></a>`)
   lines.push('')
-  lines.push(summary.narrative)
-  if (summary.decisions.length > 0) {
-    lines.push('')
-    lines.push('**Decisions**:')
-    lines.push(...summary.decisions.map((item) => `- ${item}`))
-  }
-  if (summary.discoveries.length > 0) {
-    lines.push('')
-    lines.push('**Discoveries**:')
-    lines.push(...summary.discoveries.map((item) => `- ${item}`))
-  }
-  if (summary.whatWorked.length > 0) {
-    lines.push('')
-    lines.push('**What worked**:')
-    lines.push(...summary.whatWorked.map((item) => `- ${item}`))
-  }
-  if (summary.whatFailed.length > 0) {
-    lines.push('')
-    lines.push("**What didn't work**:")
-    lines.push(...summary.whatFailed.map((item) => `- ${item}`))
-  }
-  if (summary.openQuestions.length > 0) {
-    lines.push('')
-    lines.push('**Open questions**:')
-    lines.push(...summary.openQuestions.map((item) => `- ${item}`))
-  }
-  if (summary.nextSteps.length > 0) {
-    lines.push('')
-    lines.push('**Next steps**:')
-    lines.push(...summary.nextSteps.map((item) => `- ${item}`))
-  }
-  if (summary.tasks.length > 0) {
-    lines.push('')
-    lines.push(`**Tasks**: ${summary.tasks.join(', ')}`)
-  }
-  if (summary.files.length > 0) {
-    lines.push('')
-    lines.push(`**Files**: ${formatFileList(summary.files)}`)
-  }
+  lines.push(
+    ...buildSummaryLines({ summary: options.summary, includeFiles: true }),
+  )
   return lines.join('\n')
 }
 
