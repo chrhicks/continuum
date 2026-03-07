@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import type { Command } from 'commander'
 import { isContinuumError } from '../sdk'
+import { getActiveWorkspaceContext } from '../workspace/context'
 
 export type GlobalCliOptions = {
   json: boolean
@@ -21,11 +22,12 @@ type JsonError = {
 }
 
 export function getGlobalOptions(command: Command): GlobalCliOptions {
+  const activeWorkspace = getActiveWorkspaceContext()
   if (!command || typeof (command as Command).opts !== 'function') {
     return {
       json: false,
       quiet: false,
-      cwd: process.cwd(),
+      cwd: activeWorkspace?.workspaceRoot ?? process.cwd(),
     }
   }
 
@@ -37,7 +39,7 @@ export function getGlobalOptions(command: Command): GlobalCliOptions {
     return {
       json: false,
       quiet: false,
-      cwd: process.cwd(),
+      cwd: activeWorkspace?.workspaceRoot ?? process.cwd(),
     }
   }
 
@@ -45,7 +47,7 @@ export function getGlobalOptions(command: Command): GlobalCliOptions {
   return {
     json: Boolean(options.json),
     quiet: Boolean(options.quiet),
-    cwd: options.cwd ?? process.cwd(),
+    cwd: activeWorkspace?.workspaceRoot ?? options.cwd ?? process.cwd(),
   }
 }
 
@@ -111,7 +113,7 @@ export async function runCommand<T>(
       const payload: JsonSuccess<T> = {
         ok: true,
         data,
-        meta: { cwd: process.cwd(), durationMs: Date.now() - startedAt },
+        meta: { cwd: options.cwd, durationMs: Date.now() - startedAt },
       }
       console.log(JSON.stringify(payload, null, 2))
       return
@@ -124,7 +126,7 @@ export async function runCommand<T>(
       const payload: JsonError = {
         ok: false,
         error: formatError(error),
-        meta: { cwd: process.cwd(), durationMs: Date.now() - startedAt },
+        meta: { cwd: options.cwd, durationMs: Date.now() - startedAt },
       }
       console.log(JSON.stringify(payload, null, 2))
       process.exitCode = 1

@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { join, relative } from 'node:path'
+import { getWorkspaceContext } from '../../memory/paths'
 import { parseFrontmatter } from '../../utils/frontmatter'
 import { SUMMARY_PREFIX, resolveOpencodeOutputDir } from '../opencode/paths'
 
@@ -49,8 +50,9 @@ export function searchRecall(options: RecallSearchOptions): RecallSearchResult {
   }
   const mode = normalizeMode(options.mode)
   const limit = normalizeLimit(options.limit)
+  const workspace = getWorkspaceContext()
   const summaryDir = resolveOpencodeOutputDir(
-    process.cwd(),
+    workspace.workspaceRoot,
     options.summaryDir ?? null,
   )
 
@@ -364,6 +366,6 @@ function isSummaryFile(fileName: string): boolean {
 }
 
 function formatPath(filePath: string): string {
-  const relativePath = relative(process.cwd(), filePath)
+  const relativePath = relative(getWorkspaceContext().workspaceRoot, filePath)
   return relativePath.length > 0 ? relativePath : filePath
 }

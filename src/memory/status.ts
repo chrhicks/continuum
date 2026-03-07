@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
-import { MEMORY_DIR, memoryPath } from './paths'
+import { memoryPath, resolveMemoryDir } from './paths'
 import { resolveCurrentSessionPath } from './session'
 
 export type MemoryStatus = {
@@ -37,7 +37,7 @@ export function getStatus(): MemoryStatus {
     ? extractLastTimestamp(logPath)
     : null
 
-  const memoryBytes = getDirectorySize(MEMORY_DIR)
+  const memoryBytes = getDirectorySize(resolveMemoryDir())
 
   return {
     nowPath,

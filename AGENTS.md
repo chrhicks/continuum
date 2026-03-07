@@ -14,7 +14,7 @@ Drizzle for ORM/DB
 I always want you to run tests and check types
 
 - **Full suite** - `bun test`
-- **Smoke-test** - `bun run bin/continuum <command>` (example: `bun run bin/continuum task list --json`)
+- **Smoke-test** - `continuum <command>` (example: `continuum task list --json`)
 - **Typecheck** - `bun run typecheck`
 
 ## Temporary Files

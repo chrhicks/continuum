@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { MEMORY_DIR } from './paths'
+import { resolveMemoryDir } from './paths'
 
 export type ConsolidationLogResult = {
   filePath: string
@@ -12,7 +12,7 @@ export type ConsolidationLogResult = {
 export function readConsolidationLog(
   options: { tail?: number; memoryDir?: string } = {},
 ): ConsolidationLogResult {
-  const memoryDir = options.memoryDir ?? MEMORY_DIR
+  const memoryDir = options.memoryDir ?? resolveMemoryDir()
   const filePath = join(memoryDir, 'consolidation.log')
   if (!existsSync(filePath)) {
     return { filePath, lines: [], totalLines: 0, truncated: false }

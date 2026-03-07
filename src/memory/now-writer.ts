@@ -14,10 +14,13 @@ import { consolidateNow } from './consolidate'
 import { getMemoryConfig } from './config'
 import { initMemory } from './init'
 
-const LOCK_FILE = memoryPath('.now.lock')
 const MAX_LOCK_RETRIES = 3
 const LOCK_RETRY_DELAY_MS = 200
 const STALE_LOCK_MS = 60_000
+
+function getNowLockPath(): string {
+  return memoryPath('.now.lock')
+}
 
 type AppendOptions = {
   tags?: string[]
@@ -87,12 +90,13 @@ async function withLock(action: () => void | Promise<void>): Promise<void> {
   let attempt = 0
   while (attempt < MAX_LOCK_RETRIES) {
     try {
-      const descriptor = openSync(LOCK_FILE, 'wx')
+      const lockFile = getNowLockPath()
+      const descriptor = openSync(lockFile, 'wx')
       closeSync(descriptor)
       try {
         await action()
       } finally {
-        unlinkSync(LOCK_FILE)
+        unlinkSync(lockFile)
       }
       return
     } catch {
@@ -109,16 +113,17 @@ async function withLock(action: () => void | Promise<void>): Promise<void> {
 }
 
 function tryClearStaleLock(): boolean {
-  if (!existsSync(LOCK_FILE)) {
+  const lockFile = getNowLockPath()
+  if (!existsSync(lockFile)) {
     return false
   }
   try {
-    const stats = statSync(LOCK_FILE)
+    const stats = statSync(lockFile)
     const ageMs = Date.now() - stats.mtimeMs
     if (ageMs <= STALE_LOCK_MS) {
       return false
     }
-    unlinkSync(LOCK_FILE)
+    unlinkSync(lockFile)
     return true
   } catch {
     return false

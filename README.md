@@ -70,6 +70,10 @@ continuum --json task list --status=open
 continuum --cwd /path/to/repo task list
 ```
 
+For memory commands, Continuum resolves project-local `.continuum/` state from
+the nearest parent containing `.continuum/` or `.git/`, so running from a repo
+subdirectory still targets the repo root.
+
 ## SDK Usage
 
 The SDK is designed for programmatic access and follows the contract in `src/sdk.d.ts`.

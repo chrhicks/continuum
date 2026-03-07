@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { initMemory } from './init'
-import { MEMORY_DIR, memoryPath } from './paths'
+import { memoryPath, resolveMemoryDir } from './paths'
 import { getMemoryConfig } from './config'
 import { parseFrontmatter } from '../utils/frontmatter'
 import { resolveCurrentSessionPath } from './session'
@@ -65,7 +65,7 @@ export async function consolidateNow(
   const runConsolidation = async (): Promise<ConsolidationOutput> => {
     if (!dryRun) {
       initMemory()
-    } else if (!existsSync(MEMORY_DIR)) {
+    } else if (!existsSync(resolveMemoryDir())) {
       throw new Error(
         'Memory directory not initialized. Run: continuum memory init',
       )

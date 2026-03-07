@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { getWorkspaceContext } from '../../../memory/paths'
 import {
   buildOpencodeDiffProjectScope,
   buildOpencodeDiffReport,
@@ -36,7 +37,10 @@ type RecallDiffContext = {
 }
 
 function buildRecallDiffContext(options: RecallDiffOptions): RecallDiffContext {
-  const repoPath = resolve(process.cwd(), options.repo ?? '.')
+  const workspace = getWorkspaceContext()
+  const repoPath = options.repo
+    ? resolve(process.cwd(), options.repo)
+    : workspace.workspaceRoot
   const dataRoot = resolveRecallDataRoot(options.dataRoot)
   const summaryDirArg = options.summaryDir ?? options.summaries ?? null
 

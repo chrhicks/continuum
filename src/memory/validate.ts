@@ -1,6 +1,6 @@
 import { existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { MEMORY_DIR } from './paths'
+import { resolveMemoryDir } from './paths'
 import {
   validateConsolidatedMemoryFrontmatter,
   validateNowMemoryFrontmatter,
@@ -21,7 +21,7 @@ export type MemoryValidationResult = {
 export function validateMemory(
   options: { memoryDir?: string } = {},
 ): MemoryValidationResult {
-  const memoryDir = options.memoryDir ?? MEMORY_DIR
+  const memoryDir = options.memoryDir ?? resolveMemoryDir()
   if (!existsSync(memoryDir)) {
     return { errors: [], filesChecked: 0 }
   }

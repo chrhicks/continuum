@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, statSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { MEMORY_DIR } from './paths'
+import { resolveMemoryDir } from './paths'
 import { getCurrentSessionPath } from './session'
 
 export type MemoryListEntry = {
@@ -15,7 +15,7 @@ export type MemoryListEntry = {
 export function listMemoryEntries(
   options: { memoryDir?: string } = {},
 ): MemoryListEntry[] {
-  const memoryDir = options.memoryDir ?? MEMORY_DIR
+  const memoryDir = options.memoryDir ?? resolveMemoryDir()
   if (!existsSync(memoryDir)) {
     return []
   }

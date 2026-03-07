@@ -10,7 +10,7 @@ import { join, resolve } from 'node:path'
 import { consolidateNow } from './consolidate'
 import { buildNowContent } from './recall-import-content'
 import { initMemory } from './init'
-import { memoryPath } from './paths'
+import { getWorkspaceContext, memoryPath } from './paths'
 import { parseFrontmatter } from '../utils/frontmatter'
 import {
   SUMMARY_PREFIX,
@@ -47,14 +47,12 @@ export type RecallImportResult = {
   skipped: RecallImportSkipped[]
 }
 
-const DEFAULT_SUMMARY_DIR = join('.continuum', 'recall', 'opencode')
-const TEMP_IMPORT_DIR = join('.tmp', 'recall-import')
-
 export async function importOpencodeRecall(
   options: RecallImportOptions = {},
 ): Promise<RecallImportResult> {
+  const workspace = getWorkspaceContext()
   const summaryDir = resolveOpencodeOutputDir(
-    process.cwd(),
+    workspace.workspaceRoot,
     options.summaryDir ?? options.outDir ?? null,
   )
   if (!existsSync(summaryDir)) {
@@ -191,12 +189,12 @@ function loadImportedSessions(memoryDir: string): Set<string> {
 }
 
 function ensureTempDir(): void {
-  mkdirSync(TEMP_IMPORT_DIR, { recursive: true })
+  mkdirSync(resolveTempImportDir(), { recursive: true })
 }
 
 function buildTempPath(sessionId: string): string {
   const safe = sessionId.replace(/[^a-zA-Z0-9_-]+/g, '-')
-  return join(TEMP_IMPORT_DIR, `recall-${safe}.md`)
+  return join(resolveTempImportDir(), `recall-${safe}.md`)
 }
 
 function cleanupTempPath(filePath: string): void {
@@ -207,4 +205,8 @@ function cleanupTempPath(filePath: string): void {
   if (existsSync(backupPath)) {
     rmSync(backupPath)
   }
+}
+
+function resolveTempImportDir(): string {
+  return join(getWorkspaceContext().workspaceRoot, '.tmp', 'recall-import')
 }

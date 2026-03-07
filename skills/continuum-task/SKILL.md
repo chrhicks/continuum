@@ -75,7 +75,7 @@ Note source:
 Create the local database in the current directory.
 
 ```bash
-bun run bin/continuum init
+continuum init
 ```
 
 ### List
@@ -83,7 +83,7 @@ bun run bin/continuum init
 List tasks with filters and pagination.
 
 ```bash
-bun run bin/continuum task list --status ready --type feature --sort priority --order asc --limit 20
+continuum task list --status ready --type feature --sort priority --order asc --limit 20
 ```
 
 Options:
@@ -104,9 +104,9 @@ Default ordering (when `--sort` is omitted): priority ascending, then createdAt 
 View a task, optionally expanding relations or printing a tree.
 
 ```bash
-bun run bin/continuum task get <task_id>
-bun run bin/continuum task view <task_id> --expand all
-bun run bin/continuum task get <task_id> --tree
+continuum task get <task_id>
+continuum task view <task_id> --expand all
+continuum task get <task_id> --tree
 ```
 
 Options:
@@ -120,11 +120,11 @@ Options:
 Create a task using flags or JSON input.
 
 ```bash
-bun run bin/continuum task create --title "Add login audit" --type feature --description "@docs/task.md"
+continuum task create --title "Add login audit" --type feature --description "@docs/task.md"
 ```
 
 ```bash
-bun run bin/continuum task create --input @task.json
+continuum task create --input @task.json
 ```
 
 Supported fields:
@@ -144,11 +144,11 @@ Supported fields:
 Update a task with direct flags or a JSON patch.
 
 ```bash
-bun run bin/continuum task update <task_id> --status ready --plan @plan.md
+continuum task update <task_id> --status ready --plan @plan.md
 ```
 
 ```bash
-bun run bin/continuum task update <task_id> --patch @patch.json
+continuum task update <task_id> --patch @patch.json
 ```
 
 Supported fields:
@@ -168,7 +168,7 @@ Supported fields:
 Complete a task with an outcome summary.
 
 ```bash
-bun run bin/continuum task complete <task_id> --outcome @outcome.md
+continuum task complete <task_id> --outcome @outcome.md
 ```
 
 ### Delete
@@ -176,7 +176,7 @@ bun run bin/continuum task complete <task_id> --outcome @outcome.md
 Delete a task by id. Only do this when explicitly requested.
 
 ```bash
-bun run bin/continuum task delete <task_id>
+continuum task delete <task_id>
 ```
 
 ### Validate
@@ -184,7 +184,7 @@ bun run bin/continuum task delete <task_id>
 Check whether a status transition is valid (missing fields, open blockers).
 
 ```bash
-bun run bin/continuum task validate <task_id> --transition completed
+continuum task validate <task_id> --transition completed
 ```
 
 ### Graph
@@ -192,9 +192,9 @@ bun run bin/continuum task validate <task_id> --transition completed
 Query task relationships.
 
 ```bash
-bun run bin/continuum task graph ancestors <task_id>
-bun run bin/continuum task graph descendants <task_id>
-bun run bin/continuum task graph children <task_id>
+continuum task graph ancestors <task_id>
+continuum task graph descendants <task_id>
+continuum task graph children <task_id>
 ```
 
 ### Templates
@@ -202,7 +202,7 @@ bun run bin/continuum task graph children <task_id>
 List available task templates (types).
 
 ```bash
-bun run bin/continuum task templates list
+continuum task templates list
 ```
 
 ### Steps
@@ -212,19 +212,19 @@ Add, update, complete, or list task steps.
 Add steps (JSON array of TaskStepInput):
 
 ```bash
-bun run bin/continuum task steps add <task_id> --steps @steps.json
+continuum task steps add <task_id> --steps @steps.json
 ```
 
 Update a step:
 
 ```bash
-bun run bin/continuum task steps update <task_id> <step_id> --status in_progress
+continuum task steps update <task_id> <step_id> --status in_progress
 ```
 
 Complete a step:
 
 ```bash
-bun run bin/continuum task steps complete <task_id> --step-id <step_id> --notes "Done"
+continuum task steps complete <task_id> --step-id <step_id> --notes "Done"
 ```
 
 Note: completing an already completed step returns a warning and makes no changes.
@@ -232,7 +232,7 @@ Note: completing an already completed step returns a warning and makes no change
 List steps:
 
 ```bash
-bun run bin/continuum task steps list <task_id>
+continuum task steps list <task_id>
 ```
 
 TaskStepInput shape:
@@ -255,7 +255,7 @@ TaskStepInput shape:
 Add discoveries or decisions to a task.
 
 ```bash
-bun run bin/continuum task note add <task_id> --kind discovery --content "@notes.md" --source agent
+continuum task note add <task_id> --kind discovery --content "@notes.md" --source agent
 ```
 
 Options:

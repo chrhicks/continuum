@@ -27,7 +27,7 @@ Priority ordering: lower numbers are higher priority (default is 100).
 ## Preconditions
 
 - `GOAL.md` exists at repo root
-- Continuum task DB initialized (`bun run bin/continuum init`)
+- Continuum task DB initialized (`continuum init`)
 
 If either is missing, stop and ask the user to fix it.
 
@@ -36,8 +36,10 @@ If either is missing, stop and ask the user to fix it.
 1. Read `GOAL.md` and write a one-line alignment statement.
 2. Search memory for prior context on this goal area:
    ```bash
-   bun run bin/continuum memory search "<GOAL keyword or active task title>"
+   continuum memory search "<GOAL keyword or active task title>"
    ```
+   Run from the target repo (or pass `--cwd <repo-or-subdir>`) so the search
+   targets that workspace's local `.continuum` state.
    Note any prior task IDs, known failures, or decisions for this area. Proceed regardless of results.
 3. Preflight to avoid redundant work:
    - List `open` tasks.
@@ -58,7 +60,7 @@ If either is missing, stop and ask the user to fix it.
    - If no steps exist, add 1-3 concrete steps derived from GOAL.md success criteria (avoid "run the loop" phrasing).
 7. Append a step-start memory entry (run before beginning work):
    ```bash
-   bun run bin/continuum memory append agent "Task: <task_id>; Step: <step_id>; Status: starting; Intent: <one-line step goal>"
+   continuum memory append agent "Task: <task_id>; Step: <step_id>; Status: starting; Intent: <one-line step goal>"
    ```
 8. Mark the step `in_progress`.
 9. Do the work (code, docs, config) that completes the step.
@@ -68,19 +70,19 @@ If either is missing, stop and ask the user to fix it.
 10. Validate (one command at a time, they don't `&&` well):
     - Run `bun run typecheck`
     - Run `bun test`
-    - Run one smoke command relevant to the work (example: `bun run bin/continuum task list --json`)
+    - Run one smoke command relevant to the work (example: `continuum task list --json`)
 
 11. Add notes (discovery/decision) to the task as needed.
 12. Complete the step with a concise summary.
 13. Flush task notes to NOW memory:
     ```bash
-    bun run bin/continuum task notes flush <task_id>
+    continuum task notes flush <task_id>
     ```
     Skip this step if Phase 2 has not shipped yet (`task notes flush` command does not exist).
 14. If all steps are complete, validate and complete the task.
 15. Append the full loop-end memory entry (auto-starts a session if missing):
     ```bash
-    bun run bin/continuum memory append agent "..."
+    continuum memory append agent "..."
     ```
 16. Stop and return control to the user.
 
@@ -89,74 +91,74 @@ If either is missing, stop and ask the user to fix it.
 Create an investigation task when queue is empty:
 
 ```bash
-bun run bin/continuum task create --title "Discover next GOAL-aligned work" --type investigation --priority 50 --intent "Aligned to GOAL.md: <section>; investigate repo gaps and generate actionable tasks" --description "Explore code/tests/docs for missing or stale work aligned to GOAL.md success criteria. Create 1-5 deduplicated tasks with evidence and priority." --plan "Plan: 1) Inspect GOAL criteria vs current implementation 2) Identify highest-value gaps with evidence 3) Create prioritized follow-up tasks"
+continuum task create --title "Discover next GOAL-aligned work" --type investigation --priority 50 --intent "Aligned to GOAL.md: <section>; investigate repo gaps and generate actionable tasks" --description "Explore code/tests/docs for missing or stale work aligned to GOAL.md success criteria. Create 1-5 deduplicated tasks with evidence and priority." --plan "Plan: 1) Inspect GOAL criteria vs current implementation 2) Identify highest-value gaps with evidence 3) Create prioritized follow-up tasks"
 ```
 
 List open tasks (default queue, priority-ordered):
 
 ```bash
-bun run bin/continuum task list --status open --sort priority --order asc --limit 20
+continuum task list --status open --sort priority --order asc --limit 20
 ```
 
 List ready tasks (optional queue):
 
 ```bash
-bun run bin/continuum task list --status ready --sort priority --order asc --limit 1
+continuum task list --status ready --sort priority --order asc --limit 1
 ```
 
 Get task details:
 
 ```bash
-bun run bin/continuum task get <task_id>
+continuum task get <task_id>
 ```
 
 Create task from goal (leave status as default unless you explicitly use a ready queue):
 
 ```bash
-bun run bin/continuum task create --title "<title from GOAL.md success criteria>" --type feature --priority 100 --intent "Aligned to GOAL.md: <section>" --description "@GOAL.md" --plan "Plan: <1-3 steps>"
+continuum task create --title "<title from GOAL.md success criteria>" --type feature --priority 100 --intent "Aligned to GOAL.md: <section>" --description "@GOAL.md" --plan "Plan: <1-3 steps>"
 ```
 
 List steps:
 
 ```bash
-bun run bin/continuum task steps list <task_id>
+continuum task steps list <task_id>
 ```
 
 Add steps:
 
 ```bash
-bun run bin/continuum task steps add <task_id> --steps @steps.json
+continuum task steps add <task_id> --steps @steps.json
 ```
 
 Add or update plan:
 
 ```bash
-bun run bin/continuum task update <task_id> --plan "Plan: <1-3 steps>"
+continuum task update <task_id> --plan "Plan: <1-3 steps>"
 ```
 
 Mark in progress:
 
 ```bash
-bun run bin/continuum task steps update <task_id> <step_id> --status in_progress
+continuum task steps update <task_id> <step_id> --status in_progress
 ```
 
 Complete step:
 
 ```bash
-bun run bin/continuum task steps complete <task_id> --step-id <step_id> --notes "Done"
+continuum task steps complete <task_id> --step-id <step_id> --notes "Done"
 ```
 
 Add note:
 
 ```bash
-bun run bin/continuum task note add <task_id> --kind discovery --content "@notes.md" --source agent
+continuum task note add <task_id> --kind discovery --content "@notes.md" --source agent
 ```
 
 Validate and complete task:
 
 ```bash
-bun run bin/continuum task validate <task_id> --transition completed
-bun run bin/continuum task complete <task_id> --outcome @outcome.md
+continuum task validate <task_id> --transition completed
+continuum task complete <task_id> --outcome @outcome.md
 ```
 
 ## NOW Memory Entry (Minimum)

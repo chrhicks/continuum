@@ -776,6 +776,61 @@ describe('cli input', () => {
 })
 
 describe('memory session CLI', () => {
+  test('memory init from nested subdir targets repo root', async () => {
+    await withTempCwd(async () => {
+      const repoRoot = process.cwd()
+      const nested = join(repoRoot, 'apps', 'web')
+      mkdirSync(join(repoRoot, '.git'), { recursive: true })
+      mkdirSync(nested, { recursive: true })
+      process.chdir(nested)
+
+      const originalArgv = process.argv
+      process.argv = ['node', 'continuum', 'memory', 'init']
+
+      try {
+        await withCapturedLogs(async () => {
+          await main()
+        })
+        expect(
+          existsSync(join(repoRoot, '.continuum', 'memory', '.gitignore')),
+        ).toBe(true)
+        expect(existsSync(join(nested, '.continuum'))).toBe(false)
+      } finally {
+        process.argv = originalArgv
+      }
+    })
+  })
+
+  test('memory list uses explicit --cwd workspace target', async () => {
+    await withTempCwd(async () => {
+      const outerRoot = process.cwd()
+      const repoRoot = join(outerRoot, 'repo')
+      const nested = join(repoRoot, 'apps', 'web')
+      const memoryDir = join(repoRoot, '.continuum', 'memory')
+      mkdirSync(join(repoRoot, '.git'), { recursive: true })
+      mkdirSync(nested, { recursive: true })
+      mkdirSync(memoryDir, { recursive: true })
+      writeFileSync(
+        join(memoryDir, 'NOW-2026-02-02T16-10-00.md'),
+        'hello',
+        'utf-8',
+      )
+
+      const originalArgv = process.argv
+      process.argv = ['node', 'continuum', '--cwd', nested, 'memory', 'list']
+
+      try {
+        const logs = await withCapturedLogs(async () => {
+          await main()
+        })
+        const output = logs.join('\n')
+        expect(output).toContain('NOW-2026-02-02T16-10-00.md')
+      } finally {
+        process.argv = originalArgv
+      }
+    })
+  })
+
   test('memory list prints memory files', async () => {
     await withTempCwd(async () => {
       const memoryDir = join(process.cwd(), '.continuum', 'memory')

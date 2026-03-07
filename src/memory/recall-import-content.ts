@@ -1,4 +1,5 @@
 import { serializeFrontmatter } from '../utils/frontmatter'
+import { getWorkspaceContext } from './paths'
 import type { OpencodeRecallSummary } from '../recall/opencode/summary-parse'
 
 const NOW_FRONTMATTER_ORDER = [
@@ -14,6 +15,7 @@ const NOW_FRONTMATTER_ORDER = [
 ]
 
 export function buildNowContent(summary: OpencodeRecallSummary): string {
+  const workspace = getWorkspaceContext()
   const focus = summary.focus
   const tags = ['opencode', 'recall']
   const relatedTasks = extractTaskIds(summary.tasks)
@@ -27,7 +29,7 @@ export function buildNowContent(summary: OpencodeRecallSummary): string {
       timestamp_start: summary.createdAt,
       timestamp_end: summary.updatedAt,
       duration_minutes: durationMinutes,
-      project_path: summary.directory ?? process.cwd(),
+      project_path: summary.directory ?? workspace.workspaceRoot,
       tags,
       parent_session: null,
       related_tasks: relatedTasks,

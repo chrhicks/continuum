@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
-import { MEMORY_DIR } from './paths'
+import { formatWorkspacePath, resolveMemoryDir } from './paths'
 import { normalizeTags } from './util'
 import { parseFrontmatter } from '../utils/frontmatter'
 
@@ -23,11 +23,12 @@ export function searchMemory(
   tags: string[] = [],
   afterDate?: Date,
 ): MemorySearchResult {
-  if (!existsSync(MEMORY_DIR)) {
+  const memoryDir = resolveMemoryDir()
+  if (!existsSync(memoryDir)) {
     return { matches: [], filesSearched: 0 }
   }
 
-  const files = listMemoryFiles(tier)
+  const files = listMemoryFiles(memoryDir, tier)
   const normalizedTags = normalizeTags(tags, { trim: true, dropEmpty: true })
   const normalizedQuery = query.toLowerCase()
   const afterMs = afterDate ? afterDate.getTime() : null
@@ -59,7 +60,11 @@ export function searchMemory(
     const lines = content.split('\n')
     lines.forEach((line, index) => {
       if (line.toLowerCase().includes(normalizedQuery)) {
-        matches.push({ filePath, lineNumber: index + 1, lineText: line })
+        matches.push({
+          filePath: formatWorkspacePath(filePath),
+          lineNumber: index + 1,
+          lineText: line,
+        })
       }
     })
   }
@@ -88,11 +93,11 @@ function resolveFileDate(filePath: string, content: string): Date {
   return stats.mtime
 }
 
-function listMemoryFiles(tier: MemorySearchTier): string[] {
-  const entries = readdirSync(MEMORY_DIR)
+function listMemoryFiles(memoryDir: string, tier: MemorySearchTier): string[] {
+  const entries = readdirSync(memoryDir)
   const allFiles = entries
     .filter((file) => isMemoryFile(file))
-    .map((file) => join(MEMORY_DIR, file))
+    .map((file) => join(memoryDir, file))
 
   if (tier === 'all') {
     return allFiles.sort()

@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { Database } from 'bun:sqlite'
+import { getWorkspaceContext } from '../../memory/paths'
 
 import {
   compareOptionalNumber,
@@ -65,7 +66,9 @@ export type OpencodeExtractionResult = {
 export function extractOpencodeSessions(
   options: OpencodeExtractionOptions = {},
 ): OpencodeExtractionResult {
-  const repoPath = resolve(options.repoPath ?? process.cwd())
+  const repoPath = resolve(
+    options.repoPath ?? getWorkspaceContext().workspaceRoot,
+  )
   const dbPath = resolveOpencodeDbPath(options.dbPath)
   const outDir = resolveOpencodeOutputDir(repoPath, options.outDir)
 

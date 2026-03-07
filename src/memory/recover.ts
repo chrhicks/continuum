@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { MEMORY_DIR } from './paths'
+import { resolveMemoryDir } from './paths'
 import { getCurrentSessionPath } from './session'
 import { getMemoryConfig } from './config'
 import { parseFrontmatter } from '../utils/frontmatter'
@@ -25,7 +25,7 @@ export type RecoverResult = StaleNowScanResult & {
 export function scanStaleNowFiles(
   options: { maxHours?: number; memoryDir?: string; nowMs?: number } = {},
 ): StaleNowScanResult {
-  const memoryDir = options.memoryDir ?? MEMORY_DIR
+  const memoryDir = options.memoryDir ?? resolveMemoryDir()
   const nowMs = options.nowMs ?? Date.now()
   const thresholdHours = options.maxHours ?? getMemoryConfig().now_max_hours
 

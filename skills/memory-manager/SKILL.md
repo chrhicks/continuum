@@ -19,6 +19,9 @@ consolidates project context across OpenCode sessions.
 
 Use `continuum memory` for all memory operations. Do not manually edit files
 under `.continuum/memory/` unless the CLI cannot run and recovery is required.
+When the CLI is installed globally, run memory commands from the target repo or
+pass `--cwd <repo-or-subdir>`; memory resolves project-local state from the
+nearest parent containing `.continuum/` or `.git/`.
 
 ## Memory Architecture
 
@@ -112,7 +115,7 @@ continuum memory recall diff
 
 # Step 3: Execute the sync plan (use --dry-run first)
 continuum memory recall sync --dry-run
-continuum memory recall sync --command "opencode ..." 
+continuum memory recall sync --command "opencode ..."
 
 # Import summaries directly from a directory
 continuum memory recall import --summary-dir <dir> [--dry-run]
@@ -258,7 +261,7 @@ memory_sections:
 # Optional: LLM-powered narrative consolidation
 consolidation:
   api_url: https://opencode.ai/zen/v1/chat/completions
-  api_key: sk-...       # or set OPENCODE_ZEN_API_KEY / OPENAI_API_KEY env var
+  api_key: sk-... # or set OPENCODE_ZEN_API_KEY / OPENAI_API_KEY env var
   model: gpt-4o-mini
   max_tokens: 4000
   timeout_ms: 120000

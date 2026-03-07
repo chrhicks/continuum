@@ -11,7 +11,7 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { MEMORY_DIR } from './paths'
+import { resolveMemoryDir } from './paths'
 
 export const LOG_ROTATION_LINES = 1000
 
@@ -151,7 +151,8 @@ export function cleanupOldNowFiles(
   activeNowPath: string,
   retentionDays: number,
 ): string[] {
-  if (!existsSync(MEMORY_DIR)) {
+  const memoryDir = resolveMemoryDir()
+  if (!existsSync(memoryDir)) {
     return []
   }
 
@@ -159,11 +160,11 @@ export function cleanupOldNowFiles(
   const activePath = resolve(activeNowPath)
   const removed: string[] = []
 
-  for (const fileName of readdirSync(MEMORY_DIR)) {
+  for (const fileName of readdirSync(memoryDir)) {
     if (!/^NOW-.*\.md$/.test(fileName)) {
       continue
     }
-    const filePath = join(MEMORY_DIR, fileName)
+    const filePath = join(memoryDir, fileName)
     if (resolve(filePath) === activePath) {
       continue
     }

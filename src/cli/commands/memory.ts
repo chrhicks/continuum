@@ -6,6 +6,7 @@ import {
   endSession,
 } from '../../memory/session'
 import { consolidateNow } from '../../memory/consolidate'
+import { formatWorkspacePath, resolveMemoryDir } from '../../memory/paths'
 import {
   logConsolidationResult,
   registerMemoryHandlers,
@@ -26,7 +27,9 @@ export function createMemoryCommand(): Command {
     .description('Initialize memory system')
     .action(() => {
       initMemory()
-      console.log('Memory initialized at .continuum/memory/')
+      console.log(
+        `Memory initialized at ${formatWorkspacePath(resolveMemoryDir())}`,
+      )
     })
 
   const sessionCommand = new Command('session').description(

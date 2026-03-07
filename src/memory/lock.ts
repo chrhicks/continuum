@@ -14,10 +14,13 @@ export type MemoryLockOptions = {
   staleLockMs?: number
 }
 
-export const MEMORY_LOCK_PATH = memoryPath('.memory.lock')
 const DEFAULT_RETRIES = 5
 const DEFAULT_RETRY_DELAY_MS = 200
 const DEFAULT_STALE_LOCK_MS = 60_000
+
+export function getMemoryLockPath(): string {
+  return memoryPath('.memory.lock')
+}
 
 export function withMemoryLock<T>(
   action: () => T,
@@ -31,10 +34,11 @@ export function withMemoryLock<T>(
 
   while (attempt < retries) {
     try {
-      const descriptor = openSync(MEMORY_LOCK_PATH, 'wx')
+      const memoryLockPath = getMemoryLockPath()
+      const descriptor = openSync(memoryLockPath, 'wx')
       closeSync(descriptor)
       writeFileSync(
-        MEMORY_LOCK_PATH,
+        memoryLockPath,
         JSON.stringify({
           pid: process.pid,
           timestamp: new Date().toISOString(),
@@ -44,8 +48,8 @@ export function withMemoryLock<T>(
       try {
         return action()
       } finally {
-        if (existsSync(MEMORY_LOCK_PATH)) {
-          unlinkSync(MEMORY_LOCK_PATH)
+        if (existsSync(memoryLockPath)) {
+          unlinkSync(memoryLockPath)
         }
       }
     } catch {
@@ -75,10 +79,11 @@ export async function withMemoryLockAsync<T>(
 
   while (attempt < retries) {
     try {
-      const descriptor = openSync(MEMORY_LOCK_PATH, 'wx')
+      const memoryLockPath = getMemoryLockPath()
+      const descriptor = openSync(memoryLockPath, 'wx')
       closeSync(descriptor)
       writeFileSync(
-        MEMORY_LOCK_PATH,
+        memoryLockPath,
         JSON.stringify({
           pid: process.pid,
           timestamp: new Date().toISOString(),
@@ -88,8 +93,8 @@ export async function withMemoryLockAsync<T>(
       try {
         return await action()
       } finally {
-        if (existsSync(MEMORY_LOCK_PATH)) {
-          unlinkSync(MEMORY_LOCK_PATH)
+        if (existsSync(memoryLockPath)) {
+          unlinkSync(memoryLockPath)
         }
       }
     } catch {
@@ -108,16 +113,17 @@ export async function withMemoryLockAsync<T>(
 }
 
 function tryClearStaleLock(staleLockMs: number): boolean {
-  if (!existsSync(MEMORY_LOCK_PATH)) {
+  const memoryLockPath = getMemoryLockPath()
+  if (!existsSync(memoryLockPath)) {
     return false
   }
   try {
-    const stats = statSync(MEMORY_LOCK_PATH)
+    const stats = statSync(memoryLockPath)
     const ageMs = Date.now() - stats.mtimeMs
     if (ageMs <= staleLockMs) {
       return false
     }
-    unlinkSync(MEMORY_LOCK_PATH)
+    unlinkSync(memoryLockPath)
     return true
   } catch {
     return false

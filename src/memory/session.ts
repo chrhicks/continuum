@@ -9,11 +9,13 @@ import {
 import { randomUUID } from 'node:crypto'
 import { basename } from 'node:path'
 import { initMemory } from './init'
-import { memoryPath } from './paths'
+import { getWorkspaceContext, memoryPath } from './paths'
 import { parseFrontmatter, replaceFrontmatter } from '../utils/frontmatter'
 import { withMemoryLock } from './lock'
 
-const CURRENT_SESSION_FILE = memoryPath('.current')
+function getCurrentSessionFilePath(): string {
+  return memoryPath('.current')
+}
 
 export type SessionInfo = {
   filePath: string
@@ -33,7 +35,11 @@ export function ensureCurrentSessionPath(): string {
     }
     const fallbackPath = resolveCurrentSessionPath({ allowFallback: true })
     if (fallbackPath) {
-      writeFileSync(CURRENT_SESSION_FILE, basename(fallbackPath), 'utf-8')
+      writeFileSync(
+        getCurrentSessionFilePath(),
+        basename(fallbackPath),
+        'utf-8',
+      )
       return fallbackPath
     }
     return startSessionUnlocked().filePath
@@ -79,18 +85,20 @@ export function endSession(): string {
       keys.length ? keys : undefined,
     )
     writeFileSync(filePath, replaced, 'utf-8')
-    if (existsSync(CURRENT_SESSION_FILE)) {
-      unlinkSync(CURRENT_SESSION_FILE)
+    const currentSessionFile = getCurrentSessionFilePath()
+    if (existsSync(currentSessionFile)) {
+      unlinkSync(currentSessionFile)
     }
     return filePath
   })
 }
 
 export function getCurrentSessionPath(): string | null {
-  if (!existsSync(CURRENT_SESSION_FILE)) {
+  const currentSessionFile = getCurrentSessionFilePath()
+  if (!existsSync(currentSessionFile)) {
     return null
   }
-  const filename = readFileSync(CURRENT_SESSION_FILE, 'utf-8').trim()
+  const filename = readFileSync(currentSessionFile, 'utf-8').trim()
   if (!filename) {
     return null
   }
@@ -181,7 +189,7 @@ function startSessionUnlocked(): SessionInfo {
     timestamp_start: timestampStart,
     timestamp_end: null,
     duration_minutes: null,
-    project_path: process.cwd(),
+    project_path: getWorkspaceContext().workspaceRoot,
     tags: [],
     parent_session: parentSession,
     related_tasks: [],
@@ -191,7 +199,7 @@ function startSessionUnlocked(): SessionInfo {
   const header = `# Session: ${sessionId} - ${formatTimestampForHeader(now)}`
   const content = `${buildFrontmatter(frontmatter)}\n\n${header}\n\n`
   writeFileSync(filePath, content, 'utf-8')
-  writeFileSync(CURRENT_SESSION_FILE, filename, 'utf-8')
+  writeFileSync(getCurrentSessionFilePath(), filename, 'utf-8')
 
   return { filePath, sessionId }
 }

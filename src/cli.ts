@@ -4,8 +4,14 @@ import { createTaskCommand } from './cli/commands/task'
 import { createSetupCommand } from './cli/commands/setup'
 import { runCommand } from './cli/io'
 import continuum from './sdk'
+import {
+  setActiveWorkspaceContext,
+  clearActiveWorkspaceContext,
+} from './workspace/context'
+import { resolveWorkspaceContext } from './workspace/resolve'
 
 let exitHandlersInstalled = false
+const PREVIOUS_WORKSPACE_CONTEXT = Symbol('previous-workspace-context')
 
 export async function main(): Promise<void> {
   installExitHandlers()
@@ -62,6 +68,36 @@ export async function main(): Promise<void> {
     if (options.cwd) {
       process.chdir(options.cwd)
     }
+
+    if (!isMemoryCommand(actionCommand)) {
+      return
+    }
+
+    const previous = setActiveWorkspaceContext(
+      resolveWorkspaceContext({ startDir: process.cwd() }),
+    )
+    ;(actionCommand as Command & { [PREVIOUS_WORKSPACE_CONTEXT]?: unknown })[
+      PREVIOUS_WORKSPACE_CONTEXT
+    ] = previous
+  })
+
+  program.hook('postAction', (_thisCommand, actionCommand) => {
+    if (!isMemoryCommand(actionCommand)) {
+      return
+    }
+
+    const command = actionCommand as Command & {
+      [PREVIOUS_WORKSPACE_CONTEXT]?: ReturnType<
+        typeof setActiveWorkspaceContext
+      >
+    }
+    const previous = command[PREVIOUS_WORKSPACE_CONTEXT] ?? null
+    if (previous) {
+      setActiveWorkspaceContext(previous)
+    } else {
+      clearActiveWorkspaceContext()
+    }
+    delete command[PREVIOUS_WORKSPACE_CONTEXT]
   })
 
   if (process.argv.length <= 2) {
@@ -77,7 +113,20 @@ export async function main(): Promise<void> {
       return
     }
     throw error
+  } finally {
+    clearActiveWorkspaceContext()
   }
+}
+
+function isMemoryCommand(command: Command): boolean {
+  let current: Command | null = command
+  while (current) {
+    if (current.name() === 'memory') {
+      return true
+    }
+    current = current.parent ?? null
+  }
+  return false
 }
 
 function installExitHandlers(): void {
