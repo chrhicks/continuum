@@ -1,5 +1,5 @@
 import { importOpencodeRecall } from '../../../memory/recall-import'
-import { searchRecall } from '../../../recall/search'
+import { searchRetrieval } from '../../../memory/retrieval/search'
 import { buildOpencodeSourceIndex } from '../../../recall/index/opencode-source-index'
 import {
   formatRecallModeLabel,
@@ -83,34 +83,36 @@ export function handleRecallSearch(
 ): void {
   const mode = parseRecallMode(options.mode)
   const limit = parseRecallLimit(options.limit)
-  const result = searchRecall({
+  const result = searchRetrieval({
     query,
-    mode,
-    summaryDir: options.summaryDir,
+    source: 'recall',
+    recallMode: mode,
+    recallSummaryDir: options.summaryDir,
     limit,
   })
 
-  if (result.filesSearched === 0) {
-    console.log(`No opencode recall summaries found in ${result.summaryDir}.`)
+  if (result.recallFilesSearched === 0) {
+    console.log('No opencode recall summaries found.')
     return
   }
 
-  const modeLabel = formatRecallModeLabel(result.mode)
-  const modeOutput = result.fallback ? `${modeLabel} (fallback)` : modeLabel
+  const modeLabel = formatRecallModeLabel(result.recallMode ?? 'bm25')
+  const modeOutput = result.recallFallback
+    ? `${modeLabel} (fallback)`
+    : modeLabel
 
   console.log('Recall search:')
   console.log(`- Mode: ${modeOutput}`)
-  console.log(`- Summary dir: ${result.summaryDir}`)
-  console.log(`- Files searched: ${result.filesSearched}`)
-  console.log(`- Results: ${result.results.length}`)
+  console.log(`- Files searched: ${result.recallFilesSearched}`)
+  console.log(`- Results: ${result.matches.length}`)
 
-  if (result.results.length === 0) {
+  if (result.matches.length === 0) {
     console.log(`No matches found for "${query}".`)
     return
   }
 
-  for (const match of result.results) {
-    const score = formatScore(match.score)
+  for (const match of result.matches) {
+    const score = formatScore(match.score ?? 0)
     const sessionLabel = match.sessionId ? ` [${match.sessionId}]` : ''
     const titleLabel = match.title ? ` (${match.title})` : ''
     const snippetLabel = match.snippet ? ` - ${match.snippet}` : ''

@@ -11,8 +11,12 @@ export type OpencodeRecallSummary = {
   decisions: string[]
   discoveries: string[]
   patterns: string[]
+  blockers: string[]
+  openQuestions: string[]
+  nextSteps: string[]
   tasks: string[]
   files: string[]
+  confidence: 'low' | 'medium' | 'high' | null
 }
 
 export function parseOpencodeSummary(
@@ -56,8 +60,12 @@ export function parseOpencodeSummary(
     decisions: parseList(sections.get('Decisions')),
     discoveries: parseList(sections.get('Discoveries')),
     patterns: parseList(sections.get('Patterns')),
+    blockers: parseList(sections.get('Blockers')),
+    openQuestions: parseList(sections.get('Open Questions')),
+    nextSteps: parseList(sections.get('Next Steps')),
     tasks: parseList(sections.get('Tasks')),
     files: parseList(sections.get('Files')),
+    confidence: parseConfidence(body),
   }
 }
 
@@ -136,6 +144,30 @@ function parseList(lines?: string[]): string[] {
     items.push(normalized)
   }
   return items
+}
+
+function parseConfidence(body: string): 'low' | 'medium' | 'high' | null {
+  const match = body.match(/^##\s+Confidence\s*(?:\((.+)\))?$/im)
+  const raw = match?.[1]?.trim().toLowerCase() ?? null
+  if (!raw) {
+    return null
+  }
+  if (raw === 'low') {
+    return 'low'
+  }
+  if (raw === 'med' || raw === 'medium') {
+    return 'medium'
+  }
+  if (raw === 'high') {
+    return 'high'
+  }
+  const numeric = Number(raw)
+  if (Number.isFinite(numeric)) {
+    if (numeric >= 0.8) return 'high'
+    if (numeric >= 0.5) return 'medium'
+    return 'low'
+  }
+  return null
 }
 
 function readString(value: unknown): string | null {

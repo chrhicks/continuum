@@ -1,5 +1,9 @@
 import { Command } from 'commander'
+import { collectOpencodeRecords } from '../../../memory/collectors/opencode'
+import { collectTaskRecords } from '../../../memory/collectors/task'
 import { consolidateNow } from '../../../memory/consolidate'
+import { consolidatePreparedInput } from '../../../memory/consolidate'
+import { prepareCollectedRecordConsolidationInput } from '../../../memory/consolidation/extract'
 import { listMemoryEntries } from '../../../memory/list'
 import { readConsolidationLog } from '../../../memory/log'
 import {
@@ -7,15 +11,26 @@ import {
   appendToolCall,
   appendUserMessage,
 } from '../../../memory/now-writer'
+import { getWorkspaceContext, memoryPath } from '../../../memory/paths'
+import { importOpencodeRecall } from '../../../memory/recall-import'
 import { recoverStaleNowFiles } from '../../../memory/recover'
-import { searchMemory, type MemorySearchTier } from '../../../memory/search'
+import { type MemorySearchTier } from '../../../memory/search'
+import {
+  searchRetrieval,
+  type RetrievalSearchSource,
+} from '../../../memory/retrieval/search'
+import { createFileMemoryStateRepository } from '../../../memory/state/file-repository'
 import { getStatus } from '../../../memory/status'
 import { validateMemory } from '../../../memory/validate'
+import { parseOptionalPositiveInteger } from '../shared'
+import { parseRecallMode } from './recall-helpers'
 import {
   formatAgeMinutes,
   formatBytes,
   parseAfterDate,
   parseHours,
+  parseSearchLimit,
+  parseSearchSource,
   parseSearchTags,
   parseSearchTier,
   parseTail,
@@ -43,9 +58,21 @@ export function registerMemoryHandlers(
       handleAppend(kind, textParts, endSessionIfActive),
     onSearch: (query, options) => {
       const tier = options.tier ? parseSearchTier(options.tier) : 'all'
+      const source = options.source ? parseSearchSource(options.source) : 'all'
       const tags = options.tags ? parseSearchTags(options.tags) : []
       const afterDate = options.after ? parseAfterDate(options.after) : null
-      handleSearch(query, tier, tags, afterDate)
+      const mode = parseRecallMode(options.mode)
+      const limit = options.limit ? parseSearchLimit(options.limit) : undefined
+      handleSearch(
+        query,
+        source,
+        tier,
+        tags,
+        afterDate,
+        mode,
+        limit,
+        options.summaryDir,
+      )
     },
     onLog: (options) => {
       const tail = options.tail ? parseTail(options.tail) : undefined
@@ -56,6 +83,7 @@ export function registerMemoryHandlers(
       return handleRecover(hours, options.consolidate ?? false)
     },
     onValidate: () => handleValidate(),
+    onCollect: (options) => handleCollect(options),
   })
 }
 
@@ -123,15 +151,202 @@ async function handleConsolidate(dryRun: boolean): Promise<void> {
   logConsolidationResult(result)
 }
 
+async function handleCollect(options: {
+  source?: string
+  db?: string
+  repo?: string
+  out?: string
+  project?: string
+  session?: string
+  task?: string
+  status?: string
+  limit?: string
+  summarize?: boolean
+  import?: boolean
+  summaryModel?: string
+  summaryApiUrl?: string
+  summaryApiKey?: string
+  summaryMaxTokens?: string
+  summaryTimeoutMs?: string
+  summaryMaxChars?: string
+  summaryMaxLines?: string
+  summaryMergeMaxEstTokens?: string
+}): Promise<void> {
+  const source = (options.source ?? 'opencode').trim().toLowerCase()
+  if (source !== 'opencode' && source !== 'task') {
+    throw new Error(`Unsupported collect source: ${source}`)
+  }
+
+  const checkpointRepository = createFileMemoryStateRepository(
+    memoryPath('collect-state.json'),
+  )
+
+  if (source === 'task') {
+    const workspace = getWorkspaceContext()
+    const result = await collectTaskRecords(
+      {
+        directory: workspace.workspaceRoot,
+        taskId: options.task ?? null,
+        statuses: parseTaskCollectStatuses(options.status),
+        limit: parseOptionalPositiveInteger(
+          options.limit,
+          null,
+          'Collect limit must be a positive integer.',
+        ),
+      },
+      { stateRepository: checkpointRepository },
+    )
+
+    for (const item of result.items) {
+      await consolidatePreparedInput(
+        prepareCollectedRecordConsolidationInput({
+          record: item.record,
+          sourcePath: `${workspace.continuumDbPath}#task:${item.task.id}`,
+          sessionId: item.task.id,
+          tags: item.record.references.tags,
+          precomputedSummary: item.summary,
+        }),
+        { skipSourceCleanup: true },
+      )
+    }
+
+    console.log('Memory collect:')
+    console.log(`- Source: ${source}`)
+    console.log(`- Workspace: ${result.directory}`)
+    console.log(`- Tasks examined: ${result.tasksExamined}`)
+    console.log(`- Task records emitted: ${result.records.length}`)
+    console.log(`- Skipped unchanged: ${result.skippedUnchanged}`)
+    if (result.checkpoint) {
+      console.log(`- Checkpoint: ${result.checkpoint.key}`)
+    }
+    return
+  }
+
+  const result = await collectOpencodeRecords(
+    {
+      dbPath: options.db ?? null,
+      repoPath: options.repo ?? null,
+      outDir: options.out ?? null,
+      projectId: options.project ?? null,
+      sessionId: options.session ?? null,
+      limit: parseOptionalPositiveInteger(
+        options.limit,
+        null,
+        'Collect limit must be a positive integer.',
+      ),
+      summarize: options.summarize,
+      summaryModel: options.summaryModel ?? null,
+      summaryApiUrl: options.summaryApiUrl ?? null,
+      summaryApiKey: options.summaryApiKey ?? null,
+      summaryMaxTokens: parseOptionalPositiveInteger(
+        options.summaryMaxTokens,
+        null,
+        'Summary max tokens must be a positive integer.',
+      ),
+      summaryTimeoutMs: parseOptionalPositiveInteger(
+        options.summaryTimeoutMs,
+        null,
+        'Summary timeout must be a positive integer.',
+      ),
+      summaryMaxChars: parseOptionalPositiveInteger(
+        options.summaryMaxChars,
+        null,
+        'Summary max chars must be a positive integer.',
+      ),
+      summaryMaxLines: parseOptionalPositiveInteger(
+        options.summaryMaxLines,
+        null,
+        'Summary max lines must be a positive integer.',
+      ),
+      summaryMergeMaxEstTokens: parseOptionalPositiveInteger(
+        options.summaryMergeMaxEstTokens,
+        null,
+        'Summary merge token budget must be a positive integer.',
+      ),
+    },
+    { stateRepository: checkpointRepository },
+  )
+
+  let imported = null
+  if (options.import) {
+    if (result.artifacts.summaries.length === 0) {
+      throw new Error(
+        'No summary docs were generated. Run with summarization enabled before using --import.',
+      )
+    }
+    imported = await importOpencodeRecall({
+      summaryDir: result.outDir,
+      projectId: options.project ?? undefined,
+      sessionId: options.session ?? undefined,
+    })
+  }
+
+  console.log('Memory collect:')
+  console.log(`- Source: ${source}`)
+  console.log(`- Project: ${result.projectId}`)
+  console.log(`- Repo: ${result.repoPath}`)
+  console.log(`- Output dir: ${result.outDir}`)
+  console.log(`- Sessions processed: ${result.sessionsProcessed}`)
+  console.log(`- Records emitted: ${result.records.length}`)
+  console.log(`- Normalized docs: ${result.artifacts.normalized.length}`)
+  console.log(`- Summary docs: ${result.artifacts.summaries.length}`)
+  if (result.checkpoint) {
+    console.log(`- Checkpoint: ${result.checkpoint.key}`)
+  }
+  if (imported) {
+    console.log(`- Imported summaries: ${imported.imported}`)
+  }
+}
+
+function parseTaskCollectStatuses(
+  value?: string,
+): Array<'open' | 'ready' | 'blocked' | 'completed' | 'cancelled'> | null {
+  if (!value) {
+    return null
+  }
+  const valid = new Set(['open', 'ready', 'blocked', 'completed', 'cancelled'])
+  const statuses = value
+    .split(',')
+    .map((entry) => entry.trim().toLowerCase())
+    .filter((entry) => entry.length > 0)
+
+  if (statuses.length === 0) {
+    throw new Error('Task status filter must include at least one status.')
+  }
+  for (const status of statuses) {
+    if (!valid.has(status)) {
+      throw new Error(
+        'Invalid task status filter. Use: open, ready, blocked, completed, cancelled.',
+      )
+    }
+  }
+  return statuses as Array<
+    'open' | 'ready' | 'blocked' | 'completed' | 'cancelled'
+  >
+}
+
 function handleSearch(
   query: string,
+  source: RetrievalSearchSource,
   tier: MemorySearchTier | 'all',
   tags: string[],
   afterDate: Date | null,
+  mode: 'bm25' | 'semantic' | 'auto',
+  limit?: number,
+  summaryDir?: string,
 ): void {
-  const result = searchMemory(query, tier, tags, afterDate ?? undefined)
+  const result = searchRetrieval({
+    query,
+    source,
+    tier,
+    tags,
+    afterDate: afterDate ?? undefined,
+    recallMode: mode,
+    recallSummaryDir: summaryDir,
+    limit,
+  })
   if (result.filesSearched === 0) {
-    console.log('No memory files found.')
+    console.log('No searchable memory or recall files found.')
     return
   }
   if (result.matches.length === 0) {
@@ -145,8 +360,28 @@ function handleSearch(
   console.log(
     `Found ${result.matches.length} ${matchLabel} in ${result.filesSearched} ${fileLabel}:`,
   )
+  console.log(
+    `- Sources: memory=${result.memoryFilesSearched}, recall=${result.recallFilesSearched}`,
+  )
+  if (result.recallMode) {
+    const fallback = result.recallFallback ? ' (fallback)' : ''
+    console.log(`- Recall mode: ${result.recallMode}${fallback}`)
+  }
   for (const match of result.matches) {
-    console.log(`- ${match.filePath}:${match.lineNumber} ${match.lineText}`)
+    if (match.source === 'memory') {
+      console.log(
+        `- [memory/${match.tier}] ${match.filePath}:${match.lineNumber} ${match.lineText}`,
+      )
+      continue
+    }
+    const scoreLabel =
+      match.score === null ? '' : ` score=${match.score.toFixed(3)}`
+    const sessionLabel = match.sessionId ? ` [${match.sessionId}]` : ''
+    const titleLabel = match.title ? ` (${match.title})` : ''
+    const snippetLabel = match.snippet ? ` - ${match.snippet}` : ''
+    console.log(
+      `- [recall${scoreLabel}] ${match.filePath}${sessionLabel}${titleLabel}${snippetLabel}`,
+    )
   }
 }
 

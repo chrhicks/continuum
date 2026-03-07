@@ -39,7 +39,8 @@ If either is missing, stop and ask the user to fix it.
    continuum memory search "<GOAL keyword or active task title>"
    ```
    Run from the target repo (or pass `--cwd <repo-or-subdir>`) so the search
-   targets that workspace's local `.continuum` state.
+   targets that workspace's local `.continuum` state. This command searches
+   materialized memory and recall summaries together by default.
    Note any prior task IDs, known failures, or decisions for this area. Proceed regardless of results.
 3. Preflight to avoid redundant work:
    - List `open` tasks.

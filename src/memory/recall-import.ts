@@ -1,14 +1,7 @@
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  readdirSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { consolidateNow } from './consolidate'
-import { buildNowContent } from './recall-import-content'
+import { consolidatePreparedInput } from './consolidate'
+import { prepareRecallSummaryConsolidationInput } from './consolidation/extract'
 import { initMemory } from './init'
 import { getWorkspaceContext, memoryPath } from './paths'
 import { parseFrontmatter } from '../utils/frontmatter'
@@ -68,7 +61,6 @@ export async function importOpencodeRecall(
   }
 
   initMemory()
-  ensureTempDir()
 
   const summaryFiles = listSummaryFiles(summaryDir)
   const memoryDir = resolve(memoryPath('.'))
@@ -119,19 +111,10 @@ export async function importOpencodeRecall(
       continue
     }
 
-    const nowContent = buildNowContent(parsed)
-    const tempPath = buildTempPath(parsed.sessionId)
-    writeFileSync(tempPath, nowContent, 'utf-8')
-
-    try {
-      await consolidateNow({
-        nowPath: tempPath,
-        dryRun,
-        skipNowCleanup: true,
-      })
-    } finally {
-      cleanupTempPath(tempPath)
-    }
+    await consolidatePreparedInput(
+      prepareRecallSummaryConsolidationInput(parsed, summaryPath),
+      { dryRun, skipSourceCleanup: true },
+    )
 
     if (!dryRun) {
       existingSessions.add(parsed.sessionId)
@@ -186,27 +169,4 @@ function loadImportedSessions(memoryDir: string): Set<string> {
     }
   }
   return sessions
-}
-
-function ensureTempDir(): void {
-  mkdirSync(resolveTempImportDir(), { recursive: true })
-}
-
-function buildTempPath(sessionId: string): string {
-  const safe = sessionId.replace(/[^a-zA-Z0-9_-]+/g, '-')
-  return join(resolveTempImportDir(), `recall-${safe}.md`)
-}
-
-function cleanupTempPath(filePath: string): void {
-  const backupPath = `${filePath}.bak`
-  if (existsSync(filePath)) {
-    rmSync(filePath)
-  }
-  if (existsSync(backupPath)) {
-    rmSync(backupPath)
-  }
-}
-
-function resolveTempImportDir(): string {
-  return join(getWorkspaceContext().workspaceRoot, '.tmp', 'recall-import')
 }

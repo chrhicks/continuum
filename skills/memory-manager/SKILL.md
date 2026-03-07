@@ -87,11 +87,30 @@ result to the audit trail. Use `--dry-run` to review output before committing.
 
 ```bash
 continuum memory search "<query>"
+continuum memory search "<query>" --source all
+continuum memory search "<query>" --source memory
+continuum memory search "<query>" --source recall
 continuum memory search "<query>" --tier NOW
 continuum memory search "<query>" --tier RECENT
 continuum memory search "<query>" --tier MEMORY
 continuum memory search "<query>" --tier all
 continuum memory search "<query>" --tags tag1,tag2
+continuum memory search "<query>" --after 2026-02-01T00:00:00Z
+```
+
+Use `continuum memory search` as the default retrieval command. It searches
+materialized memory and recall summaries together unless you narrow `--source`.
+
+### Collect
+
+```bash
+# Collect OpenCode sessions into local recall artifacts
+continuum memory collect --source opencode [--db <path>] [--import]
+
+# Collect task history directly into consolidated memory
+continuum memory collect --source task
+continuum memory collect --source task --task <task_id>
+continuum memory collect --source task --status open,completed
 ```
 
 ### Recovery
@@ -102,9 +121,10 @@ continuum memory recover --hours 12          # Find sessions older than 12 hours
 continuum memory recover --hours 12 --consolidate  # Find and consolidate them
 ```
 
-### Recall (OpenCode Session Import)
+### Recall Compatibility (OpenCode Session Import)
 
-Import past OpenCode session summaries into memory:
+Use these only for compatibility, debugging, or working with pre-existing
+summary directories:
 
 ```bash
 # Step 1: Build an index of what OpenCode has
@@ -120,10 +140,13 @@ continuum memory recall sync --command "opencode ..."
 # Import summaries directly from a directory
 continuum memory recall import --summary-dir <dir> [--dry-run]
 
-# Search existing recall summaries
+# Search existing recall summaries (compatibility alias)
 continuum memory recall search "<query>"
-continuum memory recall search "<query>" --mode bm25
-continuum memory recall search "<query>" --limit 10
+
+# Preferred unified retrieval form
+continuum memory search "<query>" --source recall
+continuum memory search "<query>" --source recall --mode bm25
+continuum memory search "<query>" --source recall --limit 10
 ```
 
 ## Key Workflows

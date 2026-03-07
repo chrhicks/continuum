@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import { Database } from 'bun:sqlite'
 import {
   existsSync,
   mkdirSync,
@@ -18,12 +19,47 @@ import { getCurrentSessionPath, startSession } from '../src/memory/session'
 async function withTempCwd(run: () => Promise<void> | void): Promise<void> {
   const root = mkdtempSync(join(tmpdir(), 'continuum-cli-'))
   const previous = process.cwd()
+  const env = snapshotConsolidationEnv()
   try {
+    clearConsolidationEnv()
     process.chdir(root)
     await run()
   } finally {
+    restoreConsolidationEnv(env)
     process.chdir(previous)
     rmSync(root, { recursive: true, force: true })
+  }
+}
+
+function snapshotConsolidationEnv(): Record<string, string | undefined> {
+  return {
+    OPENCODE_ZEN_API_KEY: process.env.OPENCODE_ZEN_API_KEY,
+    CONSOLIDATION_API_KEY: process.env.CONSOLIDATION_API_KEY,
+    OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+    SUMMARY_MODEL: process.env.SUMMARY_MODEL,
+    CONSOLIDATION_MODEL: process.env.CONSOLIDATION_MODEL,
+    SUMMARY_API_URL: process.env.SUMMARY_API_URL,
+  }
+}
+
+function clearConsolidationEnv(): void {
+  delete process.env.OPENCODE_ZEN_API_KEY
+  delete process.env.CONSOLIDATION_API_KEY
+  delete process.env.OPENAI_API_KEY
+  delete process.env.SUMMARY_MODEL
+  delete process.env.CONSOLIDATION_MODEL
+  delete process.env.SUMMARY_API_URL
+}
+
+function restoreConsolidationEnv(
+  env: Record<string, string | undefined>,
+): void {
+  for (const [key, value] of Object.entries(env)) {
+    if (value === undefined) {
+      delete process.env[key]
+      continue
+    }
+    process.env[key] = value
   }
 }
 
@@ -106,6 +142,44 @@ const RECALL_SUMMARY_CONTENT = [
 ].join('\n')
 
 describe('memory search CLI', () => {
+  test('includes recall summaries by default', async () => {
+    await withTempCwd(async () => {
+      const recallDir = join(process.cwd(), '.continuum', 'recall', 'opencode')
+      mkdirSync(recallDir, { recursive: true })
+      writeFileSync(
+        join(recallDir, 'OPENCODE-SUMMARY-2026-02-10T10-00-00-ses_alpha.md'),
+        [
+          '---',
+          'session_id: ses_alpha',
+          'title: Alpha Session',
+          'created_at: 2026-02-10T10:00:00.000Z',
+          '---',
+          '',
+          '# Session Summary: Alpha Session',
+          '',
+          '## Focus',
+          '',
+          'alpha recall focus',
+          '',
+        ].join('\n'),
+        'utf-8',
+      )
+
+      const originalArgv = process.argv
+      process.argv = ['node', 'continuum', 'memory', 'search', 'alpha']
+
+      try {
+        const logs = await withCapturedLogs(async () => {
+          await main()
+        })
+        expect(logs.some((line) => line.includes('[recall'))).toBe(true)
+        expect(logs.some((line) => line.includes('ses_alpha'))).toBe(true)
+      } finally {
+        process.argv = originalArgv
+      }
+    })
+  })
+
   test('accepts --tier=VALUE syntax', async () => {
     await withTempCwd(async () => {
       const memoryDir = join(process.cwd(), '.continuum', 'memory')
@@ -246,6 +320,61 @@ describe('memory search CLI', () => {
 
       try {
         await expect(main()).rejects.toThrow('Invalid --after date')
+      } finally {
+        process.argv = originalArgv
+      }
+    })
+  })
+})
+
+describe('memory collect CLI', () => {
+  test('collects task source into consolidated memory', async () => {
+    await withTempCwd(async () => {
+      await continuum.task.init()
+      const task = await continuum.task.create({
+        title: 'Collect task source via CLI',
+        type: 'feature',
+        intent: 'Make task history searchable through memory search.',
+        description: 'Touch src/memory/collectors/task.ts',
+        plan: '1. Add task collector\n2. Validate search',
+      })
+      await continuum.task.notes.add(task.id, {
+        kind: 'discovery',
+        content: 'CLI collection should consolidate task history directly.',
+        source: 'agent',
+      })
+
+      const originalArgv = process.argv
+      process.argv = [
+        'node',
+        'continuum',
+        'memory',
+        'collect',
+        '--source',
+        'task',
+      ]
+
+      try {
+        const logs = await withCapturedLogs(async () => {
+          await main()
+        })
+        const output = logs.join('\n')
+        expect(output).toContain('Task records emitted: 1')
+        expect(output).toContain('Skipped unchanged: 0')
+
+        const memoryFile = readFileSync(
+          join(
+            process.cwd(),
+            '.continuum',
+            'memory',
+            `MEMORY-${new Date().toISOString().slice(0, 10)}.md`,
+          ),
+          'utf-8',
+        )
+        expect(memoryFile).toContain(task.id)
+        expect(memoryFile).toContain(
+          'Make task history searchable through memory search.',
+        )
       } finally {
         process.argv = originalArgv
       }
@@ -776,6 +905,49 @@ describe('cli input', () => {
 })
 
 describe('memory session CLI', () => {
+  test('memory collect opencode writes local artifacts from sqlite data', async () => {
+    await withTempCwd(async () => {
+      const repoRoot = process.cwd()
+      const dbPath = join(repoRoot, 'opencode.db')
+      seedOpencodeCliDb(dbPath, repoRoot)
+
+      const originalArgv = process.argv
+      process.argv = [
+        'node',
+        'continuum',
+        'memory',
+        'collect',
+        '--source',
+        'opencode',
+        '--db',
+        dbPath,
+        '--no-summarize',
+      ]
+
+      try {
+        const logs = await withCapturedLogs(async () => {
+          await main()
+        })
+        const output = logs.join('\n')
+        expect(output).toContain('Memory collect:')
+        expect(output).toContain('Sessions processed: 1')
+        expect(
+          existsSync(
+            join(
+              repoRoot,
+              '.continuum',
+              'recall',
+              'opencode',
+              'OPENCODE-NORMALIZED-2026-03-07T20-00-00-ses_cli.md',
+            ),
+          ),
+        ).toBe(true)
+      } finally {
+        process.argv = originalArgv
+      }
+    })
+  })
+
   test('memory init from nested subdir targets repo root', async () => {
     await withTempCwd(async () => {
       const repoRoot = process.cwd()
@@ -929,3 +1101,89 @@ describe('memory session CLI', () => {
     })
   })
 })
+
+function seedOpencodeCliDb(dbPath: string, repoRoot: string): void {
+  const db = new Database(dbPath)
+  const createdAt = Date.parse('2026-03-07T20:00:00.000Z')
+  const updatedAt = Date.parse('2026-03-07T20:05:00.000Z')
+  try {
+    db.exec(`
+      CREATE TABLE project (id TEXT PRIMARY KEY, worktree TEXT, time_created INTEGER, time_updated INTEGER);
+      CREATE TABLE session (
+        id TEXT PRIMARY KEY,
+        project_id TEXT,
+        parent_id TEXT,
+        slug TEXT,
+        directory TEXT,
+        title TEXT,
+        version TEXT,
+        summary_additions INTEGER,
+        summary_deletions INTEGER,
+        summary_files INTEGER,
+        time_created INTEGER,
+        time_updated INTEGER
+      );
+      CREATE TABLE message (
+        id TEXT PRIMARY KEY,
+        session_id TEXT,
+        time_created INTEGER,
+        time_updated INTEGER,
+        data TEXT
+      );
+      CREATE TABLE part (
+        id TEXT PRIMARY KEY,
+        message_id TEXT,
+        session_id TEXT,
+        time_created INTEGER,
+        time_updated INTEGER,
+        data TEXT
+      );
+    `)
+
+    db.query(
+      'INSERT INTO project (id, worktree, time_created, time_updated) VALUES (?, ?, ?, ?)',
+    ).run('proj_cli', repoRoot, createdAt, updatedAt)
+    db.query(
+      `INSERT INTO session (id, project_id, parent_id, slug, directory, title, version, summary_additions, summary_deletions, summary_files, time_created, time_updated)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      'ses_cli',
+      'proj_cli',
+      null,
+      'cli-session',
+      repoRoot,
+      'CLI Session',
+      '1',
+      0,
+      0,
+      0,
+      createdAt,
+      updatedAt,
+    )
+    db.query(
+      'INSERT INTO message (id, session_id, time_created, time_updated, data) VALUES (?, ?, ?, ?, ?)',
+    ).run(
+      'msg_cli_user',
+      'ses_cli',
+      createdAt,
+      createdAt,
+      JSON.stringify({ role: 'user', time: { created: createdAt } }),
+    )
+    db.query(
+      'INSERT INTO part (id, message_id, session_id, time_created, time_updated, data) VALUES (?, ?, ?, ?, ?, ?)',
+    ).run(
+      'part_cli_user',
+      'msg_cli_user',
+      'ses_cli',
+      createdAt,
+      createdAt,
+      JSON.stringify({
+        type: 'text',
+        text: 'Need to update src/memory/types.ts for tkt-cli-test.',
+        time: { start: createdAt, end: createdAt },
+      }),
+    )
+  } finally {
+    db.close()
+  }
+}

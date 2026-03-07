@@ -30,6 +30,7 @@ const DEFAULT_CONSOLIDATION_MAX_TOKENS = 4000
 const DEFAULT_CONSOLIDATION_TIMEOUT_MS = 120000
 const DEFAULT_CONSOLIDATION_API_URL =
   'https://opencode.ai/zen/v1/chat/completions'
+const DEFAULT_CONSOLIDATION_MODEL = 'kimi-k2.5'
 
 const DEFAULT_CONFIG: MemoryConfig = {
   now_max_lines: 200,
@@ -42,7 +43,10 @@ const DEFAULT_CONFIG: MemoryConfig = {
 export function getMemoryConfig(): MemoryConfig {
   const configPath = memoryPath('config.yml')
   if (!existsSync(configPath)) {
-    return DEFAULT_CONFIG
+    return {
+      ...DEFAULT_CONFIG,
+      consolidation: resolveConsolidationConfig(null),
+    }
   }
 
   try {
@@ -78,42 +82,46 @@ function normalizeConfig(raw: Record<string, unknown>): MemoryConfig {
       DEFAULT_CONFIG.recent_max_lines,
     ),
     memory_sections: normalizeSections(raw.memory_sections),
-    consolidation: normalizeConsolidationConfig(raw.consolidation),
+    consolidation: resolveConsolidationConfig(raw.consolidation),
   }
 }
 
-function normalizeConsolidationConfig(
+function resolveConsolidationConfig(
   raw: unknown,
 ): ConsolidationLlmConfig | undefined {
-  if (!raw || typeof raw !== 'object') {
-    return undefined
-  }
-  const rec = raw as Record<string, unknown>
+  const rec =
+    raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : null
 
-  // api_key is required — fall back to env vars
   const api_key =
-    readNonEmptyString(rec.api_key) ??
+    readNonEmptyString(rec?.api_key) ??
     process.env.OPENCODE_ZEN_API_KEY ??
     process.env.CONSOLIDATION_API_KEY ??
     process.env.OPENAI_API_KEY ??
     null
 
-  const model = readNonEmptyString(rec.model)
+  const model =
+    readNonEmptyString(rec?.model) ??
+    process.env.SUMMARY_MODEL ??
+    process.env.CONSOLIDATION_MODEL ??
+    (api_key ? DEFAULT_CONSOLIDATION_MODEL : null)
 
   if (!api_key || !model) {
     return undefined
   }
 
   return {
-    api_url: readNonEmptyString(rec.api_url) ?? DEFAULT_CONSOLIDATION_API_URL,
+    api_url:
+      readNonEmptyString(rec?.api_url) ??
+      process.env.SUMMARY_API_URL ??
+      DEFAULT_CONSOLIDATION_API_URL,
     api_key,
     model,
     max_tokens: readPositiveInt(
-      rec.max_tokens,
+      rec?.max_tokens,
       DEFAULT_CONSOLIDATION_MAX_TOKENS,
     ),
     timeout_ms: readPositiveInt(
-      rec.timeout_ms,
+      rec?.timeout_ms,
       DEFAULT_CONSOLIDATION_TIMEOUT_MS,
     ),
   }

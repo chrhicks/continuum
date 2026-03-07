@@ -25,12 +25,47 @@ function withTempMemory(run: (memoryDir: string) => void): void {
 async function withTempCwd(run: () => Promise<void>): Promise<void> {
   const root = mkdtempSync(join(tmpdir(), 'continuum-recover-cwd-'))
   const previous = process.cwd()
+  const env = snapshotConsolidationEnv()
   try {
+    clearConsolidationEnv()
     process.chdir(root)
     await run()
   } finally {
+    restoreConsolidationEnv(env)
     process.chdir(previous)
     rmSync(root, { recursive: true, force: true })
+  }
+}
+
+function snapshotConsolidationEnv(): Record<string, string | undefined> {
+  return {
+    OPENCODE_ZEN_API_KEY: process.env.OPENCODE_ZEN_API_KEY,
+    CONSOLIDATION_API_KEY: process.env.CONSOLIDATION_API_KEY,
+    OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+    SUMMARY_MODEL: process.env.SUMMARY_MODEL,
+    CONSOLIDATION_MODEL: process.env.CONSOLIDATION_MODEL,
+    SUMMARY_API_URL: process.env.SUMMARY_API_URL,
+  }
+}
+
+function clearConsolidationEnv(): void {
+  delete process.env.OPENCODE_ZEN_API_KEY
+  delete process.env.CONSOLIDATION_API_KEY
+  delete process.env.OPENAI_API_KEY
+  delete process.env.SUMMARY_MODEL
+  delete process.env.CONSOLIDATION_MODEL
+  delete process.env.SUMMARY_API_URL
+}
+
+function restoreConsolidationEnv(
+  env: Record<string, string | undefined>,
+): void {
+  for (const [key, value] of Object.entries(env)) {
+    if (value === undefined) {
+      delete process.env[key]
+      continue
+    }
+    process.env[key] = value
   }
 }
 

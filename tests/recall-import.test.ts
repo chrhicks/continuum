@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -118,6 +119,12 @@ describe('recall import', () => {
       expect(memoryFile).toContain('Session 2026-02-10 10:00 UTC (ses_test)')
       expect(memoryFile).toContain('**Decisions**:')
       expect(memoryFile).toContain('Use consolidate pipeline')
+      expect(memoryFile).toContain('**Next steps**:')
+      expect(memoryFile).toContain('Write tests')
+      expect(memoryFile).toContain('**Files**:')
+      expect(existsSync(join(process.cwd(), '.tmp', 'recall-import'))).toBe(
+        false,
+      )
     })
   })
 

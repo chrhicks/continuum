@@ -1,4 +1,5 @@
 import { type MemorySearchTier } from '../../../memory/search'
+import { type RetrievalSearchSource } from '../../../memory/retrieval/search'
 import { parsePositiveInteger } from '../shared'
 
 export function parseSearchTier(value: string): MemorySearchTier | 'all' {
@@ -29,6 +30,18 @@ export function parseSearchTags(value: string): string[] {
   return tags
 }
 
+export function parseSearchSource(value: string): RetrievalSearchSource {
+  const normalized = value.trim().toLowerCase()
+  if (
+    normalized === 'memory' ||
+    normalized === 'recall' ||
+    normalized === 'all'
+  ) {
+    return normalized
+  }
+  throw new Error('Invalid source. Use: memory, recall, or all.')
+}
+
 export function parseAfterDate(value: string): Date {
   const parsedMs = Date.parse(value)
   if (Number.isNaN(parsedMs)) {
@@ -41,6 +54,10 @@ export function parseAfterDate(value: string): Date {
 
 export function parseTail(value: string): number {
   return parsePositiveInteger(value, 'Tail count must be a positive integer.')
+}
+
+export function parseSearchLimit(value: string): number {
+  return parsePositiveInteger(value, 'Limit must be a positive integer.')
 }
 
 export function parseHours(value: string): number {

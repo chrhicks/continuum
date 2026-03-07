@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, readdirSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { getWorkspaceContext } from '../../memory/paths'
 import { parseFrontmatter } from '../../utils/frontmatter'
@@ -16,6 +16,7 @@ export type RecallSearchMatch = {
   sessionId: string | null
   score: number
   snippet: string | null
+  createdAt: string | null
 }
 
 export type RecallSearchResult = {
@@ -32,12 +33,14 @@ export type RecallSearchOptions = {
   mode?: RecallSearchMode
   summaryDir?: string
   limit?: number
+  afterDate?: Date
 }
 
 type RecallDocument = {
   filePath: string
   title: string | null
   sessionId: string | null
+  createdAt: string | null
   tokens: string[]
   lines: string[]
   termCounts: Map<string, number>
@@ -56,7 +59,7 @@ export function searchRecall(options: RecallSearchOptions): RecallSearchResult {
     options.summaryDir ?? null,
   )
 
-  const documents = loadRecallDocuments(summaryDir)
+  const documents = loadRecallDocuments(summaryDir, options.afterDate)
   const queryTokens = tokenize(query)
   if (queryTokens.length === 0) {
     throw new Error('Search query must include searchable terms.')
@@ -135,7 +138,10 @@ function buildResult(
   }
 }
 
-function loadRecallDocuments(summaryDir: string): RecallDocument[] {
+function loadRecallDocuments(
+  summaryDir: string,
+  afterDate?: Date,
+): RecallDocument[] {
   if (!existsSync(summaryDir)) {
     return []
   }
@@ -152,12 +158,20 @@ function loadRecallDocuments(summaryDir: string): RecallDocument[] {
       const bodyText = body.trim()
       const title = resolveTitle(frontmatter.title, bodyText)
       const sessionId = readString(frontmatter.session_id)
+      const createdAt = resolveCreatedAt(filePath, frontmatter)
+      if (afterDate && createdAt) {
+        const createdMs = Date.parse(createdAt)
+        if (!Number.isNaN(createdMs) && createdMs < afterDate.getTime()) {
+          continue
+        }
+      }
       const tokens = tokenize(bodyText)
       const lines = bodyText.length > 0 ? bodyText.split('\n') : []
       documents.push({
         filePath: formatPath(filePath),
         title,
         sessionId,
+        createdAt,
         tokens,
         lines,
         termCounts: countTokens(tokens),
@@ -275,6 +289,7 @@ function buildMatch(
     sessionId: doc.sessionId,
     score,
     snippet: formatSnippet(findSnippet(doc.lines, queryTokens)),
+    createdAt: doc.createdAt,
   }
 }
 
@@ -343,6 +358,25 @@ function readString(value: unknown): string | null {
   if (typeof value !== 'string') return null
   const trimmed = value.trim()
   return trimmed.length > 0 ? trimmed : null
+}
+
+function resolveCreatedAt(
+  filePath: string,
+  frontmatter: Record<string, unknown>,
+): string | null {
+  const createdAt = readString(frontmatter.created_at)
+  if (createdAt && !Number.isNaN(Date.parse(createdAt))) {
+    return createdAt
+  }
+  const updatedAt = readString(frontmatter.updated_at)
+  if (updatedAt && !Number.isNaN(Date.parse(updatedAt))) {
+    return updatedAt
+  }
+  try {
+    return new Date(statSync(filePath).mtimeMs).toISOString()
+  } catch {
+    return null
+  }
 }
 
 function normalizeMode(mode?: RecallSearchMode): RecallSearchMode {

@@ -70,7 +70,7 @@ export function registerRecallSubcommands(
   handlers: RecallSubcommandHandlers,
 ): void {
   const recallCommand = new Command('recall').description(
-    'Recall import commands',
+    'Recall compatibility commands',
   )
 
   recallCommand.action(() => {
@@ -177,7 +177,9 @@ export function registerRecallSubcommands(
 
   recallCommand
     .command('search')
-    .description('Search recall summaries')
+    .description(
+      'Search recall summaries (compatibility alias for memory search --source recall)',
+    )
     .argument('<query...>')
     .option(
       '--mode <mode>',

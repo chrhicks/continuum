@@ -3,7 +3,7 @@
  */
 import { existsSync, readFileSync } from 'node:fs'
 import { parseFrontmatter, replaceFrontmatter } from '../utils/frontmatter'
-import { type NowSummary } from './summarize'
+import type { MemorySummary } from './types'
 import { dedupeEntriesByAnchor } from './memory-index'
 
 // ---------------------------------------------------------------------------
@@ -61,7 +61,7 @@ export function mergeUnique(current: unknown, incoming: string[]): string[] {
 }
 
 export function buildSummaryLines(options: {
-  summary: NowSummary
+  summary: MemorySummary
   includeFiles: boolean
 }): string[] {
   const { summary } = options
@@ -69,8 +69,10 @@ export function buildSummaryLines(options: {
   const sections: Array<{ heading: string; items: string[] }> = [
     { heading: '**Decisions**:', items: summary.decisions },
     { heading: '**Discoveries**:', items: summary.discoveries },
+    { heading: '**Patterns**:', items: summary.patterns },
     { heading: '**What worked**:', items: summary.whatWorked },
     { heading: "**What didn't work**:", items: summary.whatFailed },
+    { heading: '**Blockers**:', items: summary.blockers },
     { heading: '**Open questions**:', items: summary.openQuestions },
     { heading: '**Next steps**:', items: summary.nextSteps },
   ]
@@ -105,7 +107,7 @@ export function buildRecentEntry(options: {
   dateStamp: string
   timeStamp: string
   durationMinutes: number
-  summary: NowSummary
+  summary: MemorySummary
   memoryFileName: string
   anchor: string
 }): string {
@@ -197,7 +199,7 @@ export function buildMemorySection(options: {
   sessionId: string
   dateStamp: string
   timeStamp: string
-  summary: NowSummary
+  summary: MemorySummary
   anchor: string
 }): string {
   const lines: string[] = []

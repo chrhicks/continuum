@@ -1,31 +1,13 @@
 import { createLlmClient } from '../llm/client'
 import { parseJsonResponse } from '../llm/json'
 import type { ConsolidationLlmConfig } from './config'
+import type { MemorySummary } from './types'
 
 /**
  * Structured summary produced either by an LLM or the mechanical fallback.
  * consolidate.ts consumes this shape regardless of which path produced it.
  */
-export type NowSummary = {
-  /** Multi-sentence narrative of what happened and why */
-  narrative: string
-  /** Decisions made with brief reasoning each */
-  decisions: string[]
-  /** Things that were surprising or newly understood */
-  discoveries: string[]
-  /** Approaches that succeeded and are worth repeating */
-  whatWorked: string[]
-  /** Approaches tried and abandoned, with why */
-  whatFailed: string[]
-  /** Unresolved questions to carry into the next session */
-  openQuestions: string[]
-  /** Concrete follow-on work */
-  nextSteps: string[]
-  /** Task IDs referenced in the session */
-  tasks: string[]
-  /** Source path list (kept for index/search purposes) */
-  files: string[]
-}
+export type NowSummary = MemorySummary
 
 // ---------------------------------------------------------------------------
 // LLM path
@@ -105,12 +87,15 @@ function validateNowSummary(raw: unknown): NowSummary {
     narrative: requireString(r, 'narrative'),
     decisions: requireStringArray(r, 'decisions'),
     discoveries: requireStringArray(r, 'discoveries'),
+    patterns: requireOptionalStringArray(r, 'patterns'),
     whatWorked: requireStringArray(r, 'whatWorked'),
     whatFailed: requireStringArray(r, 'whatFailed'),
+    blockers: requireOptionalStringArray(r, 'blockers'),
     openQuestions: requireStringArray(r, 'openQuestions'),
     nextSteps: requireStringArray(r, 'nextSteps'),
     tasks: requireStringArray(r, 'tasks'),
     files: requireStringArray(r, 'files'),
+    confidence: requireOptionalConfidence(r, 'confidence'),
   }
 }
 
@@ -136,6 +121,30 @@ function requireStringArray(
   })
 }
 
+function requireOptionalStringArray(
+  rec: Record<string, unknown>,
+  key: string,
+): string[] {
+  if (rec[key] === undefined) {
+    return []
+  }
+  return requireStringArray(rec, key)
+}
+
+function requireOptionalConfidence(
+  rec: Record<string, unknown>,
+  key: string,
+): MemorySummary['confidence'] {
+  const value = rec[key]
+  if (value === undefined || value === null) {
+    return null
+  }
+  if (value === 'low' || value === 'medium' || value === 'high') {
+    return value
+  }
+  throw new Error(`Summary field "${key}" must be low, medium, or high.`)
+}
+
 // ---------------------------------------------------------------------------
 // Mechanical fallback
 // ---------------------------------------------------------------------------
@@ -148,12 +157,15 @@ export function mechanicalSummary(body: string): NowSummary {
     narrative: extractNarrative(body),
     decisions: extractMarkers(body, /@decision\b[:\s-]*(.+)/i),
     discoveries: extractMarkers(body, /@discovery\b[:\s-]*(.+)/i),
+    patterns: extractMarkers(body, /@pattern\b[:\s-]*(.+)/i),
     whatWorked: [],
     whatFailed: [],
+    blockers: [],
     openQuestions: [],
     nextSteps: [],
     tasks: extractTasks(body),
     files: extractFiles(body),
+    confidence: null,
   }
 }
 

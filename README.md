@@ -205,10 +205,16 @@ continuum memory consolidate --dry-run
 ### Querying Memory
 
 ```bash
-# Search across all memory tiers
+# Search across materialized memory plus recall summaries
 continuum memory search "authentication"
 
-# Search specific tier
+# Search only materialized memory tiers
+continuum memory search "auth" --source memory
+
+# Search only imported recall summaries
+continuum memory search "auth" --source recall
+
+# Search specific materialized tier
 continuum memory search "auth" --tier=MEMORY
 
 # Search by tags
@@ -216,6 +222,24 @@ continuum memory search "auth" --tags auth,security
 
 # Search from a date/time onward
 continuum memory search "auth" --after 2026-02-01T00:00:00Z
+```
+
+`continuum memory search` is the primary retrieval interface for agents and users.
+`continuum memory recall search` remains available as a compatibility alias for
+recall-only lookups.
+
+### Collection
+
+```bash
+# Collect OpenCode sessions into local recall artifacts
+continuum memory collect --source opencode --db ~/.local/share/opencode/opencode.db
+
+# Collect and consolidate task history directly into memory
+continuum memory collect --source task
+
+# Limit task collection to one task or a subset of statuses
+continuum memory collect --source task --task tkt_abc123
+continuum memory collect --source task --status open,completed
 ```
 
 ### Diagnostics
@@ -241,10 +265,13 @@ continuum memory recover --hours 24
 continuum memory recover --hours 24 --consolidate
 ```
 
-### Recall Import
+### Recall Compatibility
 
 ```bash
-# Import OpenCode recall summaries into memory
+# Preferred OpenCode collection path
+continuum memory collect --source opencode --import
+
+# Compatibility import path for existing summary directories
 continuum memory recall import
 
 # Preview without writing files
@@ -254,9 +281,8 @@ continuum memory recall import --dry-run
 continuum memory recall import --summary-dir .continuum/recall/opencode
 ```
 
-The import expects `OPENCODE-SUMMARY-*.md` files produced by the recall prototype
-in `.continuum/recall/opencode` and skips sessions already consolidated into
-MEMORY files.
+The recall subcommands remain available for compatibility and debugging, but the
+supported collection path is `continuum memory collect`.
 
 ## How It Works
 
