@@ -1,19 +1,19 @@
 import { Command } from 'commander'
-import {
-  handleRecallImport,
-  handleRecallIndex,
-  handleRecallSearch,
-} from './recall-basic-handlers'
-import { handleRecallDiff } from './recall-diff-handler'
-import { handleRecallSync } from './recall-sync-handler'
+import { handleRecallImport, handleRecallSearch } from './recall-basic-handlers'
 import { registerRecallSubcommands } from './recall-subcommands'
 
 export function registerRecallCommands(memoryCommand: Command): void {
   registerRecallSubcommands(memoryCommand, {
     onImport: (options) => handleRecallImport(options),
-    onIndex: (options) => handleRecallIndex(options),
-    onDiff: (options) => handleRecallDiff(options),
-    onSync: (options) => handleRecallSync(options),
+    onIndex: () => {
+      throw new Error('Recall indexing is no longer part of the supported CLI.')
+    },
+    onDiff: () => {
+      throw new Error('Recall diff is no longer part of the supported CLI.')
+    },
+    onSync: () => {
+      throw new Error('Recall sync is no longer part of the supported CLI.')
+    },
     onSearch: (query, options) => handleRecallSearch(query, options),
   })
 }

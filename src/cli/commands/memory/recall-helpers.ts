@@ -80,7 +80,12 @@ export function formatScore(score: number): string {
   return rounded.toFixed(3)
 }
 
-export function formatRecallModeLabel(mode: 'bm25' | 'semantic'): string {
+export function formatRecallModeLabel(
+  mode: 'bm25' | 'semantic' | 'auto',
+): string {
+  if (mode === 'auto') {
+    return 'auto (hybrid)'
+  }
   if (mode === 'semantic') {
     return 'semantic (tf-idf)'
   }

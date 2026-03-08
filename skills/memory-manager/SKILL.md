@@ -127,16 +127,6 @@ Use these only for compatibility, debugging, or working with pre-existing
 summary directories:
 
 ```bash
-# Step 1: Build an index of what OpenCode has
-continuum memory recall index
-
-# Step 2: Diff the index against existing recall summaries
-continuum memory recall diff
-
-# Step 3: Execute the sync plan (use --dry-run first)
-continuum memory recall sync --dry-run
-continuum memory recall sync --command "opencode ..."
-
 # Import summaries directly from a directory
 continuum memory recall import --summary-dir <dir> [--dry-run]
 
@@ -147,6 +137,12 @@ continuum memory recall search "<query>"
 continuum memory search "<query>" --source recall
 continuum memory search "<query>" --source recall --mode bm25
 continuum memory search "<query>" --source recall --limit 10
+```
+
+The supported path for new data is still collector-first:
+
+```bash
+continuum memory collect --source opencode --import
 ```
 
 ## Key Workflows

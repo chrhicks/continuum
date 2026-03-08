@@ -11,7 +11,7 @@ import {
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 
-import { main } from '../src/cli'
+import { handleSigint, main } from '../src/cli'
 import { readInput } from '../src/cli/io'
 import continuum from '../src/sdk'
 import { getCurrentSessionPath, startSession } from '../src/memory/session'
@@ -1088,16 +1088,8 @@ describe('memory session CLI', () => {
     await withTempCwd(async () => {
       startSession()
 
-      const originalArgv = process.argv
-      process.argv = ['node', 'continuum', 'memory', 'status']
-
-      try {
-        await main()
-        process.emit('SIGINT')
-        expect(getCurrentSessionPath()).toBeNull()
-      } finally {
-        process.argv = originalArgv
-      }
+      await handleSigint({ setExitCode: false })
+      expect(getCurrentSessionPath()).toBeNull()
     })
   })
 })

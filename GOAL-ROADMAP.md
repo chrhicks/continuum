@@ -77,7 +77,7 @@ All three are byte-for-byte identical. This is duplication as a direct side-effe
 1. Delete `recall-handlers.ts`.
 2. In `recall.ts`, import `handleRecallImport`, `handleRecallIndex`, `handleRecallSearch` from `recall-basic-handlers.ts`, `handleRecallDiff` from `recall-diff-handler.ts`, and `handleRecallSync` from `recall-sync-handler.ts` directly.
 
-**Verification:** `bun test` passes; `continuum memory recall diff --help` works.
+**Verification:** `bun test` passes; `continuum memory recall --help` only shows compatibility import/search commands.
 
 ---
 

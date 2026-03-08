@@ -130,13 +130,21 @@ export function buildLogEntry(options: {
 
 export function buildUpdatedLog(
   path: string,
-  logEntry: { entry: string; timestamp: string },
+  logEntry: { entry: string; timestamp: string } | string,
   rotationLines: number,
+  existingContent?: string | null,
 ): { content: string; rotateExistingTo?: string } {
   let existing = ''
   let rotateExistingTo: string | undefined
-  if (existsSync(path)) {
-    const content = readFileSync(path, 'utf-8')
+  const currentContent =
+    typeof existingContent === 'string'
+      ? existingContent
+      : existsSync(path)
+        ? readFileSync(path, 'utf-8')
+        : null
+
+  if (currentContent !== null) {
+    const content = currentContent
     const lineCount = content.split('\n').length
     if (lineCount > rotationLines) {
       rotateExistingTo = `${path}.old`
@@ -144,7 +152,8 @@ export function buildUpdatedLog(
       existing = content
     }
   }
-  return { content: existing + logEntry.entry + '\n', rotateExistingTo }
+  const entry = typeof logEntry === 'string' ? logEntry : logEntry.entry
+  return { content: existing + entry + '\n', rotateExistingTo }
 }
 
 export function cleanupOldNowFiles(

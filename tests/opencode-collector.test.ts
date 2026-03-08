@@ -5,10 +5,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 
 import { collectOpencodeRecords } from '../src/memory/collectors/opencode'
-import {
-  createFileMemoryStateRepository,
-  readCheckpointFile,
-} from '../src/memory/state/file-repository'
+import { createDbMemoryStateRepository } from '../src/memory/state/db-repository'
 
 async function withTempDir(
   run: (root: string) => Promise<void> | void,
@@ -29,12 +26,7 @@ describe('collectOpencodeRecords', () => {
       const outDir = join(repoRoot, '.continuum', 'recall', 'opencode')
       seedOpencodeDb(dbPath, repoRoot)
 
-      const checkpointFile = join(
-        repoRoot,
-        '.continuum',
-        'memory',
-        'collect-state.json',
-      )
+      const checkpointDbPath = join(repoRoot, '.continuum', 'continuum.db')
       const result = await collectOpencodeRecords(
         {
           repoPath: repoRoot,
@@ -43,7 +35,9 @@ describe('collectOpencodeRecords', () => {
           summarize: false,
         },
         {
-          stateRepository: createFileMemoryStateRepository(checkpointFile),
+          stateRepository: createDbMemoryStateRepository({
+            dbPath: checkpointDbPath,
+          }),
         },
       )
 
@@ -53,7 +47,10 @@ describe('collectOpencodeRecords', () => {
       expect(result.artifacts.normalized).toHaveLength(1)
       expect(result.artifacts.summaries).toHaveLength(0)
       expect(existsSync(result.artifacts.normalized[0]!)).toBe(true)
-      expect(readCheckpointFile(checkpointFile)).toHaveLength(1)
+      const repository = createDbMemoryStateRepository({
+        dbPath: checkpointDbPath,
+      })
+      expect(repository.listCheckpoints()).toHaveLength(1)
     })
   })
 

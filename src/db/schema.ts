@@ -38,3 +38,21 @@ export const tasks = sqliteTable(
     index('idx_tasks_priority').on(table.priority),
   ],
 )
+
+export const memoryCheckpoints = sqliteTable(
+  'memory_checkpoints',
+  {
+    key: text('key').primaryKey(),
+    source: text('source').notNull(),
+    scope: text('scope').notNull(),
+    cursor: text('cursor'),
+    fingerprint: text('fingerprint'),
+    record_count: integer('record_count').notNull().default(0),
+    updated_at: text('updated_at').notNull(),
+    metadata: text('metadata').notNull().default('{}'),
+  },
+  (table) => [
+    index('idx_memory_checkpoints_source').on(table.source),
+    index('idx_memory_checkpoints_source_scope').on(table.source, table.scope),
+  ],
+)

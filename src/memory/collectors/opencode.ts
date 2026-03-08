@@ -22,23 +22,25 @@ import {
   type OpencodeExtractionOptions,
   type OpencodeMessageBlock,
   type OpencodeSessionBundle,
-} from '../../recall/opencode/extract'
+} from '../opencode/extract'
 import {
   buildOpencodeArtifactFilename,
   type OpencodeArtifactKind,
-} from '../../recall/opencode/paths'
+} from '../opencode/paths'
 import {
   buildRecallSummaryItem,
   mergeRecallSummaryItems,
-} from '../../recall/opencode/summary-merge'
+} from '../opencode/summary-merge'
 import {
   parseRecallSummaryJson,
   type RecallSummaryConfidence,
+  type RecallSummaryKeywordBlock,
   type RecallSummaryResult,
+  RECALL_SUMMARY_KEYWORD_GROUPS,
   RECALL_SUMMARY_JSON_SCHEMA,
-} from '../../recall/opencode/summary-schema'
-import { planRecallSummaryChunks } from '../../recall/opencode/summary-chunks'
-import type { OpencodeRecallSummary } from '../../recall/opencode/summary-parse'
+} from '../opencode/summary-schema'
+import { planRecallSummaryChunks } from '../opencode/summary-chunks'
+import type { OpencodeRecallSummary } from '../opencode/summary-parse'
 
 const DEFAULT_SUMMARY_API_URL = 'https://opencode.ai/zen/v1/chat/completions'
 const DEFAULT_SUMMARY_MAX_TOKENS = 4000
@@ -214,6 +216,10 @@ export async function collectOpencodeRecords(
     normalizedPaths.push(normalizedPath)
 
     if (shouldSummarize && summaryConfig) {
+      const summaryChunkCount = countSummaryChunks(
+        normalizedMessages,
+        summaryConfig,
+      )
       const summary = dependencies.summarizeSession
         ? await dependencies.summarizeSession(
             session,
@@ -244,6 +250,7 @@ export async function collectOpencodeRecords(
         extraction.project.id,
         normalizedSummary,
         summaryConfig,
+        summaryChunkCount,
       )
       writeFileSync(summaryPath, summaryDoc, 'utf-8')
       summaryPaths.push(summaryPath)
@@ -264,6 +271,7 @@ export async function collectOpencodeRecords(
             extraction.project.id,
             normalizedSummary,
             summaryConfig,
+            summaryChunkCount,
           ),
           null,
           2,
@@ -538,8 +546,9 @@ function buildSummaryDoc(
   projectId: string,
   summary: RecallSummaryResult,
   config: ResolvedSummaryConfig,
+  summaryChunkCount: number,
 ): string {
-  const keywordTotal = 0
+  const keywordTotal = countKeywords(summary.keywords)
   const frontmatter = serializeFrontmatter({
     source: 'opencode',
     session_id: session.session.id,
@@ -550,7 +559,7 @@ function buildSummaryDoc(
     created_at: toIso(session.session.time?.created),
     updated_at: toIso(session.session.time?.updated),
     summary_model: config.model,
-    summary_chunks: 1,
+    summary_chunks: summaryChunkCount,
     summary_max_chars: config.maxChars,
     summary_max_lines: config.maxLines,
     summary_generated_at: new Date().toISOString(),
@@ -589,7 +598,7 @@ function buildSummaryDoc(
     '',
     '## Keywords',
     '',
-    '- none',
+    ...renderKeywordList(summary.keywords),
     '',
     '## Blockers',
     '',
@@ -614,6 +623,7 @@ function buildSummaryMeta(
   projectId: string,
   summary: RecallSummaryResult,
   config: ResolvedSummaryConfig,
+  summaryChunkCount: number,
 ): Record<string, unknown> {
   return {
     session_id: session.session.id,
@@ -622,10 +632,10 @@ function buildSummaryMeta(
     title: session.session.title ?? null,
     summary_model: config.model,
     summary_generated_at: new Date().toISOString(),
-    summary_chunks: 1,
+    summary_chunks: summaryChunkCount,
     summary_max_chars: config.maxChars,
     summary_max_lines: config.maxLines,
-    summary_keyword_total: 0,
+    summary_keyword_total: countKeywords(summary.keywords),
     confidence: summary.confidence,
   }
 }
@@ -674,7 +684,30 @@ function normalizeSummary(
     open_questions: dedupeStrings(summary.open_questions),
     next_steps: dedupeStrings(summary.next_steps),
     confidence: normalizeConfidence(summary.confidence),
+    keywords: normalizeKeywords(summary.keywords, allowed),
   }
+}
+
+function normalizeKeywords(
+  keywords: RecallSummaryKeywordBlock | undefined,
+  allowedFiles: Set<string>,
+): RecallSummaryKeywordBlock | undefined {
+  if (!keywords) {
+    return undefined
+  }
+
+  const normalized = Object.fromEntries(
+    RECALL_SUMMARY_KEYWORD_GROUPS.map((group) => [
+      group,
+      group === 'files'
+        ? dedupeStrings(keywords[group]).filter((file) =>
+            allowedFiles.has(file),
+          )
+        : dedupeStrings(keywords[group]),
+    ]),
+  ) as RecallSummaryKeywordBlock
+
+  return countKeywords(normalized) > 0 ? normalized : undefined
 }
 
 function buildCheckpointFingerprint(records: CollectedRecord[]): string {
@@ -688,6 +721,47 @@ function renderSummaryList(items: string[]): string[] {
     return ['- none']
   }
   return items.map((item) => `- ${item}`)
+}
+
+function renderKeywordList(
+  keywords: RecallSummaryKeywordBlock | undefined,
+): string[] {
+  if (!keywords || countKeywords(keywords) === 0) {
+    return ['- none']
+  }
+
+  return RECALL_SUMMARY_KEYWORD_GROUPS.flatMap((group) => {
+    const values = keywords[group]
+    if (values.length === 0) {
+      return []
+    }
+    return [`- ${group}: ${values.join(', ')}`]
+  })
+}
+
+function countKeywords(
+  keywords: RecallSummaryKeywordBlock | undefined,
+): number {
+  if (!keywords) {
+    return 0
+  }
+  return RECALL_SUMMARY_KEYWORD_GROUPS.reduce(
+    (total, group) => total + keywords[group].length,
+    0,
+  )
+}
+
+function countSummaryChunks(
+  messages: NormalizedOpencodeMessage[],
+  config: ResolvedSummaryConfig,
+): number {
+  return planRecallSummaryChunks(
+    messages.map((message) => renderNormalizedMessageBlock(message)),
+    {
+      maxChars: config.maxChars,
+      maxLines: config.maxLines,
+    },
+  ).length
 }
 
 function dedupeStrings(items: string[]): string[] {

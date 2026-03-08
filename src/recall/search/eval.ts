@@ -17,7 +17,7 @@ export type RecallSearchEvalCase = {
 
 export type RecallSearchEvalModeResult = {
   requestedMode: RecallSearchMode
-  mode: 'bm25' | 'semantic' | null
+  mode: RecallSearchMode | null
   fallback: boolean
   ok: boolean
   matched: boolean

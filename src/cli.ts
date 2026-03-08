@@ -10,11 +10,10 @@ import {
 } from './workspace/context'
 import { resolveWorkspaceContext } from './workspace/resolve'
 
-let exitHandlersInstalled = false
 const PREVIOUS_WORKSPACE_CONTEXT = Symbol('previous-workspace-context')
 
 export async function main(): Promise<void> {
-  installExitHandlers()
+  const removeExitHandlers = installExitHandlers()
 
   const program = new Command()
   program
@@ -114,6 +113,7 @@ export async function main(): Promise<void> {
     }
     throw error
   } finally {
+    removeExitHandlers()
     clearActiveWorkspaceContext()
   }
 }
@@ -129,25 +129,32 @@ function isMemoryCommand(command: Command): boolean {
   return false
 }
 
-function installExitHandlers(): void {
-  if (exitHandlersInstalled) {
-    return
+export async function handleSigint(
+  options: { setExitCode?: boolean } = {},
+): Promise<void> {
+  try {
+    const path = await endSessionIfActive({ consolidate: false })
+    if (path) {
+      console.log(`Session ended: ${path}`)
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    console.error(message)
+  } finally {
+    if (options.setExitCode !== false) {
+      process.exitCode = 130
+    }
   }
-  exitHandlersInstalled = true
-  process.once('SIGINT', () => {
-    endSessionIfActive({ consolidate: false })
-      .then((path) => {
-        if (path) {
-          console.log(`Session ended: ${path}`)
-        }
-      })
-      .catch((error) => {
-        const message = error instanceof Error ? error.message : String(error)
-        console.error(message)
-      })
-      .finally(() => {
-        exitHandlersInstalled = false
-        process.exitCode = 130
-      })
-  })
+}
+
+function installExitHandlers(): () => void {
+  const sigintHandler = () => {
+    void handleSigint()
+  }
+
+  process.once('SIGINT', sigintHandler)
+
+  return () => {
+    process.removeListener('SIGINT', sigintHandler)
+  }
 }

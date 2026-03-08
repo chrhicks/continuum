@@ -63,9 +63,15 @@ export function mergeUnique(current: unknown, incoming: string[]): string[] {
 export function buildSummaryLines(options: {
   summary: MemorySummary
   includeFiles: boolean
+  sourceLabel?: string | null
 }): string[] {
   const { summary } = options
-  const lines = [summary.narrative]
+  const lines: string[] = []
+  if (options.sourceLabel) {
+    lines.push(`**Source**: ${options.sourceLabel}`)
+    lines.push('')
+  }
+  lines.push(summary.narrative)
   const sections: Array<{ heading: string; items: string[] }> = [
     { heading: '**Decisions**:', items: summary.decisions },
     { heading: '**Discoveries**:', items: summary.discoveries },
@@ -104,6 +110,8 @@ export function buildSummaryLines(options: {
 // ---------------------------------------------------------------------------
 
 export function buildRecentEntry(options: {
+  entryLabel: string
+  sourceLabel?: string | null
   dateStamp: string
   timeStamp: string
   durationMinutes: number
@@ -114,11 +122,15 @@ export function buildRecentEntry(options: {
   const duration = formatDuration(options.durationMinutes)
   const lines: string[] = []
   lines.push(
-    `## Session ${options.dateStamp} ${options.timeStamp} (${duration})`,
+    `## ${options.entryLabel} ${options.dateStamp} ${options.timeStamp} (${duration})`,
   )
   lines.push('')
   lines.push(
-    ...buildSummaryLines({ summary: options.summary, includeFiles: false }),
+    ...buildSummaryLines({
+      summary: options.summary,
+      includeFiles: false,
+      sourceLabel: options.sourceLabel,
+    }),
   )
   lines.push(
     `**Link**: [Full details](${options.memoryFileName}#${options.anchor})`,
@@ -130,13 +142,21 @@ export function upsertRecent(
   path: string,
   entry: string,
   options: { maxSessions: number; maxLines: number },
+  existingContent?: string | null,
 ): string {
   const maxSessions = Math.max(1, options.maxSessions)
   const header = `# RECENT - Last ${maxSessions} Sessions`
-  if (!existsSync(path)) {
+  const currentContent =
+    typeof existingContent === 'string'
+      ? existingContent
+      : existsSync(path)
+        ? readFileSync(path, 'utf-8')
+        : null
+
+  if (!currentContent) {
     return `${header}\n\n${entry}\n`
   }
-  const content = readFileSync(path, 'utf-8').trim()
+  const content = currentContent.trim()
   const lines = content.split('\n')
   const existingEntries = extractRecentEntries(lines)
   const allEntries = dedupeEntriesByAnchor([entry, ...existingEntries]).slice(
@@ -196,6 +216,8 @@ export function buildRecentContent(
 // ---------------------------------------------------------------------------
 
 export function buildMemorySection(options: {
+  entryLabel: string
+  sourceLabel?: string | null
   sessionId: string
   dateStamp: string
   timeStamp: string
@@ -204,12 +226,16 @@ export function buildMemorySection(options: {
 }): string {
   const lines: string[] = []
   lines.push(
-    `## Session ${options.dateStamp} ${options.timeStamp} UTC (${options.sessionId})`,
+    `## ${options.entryLabel} ${options.dateStamp} ${options.timeStamp} UTC (${options.sessionId})`,
   )
   lines.push(`<a name="${options.anchor}"></a>`)
   lines.push('')
   lines.push(
-    ...buildSummaryLines({ summary: options.summary, includeFiles: true }),
+    ...buildSummaryLines({
+      summary: options.summary,
+      includeFiles: true,
+      sourceLabel: options.sourceLabel,
+    }),
   )
   return lines.join('\n')
 }
@@ -217,9 +243,17 @@ export function buildMemorySection(options: {
 export function upsertMemoryFile(
   path: string,
   options: { sessionId: string; tags: string[]; section: string },
+  existingContent?: string | null,
 ): string {
   const now = new Date().toISOString()
-  if (!existsSync(path)) {
+  const currentContent =
+    typeof existingContent === 'string'
+      ? existingContent
+      : existsSync(path)
+        ? readFileSync(path, 'utf-8')
+        : null
+
+  if (!currentContent) {
     const frontmatter = buildMemoryFrontmatter({
       consolidationDate: now,
       sessionIds: [options.sessionId],
@@ -229,8 +263,7 @@ export function upsertMemoryFile(
     return `${frontmatter}\n\n# Consolidated Memory\n\n${options.section}\n`
   }
 
-  const existing = readFileSync(path, 'utf-8')
-  const { frontmatter, body, keys } = parseFrontmatter(existing)
+  const { frontmatter, body, keys } = parseFrontmatter(currentContent)
   const sessionIds = mergeUnique(frontmatter.source_sessions, [
     options.sessionId,
   ])

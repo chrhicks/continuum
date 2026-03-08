@@ -2,6 +2,9 @@
 
 Purpose: capture terminology and framing for the tiered memory system as we refine it.
 
+Status: historical notes plus current terminology. The shipped architecture is now
+workspace context -> collectors (`opencode`, `task`, `now`) -> consolidation -> retrieval.
+
 ## Intent
 
 - Help the agent recall prior work, decisions, and context across sessions.
@@ -34,30 +37,20 @@ Alternates (keep in mind for docs/UI):
 - RECENT: last few sessions summary (continuity snapshot)
 - MEMORY: long-term curated recall (historical context)
 
-## Candidate Tool: qmd (Recall Layer)
+## Retrieval Layer
 
-What it is:
+Current implementation:
 
-- Local hybrid search engine for markdown (BM25 + vector + reranking).
-- Designed for agent use with JSON output and MCP server.
+- Materialized memory search across NOW, RECENT, and MEMORY files.
+- Recall-summary search over `.continuum/recall/opencode/` using local BM25 and
+  tf-idf semantic fallback.
+- Unified retrieval exposed through `continuum memory search`.
 
-Why it fits:
+Notes:
 
-- Treats memory as markdown docs, supports natural language queries.
-- Strong recall quality via hybrid retrieval + reranking.
-- Local/private; no external services required.
-
-Gaps to account for:
-
-- It does not create or consolidate memory; it only indexes what we write.
-- Recency logic is not explicit; timestamps/metadata must be encoded in docs.
-- No native notion of decisions/discoveries unless we structure notes.
-
-Integration ideas:
-
-- Index `.continuum/memory/` as a qmd collection.
-- Add frontmatter or headings with dates/tags to improve recall.
-- Use `qmd query` or MCP tool `qmd_deep_search` as the recall entrypoint.
+- Retrieval is intentionally local and workspace-scoped.
+- Recall summaries are now one collector source, not a separate primary CLI.
+- `continuum memory recall ...` is compatibility-only for import and recall-only search.
 
 ## OpenCode Data Sources (Capture Layer)
 
@@ -75,12 +68,12 @@ Implications:
 - Session reconstruction is possible by ordering messages by `time.created` and joining parts.
 - Project scoping is doable via `project.worktree` matching the repo path.
 
-Integration sketch (recall pipeline):
+Integration sketch (collector pipeline):
 
 - Read OpenCode session + message + part JSON for the current project.
 - Emit one Markdown recall doc per session into `.continuum/recall/opencode/`.
 - Include frontmatter with session_id, project_id, directory, timestamps, message_count.
-- Index `.continuum/recall/opencode/` with qmd for recall queries.
+- Make summaries searchable through unified memory retrieval.
 
 ## OpenCode Storage Findings (2026-02-12)
 

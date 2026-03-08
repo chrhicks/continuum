@@ -15,6 +15,13 @@
       "when": 1771951323000,
       "tag": "0001_add_task_priority",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "0002",
+      "when": 1772841600000,
+      "tag": "0002_add_memory_checkpoints",
+      "breakpoints": true
     }
   ]
 }

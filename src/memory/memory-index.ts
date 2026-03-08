@@ -113,6 +113,7 @@ export function resolveIndexSections(sections: string[]): {
 }
 
 export function buildIndexEntry(options: {
+  entryLabel: string
   dateStamp: string
   timeStamp: string
   focus: string
@@ -123,24 +124,29 @@ export function buildIndexEntry(options: {
     options.focus.length > 80
       ? `${options.focus.slice(0, 77)}...`
       : options.focus
-  return `- **[Session ${options.dateStamp} ${options.timeStamp}](${options.memoryFileName}#${options.anchor})** - ${summary}`
+  return `- **[${options.entryLabel} ${options.dateStamp} ${options.timeStamp}](${options.memoryFileName}#${options.anchor})** - ${summary}`
 }
 
 export function upsertMemoryIndex(
   path: string,
   options: {
     entry: string
+    entryLabel?: string
     hasDecisions: boolean
     hasDiscoveries: boolean
     hasPatterns: boolean
     sections: string[]
   },
+  existingContent?: string | null,
 ): string {
   const defaultContent = buildDefaultIndexContent(options.sections)
 
-  const content = existsSync(path)
-    ? readFileSync(path, 'utf-8')
-    : defaultContent
+  const content =
+    typeof existingContent === 'string'
+      ? existingContent
+      : existsSync(path)
+        ? readFileSync(path, 'utf-8')
+        : defaultContent
   let updated = dedupeIndexEntries(content)
 
   const indexSections = resolveIndexSections(options.sections)

@@ -279,10 +279,15 @@ continuum memory recall import --dry-run
 
 # Use a custom summary directory
 continuum memory recall import --summary-dir .continuum/recall/opencode
+
+# Recall-only compatibility search
+continuum memory recall search "auth"
 ```
 
-The recall subcommands remain available for compatibility and debugging, but the
-supported collection path is `continuum memory collect`.
+The recall subcommands are intentionally limited to compatibility aliases for
+importing existing summary directories and recall-only search. The supported
+collector-first workflow is `continuum memory collect`, `continuum memory
+consolidate`, and `continuum memory search`.
 
 ## How It Works
 

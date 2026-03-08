@@ -2,7 +2,7 @@ import { Command } from 'commander'
 import { collectOpencodeRecords } from '../../../memory/collectors/opencode'
 import { collectTaskRecords } from '../../../memory/collectors/task'
 import { consolidateNow } from '../../../memory/consolidate'
-import { consolidatePreparedInput } from '../../../memory/consolidate'
+import { consolidatePreparedInputs } from '../../../memory/consolidate'
 import { prepareCollectedRecordConsolidationInput } from '../../../memory/consolidation/extract'
 import { listMemoryEntries } from '../../../memory/list'
 import { readConsolidationLog } from '../../../memory/log'
@@ -19,7 +19,7 @@ import {
   searchRetrieval,
   type RetrievalSearchSource,
 } from '../../../memory/retrieval/search'
-import { createFileMemoryStateRepository } from '../../../memory/state/file-repository'
+import { createDbMemoryStateRepository } from '../../../memory/state/db-repository'
 import { getStatus } from '../../../memory/status'
 import { validateMemory } from '../../../memory/validate'
 import { parseOptionalPositiveInteger } from '../shared'
@@ -177,12 +177,13 @@ async function handleCollect(options: {
     throw new Error(`Unsupported collect source: ${source}`)
   }
 
-  const checkpointRepository = createFileMemoryStateRepository(
-    memoryPath('collect-state.json'),
-  )
+  const workspace = getWorkspaceContext()
+  const checkpointRepository = createDbMemoryStateRepository({
+    dbPath: workspace.continuumDbPath,
+    legacyFilePath: memoryPath('collect-state.json'),
+  })
 
   if (source === 'task') {
-    const workspace = getWorkspaceContext()
     const result = await collectTaskRecords(
       {
         directory: workspace.workspaceRoot,
@@ -197,15 +198,17 @@ async function handleCollect(options: {
       { stateRepository: checkpointRepository },
     )
 
-    for (const item of result.items) {
-      await consolidatePreparedInput(
-        prepareCollectedRecordConsolidationInput({
-          record: item.record,
-          sourcePath: `${workspace.continuumDbPath}#task:${item.task.id}`,
-          sessionId: item.task.id,
-          tags: item.record.references.tags,
-          precomputedSummary: item.summary,
-        }),
+    if (result.items.length > 0) {
+      await consolidatePreparedInputs(
+        result.items.map((item) =>
+          prepareCollectedRecordConsolidationInput({
+            record: item.record,
+            sourcePath: `${workspace.continuumDbPath}#task:${item.task.id}`,
+            sessionId: item.task.id,
+            tags: item.record.references.tags,
+            precomputedSummary: item.summary,
+          }),
+        ),
         { skipSourceCleanup: true },
       )
     }

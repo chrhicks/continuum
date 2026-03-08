@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { consolidatePreparedInput } from './consolidate'
+import { consolidatePreparedInputs } from './consolidate'
 import { prepareRecallSummaryConsolidationInput } from './consolidation/extract'
 import { initMemory } from './init'
 import { getWorkspaceContext, memoryPath } from './paths'
@@ -9,8 +9,8 @@ import {
   SUMMARY_PREFIX,
   resolveOpencodeDbPath,
   resolveOpencodeOutputDir,
-} from '../recall/opencode/paths'
-import { parseOpencodeSummary } from '../recall/opencode/summary-parse'
+} from './opencode/paths'
+import { parseOpencodeSummary } from './opencode/summary-parse'
 
 export type RecallImportOptions = {
   summaryDir?: string
@@ -69,6 +69,7 @@ export async function importOpencodeRecall(
   const sessionFilter = options.sessionId?.trim() || null
   const importedSessions: string[] = []
   const skipped: RecallImportSkipped[] = []
+  const preparedInputs = []
   let imported = 0
   let skippedExisting = 0
   let skippedInvalid = 0
@@ -111,16 +112,21 @@ export async function importOpencodeRecall(
       continue
     }
 
-    await consolidatePreparedInput(
+    preparedInputs.push(
       prepareRecallSummaryConsolidationInput(parsed, summaryPath),
-      { dryRun, skipSourceCleanup: true },
     )
-
     if (!dryRun) {
       existingSessions.add(parsed.sessionId)
       importedSessions.push(parsed.sessionId)
       imported += 1
     }
+  }
+
+  if (preparedInputs.length > 0) {
+    await consolidatePreparedInputs(preparedInputs, {
+      dryRun,
+      skipSourceCleanup: true,
+    })
   }
 
   return {

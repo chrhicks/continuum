@@ -107,18 +107,22 @@ describe('recall import', () => {
 
       const memoryDir = join(process.cwd(), '.continuum', 'memory')
       const recent = readFileSync(join(memoryDir, 'RECENT.md'), 'utf-8')
-      expect(recent).toContain('Session 2026-02-10 10:00 (30m)')
+      expect(recent).toContain('Recall Import 2026-02-10 10:00 (30m)')
       // With the mechanical fallback, decisions from @decision: markers are captured
       expect(recent).toContain('Use consolidate pipeline')
+      expect(recent).toContain('**Source**: Imported OpenCode summary')
       expect(recent).toContain('**Decisions**:')
 
       const memoryFile = readFileSync(
         join(memoryDir, 'MEMORY-2026-02-10.md'),
         'utf-8',
       )
-      expect(memoryFile).toContain('Session 2026-02-10 10:00 UTC (ses_test)')
+      expect(memoryFile).toContain(
+        'Recall Import 2026-02-10 10:00 UTC (ses_test)',
+      )
       expect(memoryFile).toContain('**Decisions**:')
       expect(memoryFile).toContain('Use consolidate pipeline')
+      expect(memoryFile).toContain('**Source**: Imported OpenCode summary')
       expect(memoryFile).toContain('**Next steps**:')
       expect(memoryFile).toContain('Write tests')
       expect(memoryFile).toContain('**Files**:')
