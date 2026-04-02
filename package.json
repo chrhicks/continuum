@@ -18,7 +18,8 @@
     "install:global": "bun link",
     "setup": "bun install && bun run install:global",
     "format": "prettier --write .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "verify:goal": "bun run scripts/verify-goal-invariants.ts"
   },
   "dependencies": {
     "commander": "^14.0.3",

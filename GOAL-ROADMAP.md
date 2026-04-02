@@ -27,22 +27,24 @@ Remaining work toward the goal in `GOAL.md`.
 
 ---
 
-## Open: Remaining File-Size Violations
+## Resolved: File-Size Violations
 
-Two files still exceed the 300-line cap.
+All `src/` files are now under the 300-line cap.
 
-| File                               | Lines | Task                  |
-| ---------------------------------- | ----- | --------------------- |
-| `src/recall/diff/opencode-diff.ts` | 479   | tkt-v85vqnvh (step 2) |
-| `src/recall/sync/opencode-sync.ts` | 431   | tkt-v85vqnvh (step 2) |
-| `src/memory/recall-import.ts`      | 475   | tkt-qefb2bem          |
-| `src/memory/validate.ts`           | 349   | tkt-qefb2bem          |
+| File                               | Previous | Current | Evidence task |
+| ---------------------------------- | -------- | ------- | ------------- |
+| `src/recall/diff/opencode-diff.ts` | 479      | 32      | tkt-v85vqnvh  |
+| `src/recall/sync/opencode-sync.ts` | 431      | 116     | tkt-v85vqnvh  |
+| `src/memory/recall-import.ts`      | 475      | 232     | tkt-qefb2bem  |
+| `src/memory/validate.ts`           | 349      | 57      | tkt-qefb2bem  |
+
+Largest current file check: `src/cli/commands/task/render.ts` at 288 lines.
 
 ---
 
 ## Phase 5: Code Standard Quality Fixes
 
-The phase 4 splitting work introduced several violations of the Code Standard Principles added to `GOAL.md`. These must be resolved before the goal is complete. Each is an independent change.
+Phase 5 follow-up fixes have been completed. The items below are retained as a record of the targeted corrections.
 
 The guiding principle: **size reduction must not come at the cost of duplication, circular dependencies, or navigability.** See `GOAL.md` for the full principles.
 
@@ -256,26 +258,26 @@ Phase 6      ─── final verification after all phases complete
 
 ## Success Criteria Status
 
-| Criterion                                                     | Status                                                                             |
-| ------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| No file in `src/` exceeds 300 lines                           | **Partial** — 4 files remain (diff 479, recall-import 475, sync 431, validate 349) |
-| No function exceeds 80 lines                                  | **Partial** — pending review of remaining large files                              |
-| Zero `as any` casts                                           | Done                                                                               |
-| All exported functions have explicit return types             | Done                                                                               |
-| `formatStepMarker` helper consolidated                        | Done                                                                               |
-| `parsePositiveInt` consolidated                               | Done                                                                               |
-| `resolveRecallPath` consolidated                              | Done                                                                               |
-| `buildSummaryLines` shared helper                             | Done                                                                               |
-| `patch_collection` generic helper                             | Done                                                                               |
-| `createTaskCommand` decomposed into per-sub-command functions | Done                                                                               |
-| `require_task` defined once, imported everywhere              | **Pending** — Phase 5a                                                             |
-| `recall-handlers.ts` barrel removed                           | **Pending** — Phase 5b                                                             |
-| SDK types have one canonical export path                      | **Pending** — Phase 5c                                                             |
-| `SdkUpdateTaskInput` duplicate type removed                   | **Pending** — Phase 5d                                                             |
-| `opencode-source-index.helpers.ts` inlined                    | **Pending** — Phase 5e                                                             |
-| `extract.ts`/`extract-helpers.ts` circular dep removed        | **Pending** — Phase 5f                                                             |
-| `normalizeLimit` defined once                                 | **Pending** — Phase 5g                                                             |
-| `SUMMARY_PREFIX` defined once                                 | **Pending** — Phase 5h                                                             |
-| `consolidate-helpers.ts` renamed to descriptive name          | **Pending** — Phase 5i                                                             |
-| OpenCode parsing consolidated into `recall/opencode/`         | **Pending** — Phase 5j                                                             |
-| `bun run typecheck` and `bun test` pass throughout            | Passing                                                                            |
+| Criterion                                                     | Status  |
+| ------------------------------------------------------------- | ------- |
+| No file in `src/` exceeds 300 lines                           | Done    |
+| No function exceeds 80 lines                                  | Done    |
+| Zero `as any` casts                                           | Done    |
+| All exported functions have explicit return types             | Done    |
+| `formatStepMarker` helper consolidated                        | Done    |
+| `parsePositiveInt` consolidated                               | Done    |
+| `resolveRecallPath` consolidated                              | Done    |
+| `buildSummaryLines` shared helper                             | Done    |
+| `patch_collection` generic helper                             | Done    |
+| `createTaskCommand` decomposed into per-sub-command functions | Done    |
+| `require_task` defined once, imported everywhere              | Done    |
+| `recall-handlers.ts` barrel removed                           | Done    |
+| SDK types have one canonical export path                      | Done    |
+| `SdkUpdateTaskInput` duplicate type removed                   | Done    |
+| `opencode-source-index.helpers.ts` inlined                    | Done    |
+| `extract.ts`/`extract-helpers.ts` circular dep removed        | Done    |
+| `normalizeLimit` defined once                                 | Done    |
+| `SUMMARY_PREFIX` defined once                                 | Done    |
+| `consolidate-helpers.ts` renamed to descriptive name          | Done    |
+| OpenCode parsing consolidated into `recall/opencode/`         | Done    |
+| `bun run typecheck` and `bun test` pass throughout            | Passing |

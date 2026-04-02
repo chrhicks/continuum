@@ -74,6 +74,34 @@ For memory commands, Continuum resolves project-local `.continuum/` state from
 the nearest parent containing `.continuum/` or `.git/`, so running from a repo
 subdirectory still targets the repo root.
 
+### GOAL invariant verification
+
+```bash
+# Run GOAL.md invariant checks + validation command statuses
+bun run verify:goal
+```
+
+`bun run verify:goal` runs a deterministic repo-local verifier (`scripts/verify-goal-invariants.ts`) and exits non-zero on any failure.
+
+Checks covered:
+
+- `src/` file length violations (`> 300` lines)
+- `as any` occurrences in `src/`
+- Duplication sentinel counts for `require_task`, `normalizeLimit`, and `SUMMARY_PREFIX` (each must be exactly `1`)
+- Validation command statuses for `bun run typecheck`, `bun test`, and `continuum task list --json`
+
+Expected report shape:
+
+```text
+## File Length (src <= 300 lines)
+## 'as any' Casts (src)
+## Duplication Sentinel Counts
+## Validation Commands
+## Result
+```
+
+The final `Result` line is `- PASS` when all checks pass, otherwise `- FAIL`.
+
 ## SDK Usage
 
 The SDK is designed for programmatic access and follows the contract in `src/sdk.d.ts`.
