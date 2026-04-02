@@ -23,7 +23,7 @@ type RecoverOptions = {
   consolidate?: boolean
 }
 
-type CollectOptions = {
+export type CollectOptions = {
   source?: string
   db?: string
   repo?: string
@@ -45,23 +45,13 @@ type CollectOptions = {
   summaryMergeMaxEstTokens?: string
 }
 
-type MemorySubcommandHandlers = {
-  onSessionAppend: (kind: string, textParts: string[]) => void | Promise<void>
-  onStatus: () => void
-  onList: () => void
-  onConsolidate: (options: ConsolidateOptions) => void | Promise<void>
-  onAppend: (kind: string, textParts: string[]) => void | Promise<void>
-  onSearch: (query: string, options: SearchOptions) => void | Promise<void>
-  onLog: (options: LogOptions) => void
-  onRecover: (options: RecoverOptions) => void | Promise<void>
-  onValidate: () => void
-  onCollect: (options: CollectOptions) => void | Promise<void>
-}
+type SessionAppendHandler = MemorySubcommandHandlers['onSessionAppend']
+type AppendHandler = MemorySubcommandHandlers['onAppend']
+type SearchHandler = MemorySubcommandHandlers['onSearch']
 
-export function registerMemorySubcommands(
-  memoryCommand: Command,
+function registerSessionSubcommands(
   sessionCommand: Command,
-  handlers: MemorySubcommandHandlers,
+  onSessionAppend: SessionAppendHandler,
 ): void {
   sessionCommand
     .command('append')
@@ -69,9 +59,17 @@ export function registerMemorySubcommands(
     .argument('<kind>')
     .argument('<text...>')
     .action((kind: string, textParts: string[]) =>
-      handlers.onSessionAppend(kind, textParts),
+      onSessionAppend(kind, textParts),
     )
+}
 
+function registerBasicMemorySubcommands(
+  memoryCommand: Command,
+  handlers: Pick<
+    MemorySubcommandHandlers,
+    'onStatus' | 'onList' | 'onConsolidate'
+  >,
+): void {
   memoryCommand
     .command('status')
     .description('Show memory status')
@@ -87,16 +85,24 @@ export function registerMemorySubcommands(
     .description('Consolidate memory files')
     .option('--dry-run', 'Preview consolidation without writing files')
     .action((options: ConsolidateOptions) => handlers.onConsolidate(options))
+}
 
+function registerAppendSubcommand(
+  memoryCommand: Command,
+  onAppend: AppendHandler,
+): void {
   memoryCommand
     .command('append')
     .description('Append message to current session')
     .argument('<kind>')
     .argument('<text...>')
-    .action((kind: string, textParts: string[]) =>
-      handlers.onAppend(kind, textParts),
-    )
+    .action((kind: string, textParts: string[]) => onAppend(kind, textParts))
+}
 
+function registerSearchSubcommand(
+  memoryCommand: Command,
+  onSearch: SearchHandler,
+): void {
   memoryCommand
     .command('search')
     .description('Search memory content')
@@ -120,22 +126,37 @@ export function registerMemorySubcommands(
       if (!query) {
         throw new Error('Missing search query.')
       }
-      return handlers.onSearch(query, options)
+      return onSearch(query, options)
     })
+}
 
+function registerLogSubcommand(
+  memoryCommand: Command,
+  onLog: MemorySubcommandHandlers['onLog'],
+): void {
   memoryCommand
     .command('log')
     .description('View consolidation log')
     .option('--tail <lines>', 'Show last N lines')
-    .action((options: LogOptions) => handlers.onLog(options))
+    .action((options: LogOptions) => onLog(options))
+}
 
+function registerRecoverSubcommand(
+  memoryCommand: Command,
+  onRecover: MemorySubcommandHandlers['onRecover'],
+): void {
   memoryCommand
     .command('recover')
     .description('Recover stale NOW sessions')
     .option('--hours <hours>', 'Maximum age in hours')
     .option('--consolidate', 'Consolidate recovered sessions')
-    .action((options: RecoverOptions) => handlers.onRecover(options))
+    .action((options: RecoverOptions) => onRecover(options))
+}
 
+function registerCollectSubcommand(
+  memoryCommand: Command,
+  onCollect: MemorySubcommandHandlers['onCollect'],
+): void {
   memoryCommand
     .command('collect')
     .description(
@@ -177,10 +198,43 @@ export function registerMemorySubcommands(
       '--summary-merge-max-est-tokens <n>',
       'Estimated token budget for merging multiple summary chunks',
     )
-    .action((options: CollectOptions) => handlers.onCollect(options))
+    .action((options: CollectOptions) => onCollect(options))
+}
 
+function registerValidateSubcommand(
+  memoryCommand: Command,
+  onValidate: MemorySubcommandHandlers['onValidate'],
+): void {
   memoryCommand
     .command('validate')
     .description('Validate memory structure')
-    .action(() => handlers.onValidate())
+    .action(() => onValidate())
+}
+
+type MemorySubcommandHandlers = {
+  onSessionAppend: (kind: string, textParts: string[]) => void | Promise<void>
+  onStatus: () => void
+  onList: () => void
+  onConsolidate: (options: ConsolidateOptions) => void | Promise<void>
+  onAppend: (kind: string, textParts: string[]) => void | Promise<void>
+  onSearch: (query: string, options: SearchOptions) => void | Promise<void>
+  onLog: (options: LogOptions) => void
+  onRecover: (options: RecoverOptions) => void | Promise<void>
+  onValidate: () => void
+  onCollect: (options: CollectOptions) => void | Promise<void>
+}
+
+export function registerMemorySubcommands(
+  memoryCommand: Command,
+  sessionCommand: Command,
+  handlers: MemorySubcommandHandlers,
+): void {
+  registerSessionSubcommands(sessionCommand, handlers.onSessionAppend)
+  registerBasicMemorySubcommands(memoryCommand, handlers)
+  registerAppendSubcommand(memoryCommand, handlers.onAppend)
+  registerSearchSubcommand(memoryCommand, handlers.onSearch)
+  registerLogSubcommand(memoryCommand, handlers.onLog)
+  registerRecoverSubcommand(memoryCommand, handlers.onRecover)
+  registerCollectSubcommand(memoryCommand, handlers.onCollect)
+  registerValidateSubcommand(memoryCommand, handlers.onValidate)
 }
