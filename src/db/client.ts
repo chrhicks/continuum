@@ -3,6 +3,7 @@ import { drizzle } from 'drizzle-orm/bun-sqlite'
 import * as schema from './schema'
 import { dbFilePath } from './paths'
 import { runMigrations } from './migrate'
+import { configureSqlite } from './sqlite'
 
 export type DbClient = ReturnType<typeof drizzle>
 
@@ -16,6 +17,7 @@ const migratedPaths = new Set<string>()
 
 export function createClient(dbPath: string): DbHandle {
   const sqlite = new Database(dbPath)
+  configureSqlite(sqlite)
   const db = drizzle(sqlite, { schema })
   return { db, sqlite }
 }
@@ -34,7 +36,7 @@ export async function getDbClient(
 
   const shouldMigrate = options.migrate !== false
   if (shouldMigrate && !migratedPaths.has(dbPath)) {
-    runMigrations(client.db)
+    runMigrations(client.sqlite)
     migratedPaths.add(dbPath)
   }
 

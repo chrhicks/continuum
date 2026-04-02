@@ -1,6 +1,7 @@
 import { Database } from 'bun:sqlite'
 import { existsSync, mkdirSync, rmSync } from 'node:fs'
 import { dirname } from 'node:path'
+import { configureSqlite } from '../../db/sqlite'
 import type { MemorySource } from '../types'
 import type { MemoryStateRepository } from './repository'
 import {
@@ -123,6 +124,7 @@ function getContext(
 
   mkdirSync(dirname(dbPath), { recursive: true })
   const sqlite = new Database(dbPath)
+  configureSqlite(sqlite)
   sqlite.exec(INITIALIZE_SQL)
   migrateLegacyCheckpointFile(sqlite, legacyFilePath)
 

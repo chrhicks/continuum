@@ -16,6 +16,8 @@ import { readInput } from '../src/cli/io'
 import continuum from '../src/sdk'
 import { getCurrentSessionPath, startSession } from '../src/memory/session'
 
+const CONTINUUM_BIN = new URL('../bin/continuum', import.meta.url).pathname
+
 async function withTempCwd(run: () => Promise<void> | void): Promise<void> {
   const root = mkdtempSync(join(tmpdir(), 'continuum-cli-'))
   const previous = process.cwd()
@@ -75,6 +77,26 @@ async function withCapturedLogs(run: () => Promise<void>): Promise<string[]> {
     console.log = original
   }
   return logs
+}
+
+async function runContinuumProcess(
+  args: string[],
+  cwd: string,
+): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+  const proc = Bun.spawn({
+    cmd: [process.execPath, CONTINUUM_BIN, ...args],
+    cwd,
+    stdout: 'pipe',
+    stderr: 'pipe',
+  })
+
+  const [exitCode, stdout, stderr] = await Promise.all([
+    proc.exited,
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+  ])
+
+  return { exitCode, stdout, stderr }
 }
 
 const RECALL_SUMMARY_CONTENT = [
@@ -493,6 +515,15 @@ describe('task CLI', () => {
             line.includes('Initialized continuum in current directory.'),
           ),
         ).toBe(true)
+
+        const db = new Database(dbPath)
+        const migrationsTable = db
+          .query(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = '__drizzle_migrations'",
+          )
+          .get() as { sql: string } | null
+        expect(migrationsTable?.sql).toContain('id INTEGER PRIMARY KEY')
+        db.close()
       } finally {
         process.argv = originalArgv
       }
@@ -533,6 +564,24 @@ describe('task CLI', () => {
         expect(output).not.toContain(completedTask.id)
       } finally {
         process.argv = originalArgv
+      }
+    })
+  })
+
+  test('concurrent task list commands succeed against one database', async () => {
+    await withTempCwd(async () => {
+      await continuum.task.init()
+
+      const results = await Promise.all(
+        Array.from({ length: 6 }, () =>
+          runContinuumProcess(['task', 'list', '--json'], process.cwd()),
+        ),
+      )
+
+      for (const result of results) {
+        expect(result.exitCode).toBe(0)
+        expect(result.stderr.trim()).toBe('')
+        expect(JSON.parse(result.stdout)).toMatchObject({ ok: true })
       }
     })
   })

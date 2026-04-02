@@ -19,7 +19,7 @@ export async function main(): Promise<void> {
   program
     .name('continuum')
     .description('Continuum CLI - Task and memory management system')
-    .version('0.1.0')
+    .version('0.1.1')
     .option('--json', 'Output JSON responses')
     .option('--cwd <path>', 'Run in target directory')
     .option('--quiet', 'Suppress non-JSON output')
