@@ -1,21 +1,20 @@
 import { existsSync } from 'node:fs'
 import { initMemory } from './init'
-import { memoryPath, resolveMemoryDir } from './paths'
+import { resolveMemoryDir } from './paths'
 import { getMemoryConfig } from './config'
 import { resolveCurrentSessionPath } from './session'
 import { withMemoryLockAsync } from './lock'
 import { dedupeEntriesByAnchor, insertEntryInSection } from './memory-index'
-import { formatDate } from './memory-content-builders'
-import {
-  LOG_ROTATION_LINES,
-  buildUpdatedLog,
-  cleanupOldNowFiles,
-  writeFilesAtomically,
-} from './consolidate-io'
 import {
   prepareNowConsolidationInput,
   type PreparedConsolidationInput,
 } from './consolidation/extract'
+import {
+  createBatchState,
+  ensureConsolidationEnvironment,
+  persistBatchState,
+  processBatchInput,
+} from './consolidation/batch'
 import { summarizePreparedInput } from './consolidation/summarize'
 import { renderConsolidationArtifacts } from './consolidation/render'
 import {
@@ -140,97 +139,26 @@ export async function consolidatePreparedInputs(
 
   const dryRun = options.dryRun ?? false
   const runBatch = async (): Promise<ConsolidationBatchOutput> => {
-    if (!dryRun) {
-      initMemory()
-    } else if (!existsSync(resolveMemoryDir())) {
-      throw new Error(
-        'Memory directory not initialized. Run: continuum memory init',
-      )
-    }
+    ensureConsolidationEnvironment(dryRun)
 
     const config = getMemoryConfig()
     const sortedInputs = inputs.slice().sort(comparePreparedInputs)
-    const memoryContents = new Map<string, string>()
-    const sourceContents = new Map<string, string>()
-    const cleanupPaths = new Set<string>()
-    const memoryPaths = new Set<string>()
-    const logEntries: string[] = []
-    let recentPath: string | null = null
-    let recentContent: string | null = null
-    let memoryIndexPath: string | null = null
-    let memoryIndexContent: string | null = null
-    let logPath: string | null = null
+    const state = createBatchState()
 
     for (const input of sortedInputs) {
-      const summary = await summarizePreparedInput(input, config)
-      const artifacts = renderConsolidationArtifacts({
+      await processBatchInput({
         input,
-        summary,
         config,
-        existing: {
-          recent: recentContent,
-          memory: memoryContents.get(
-            memoryPath(`MEMORY-${formatDate(input.timestampStart)}.md`),
-          ),
-          index: memoryIndexContent,
-        },
+        state,
+        skipSourceCleanup: options.skipSourceCleanup,
       })
-
-      recentPath = artifacts.recentPath
-      recentContent = artifacts.updatedRecent
-      memoryIndexPath = artifacts.memoryIndexPath
-      memoryIndexContent = artifacts.updatedIndex
-      logPath = artifacts.logPath
-      memoryPaths.add(artifacts.memoryFilePath)
-      memoryContents.set(artifacts.memoryFilePath, artifacts.updatedMemory)
-      logEntries.push(artifacts.logEntry.entry)
-
-      if (artifacts.updatedSourceContent && !options.skipSourceCleanup) {
-        sourceContents.set(input.sourcePath, artifacts.updatedSourceContent)
-      }
-      if (input.clearSourceAfterPersist && !options.skipSourceCleanup) {
-        cleanupPaths.add(input.sourcePath)
-      }
     }
 
-    if (!dryRun && recentPath && memoryIndexPath && logPath) {
-      const logUpdate = buildUpdatedLog(
-        logPath,
-        logEntries.join(''),
-        LOG_ROTATION_LINES,
-      )
-      const targets = [
-        { path: recentPath, content: recentContent ?? '' },
-        ...Array.from(memoryContents.entries())
-          .sort(([left], [right]) => left.localeCompare(right))
-          .map(([path, content]) => ({ path, content })),
-        { path: memoryIndexPath, content: memoryIndexContent ?? '' },
-        ...Array.from(sourceContents.entries())
-          .sort(([left], [right]) => left.localeCompare(right))
-          .map(([path, content]) => ({ path, content })),
-        {
-          path: logPath,
-          content: logUpdate.content,
-          rotateExistingTo: logUpdate.rotateExistingTo,
-        },
-      ]
-      writeFilesAtomically(targets)
-
-      for (const sourcePath of cleanupPaths) {
-        cleanupOldNowFiles(sourcePath, NOW_RETENTION_DAYS)
-      }
+    if (!dryRun) {
+      persistBatchState(state)
     }
 
-    return {
-      count: sortedInputs.length,
-      dryRun,
-      recentPath,
-      memoryPaths: Array.from(memoryPaths).sort((left, right) =>
-        left.localeCompare(right),
-      ),
-      memoryIndexPath,
-      logPath,
-    }
+    return buildBatchOutput(sortedInputs.length, dryRun, state)
   }
 
   if (dryRun) {
@@ -238,6 +166,28 @@ export async function consolidatePreparedInputs(
   }
 
   return withMemoryLockAsync(runBatch)
+}
+
+function buildBatchOutput(
+  count: number,
+  dryRun: boolean,
+  state: {
+    recentPath: string | null
+    memoryPaths: Set<string>
+    memoryIndexPath: string | null
+    logPath: string | null
+  },
+): ConsolidationBatchOutput {
+  return {
+    count,
+    dryRun,
+    recentPath: state.recentPath,
+    memoryPaths: Array.from(state.memoryPaths).sort((left, right) =>
+      left.localeCompare(right),
+    ),
+    memoryIndexPath: state.memoryIndexPath,
+    logPath: state.logPath,
+  }
 }
 
 function comparePreparedInputs(

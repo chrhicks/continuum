@@ -14,7 +14,23 @@ const PREVIOUS_WORKSPACE_CONTEXT = Symbol('previous-workspace-context')
 
 export async function main(): Promise<void> {
   const removeExitHandlers = installExitHandlers()
+  const program = createProgram()
 
+  try {
+    await parseProgram(program)
+  } catch (error) {
+    if (error instanceof Error && error.name === 'CommanderError') {
+      process.exitCode = 1
+      return
+    }
+    throw error
+  } finally {
+    removeExitHandlers()
+    clearActiveWorkspaceContext()
+  }
+}
+
+function createProgram(): Command {
   const program = new Command()
   program
     .name('continuum')
@@ -26,6 +42,17 @@ export async function main(): Promise<void> {
     .showHelpAfterError()
     .showSuggestionAfterError()
 
+  addInitCommand(program)
+  program.addCommand(createSetupCommand())
+  program.addCommand(createMemoryCommand())
+  program.addCommand(createTaskCommand())
+  program.exitOverride()
+  registerWorkspaceHooks(program)
+
+  return program
+}
+
+function addInitCommand(program: Command): void {
   program
     .command('init')
     .description('Initialize continuum database in current directory')
@@ -51,13 +78,9 @@ export async function main(): Promise<void> {
         },
       )
     })
+}
 
-  program.addCommand(createSetupCommand())
-  program.addCommand(createMemoryCommand())
-  program.addCommand(createTaskCommand())
-
-  program.exitOverride()
-
+function registerWorkspaceHooks(program: Command): void {
   program.hook('preAction', (_thisCommand, actionCommand) => {
     let root = actionCommand as Command
     while (root.parent) {
@@ -98,24 +121,15 @@ export async function main(): Promise<void> {
     }
     delete command[PREVIOUS_WORKSPACE_CONTEXT]
   })
+}
 
+async function parseProgram(program: Command): Promise<void> {
   if (process.argv.length <= 2) {
     program.outputHelp()
     return
   }
 
-  try {
-    await program.parseAsync(process.argv)
-  } catch (error) {
-    if (error instanceof Error && error.name === 'CommanderError') {
-      process.exitCode = 1
-      return
-    }
-    throw error
-  } finally {
-    removeExitHandlers()
-    clearActiveWorkspaceContext()
-  }
+  await program.parseAsync(process.argv)
 }
 
 function isMemoryCommand(command: Command): boolean {

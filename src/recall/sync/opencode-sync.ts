@@ -1,7 +1,8 @@
 import { existsSync, readFileSync } from 'node:fs'
-import { isAbsolute, join, resolve } from 'node:path'
+import { join, resolve } from 'node:path'
 import type { OpencodeSyncPlan } from '../diff/opencode-diff'
 import { resolveRecallDataRoot } from '../index/opencode-source-index'
+import { resolveRecallPath } from '../resolve-path'
 import {
   adjustTemplateForScope,
   limitSyncPlanItems,
@@ -55,7 +56,7 @@ export function resolveOpencodeSyncPlanFile(
   dataRoot: string,
   value?: string | null,
 ): string {
-  if (value) return resolvePath(value)
+  if (value) return resolveRecallPath(value)
   return join(dataRoot, DEFAULT_SYNC_PLAN_FILE)
 }
 
@@ -108,9 +109,4 @@ export function runOpencodeSyncPlan(
     results,
     summary: summarizeSyncRunResults(results),
   }
-}
-
-const resolvePath = (value: string, base?: string): string => {
-  if (isAbsolute(value)) return value
-  return resolve(base ?? process.cwd(), value)
 }

@@ -1,99 +1,37 @@
 import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { dirname, isAbsolute, join, resolve } from 'node:path'
+import { dirname, join } from 'node:path'
 import { Database } from 'bun:sqlite'
 import { resolveOpencodeDbPath } from '../opencode/paths'
+import { resolveRecallPath } from '../resolve-path'
+import type {
+  OpencodeMessageStatsRow,
+  OpencodePartStatsRow,
+  OpencodeProjectIndexRecord,
+  OpencodeSessionRow,
+  OpencodeSessionStats,
+  OpencodeSourceIndex,
+  OpencodeSourceIndexEntry,
+  OpencodeSourceIndexOptions,
+} from './opencode-source-index.types'
+
+export type {
+  OpencodeMessageStatsRow,
+  OpencodePartStatsRow,
+  OpencodeProjectIndexRecord,
+  OpencodeSessionRow,
+  OpencodeSessionStats,
+  OpencodeSourceIndex,
+  OpencodeSourceIndexEntry,
+  OpencodeSourceIndexOptions,
+} from './opencode-source-index.types'
 const SOURCE_INDEX_VERSION = 2
 const DEFAULT_SOURCE_INDEX_FILE = join(
   'recall',
   'opencode',
   'source-index.json',
 )
-
-export type OpencodeSourceIndexOptions = {
-  dbPath?: string | null
-  dataRoot?: string | null
-  indexFile?: string | null
-  projectId?: string | null
-  sessionId?: string | null
-}
-
-export type OpencodeProjectIndexRecord = {
-  id: string
-  worktree: string | null
-}
-
-export type OpencodeSessionRow = {
-  id: string
-  project_id: string
-  slug: string | null
-  title: string | null
-  directory: string | null
-  version: string | null
-  summary_additions: number | null
-  summary_deletions: number | null
-  summary_files: number | null
-  time_created: number
-  time_updated: number
-}
-
-export type OpencodeMessageStatsRow = {
-  session_id: string
-  message_count: number
-  message_latest_ms: number | null
-}
-
-export type OpencodePartStatsRow = {
-  session_id: string
-  part_count: number
-  part_latest_ms: number | null
-}
-
-export type OpencodeSessionStats = {
-  message_count: number
-  part_count: number
-  message_latest_ms: number | null
-  part_latest_ms: number | null
-}
-
-export type OpencodeSourceIndexEntry = {
-  key: string
-  session_id: string
-  project_id: string
-  title: string | null
-  slug: string | null
-  directory: string | null
-  created_at: string | null
-  updated_at: string | null
-  message_count: number
-  part_count: number
-  message_latest_mtime_ms: number | null
-  part_latest_mtime_ms: number | null
-  session_file: string
-  message_dir: string | null
-  session_mtime_ms: number | null
-  fingerprint: string
-}
-
-export type OpencodeSourceIndex = {
-  version: number
-  generated_at: string
-  storage_root: string
-  db_path: string
-  data_root: string
-  index_file: string
-  filters: {
-    project_id: string | null
-    session_id: string | null
-  }
-  projects: Record<string, OpencodeProjectIndexRecord>
-  sessions: Record<string, OpencodeSourceIndexEntry>
-  stats: {
-    project_count: number
-    session_count: number
-  }
-}
 
 function toIso(value?: number | null): string | null {
   if (typeof value !== 'number' || !Number.isFinite(value)) return null
@@ -117,7 +55,7 @@ function buildSessionStats(
 }
 
 export function resolveRecallDataRoot(value?: string | null): string {
-  if (value) return resolvePath(value) as string
+  if (value) return resolveRecallPath(value)
   const dataHome = process.env.XDG_DATA_HOME
   return join(dataHome ?? join(homedir(), '.local', 'share'), 'continuum')
 }
@@ -126,7 +64,7 @@ export function resolveOpencodeSourceIndexFile(
   dataRoot: string,
   value?: string | null,
 ): string {
-  if (value) return resolvePath(value) as string
+  if (value) return resolveRecallPath(value)
   return join(dataRoot, DEFAULT_SOURCE_INDEX_FILE)
 }
 
@@ -183,6 +121,81 @@ export function buildOpencodeSessionIndexEntry(
   }
 }
 
+function buildSessionFilter(
+  projectFilter: string | null,
+  sessionFilter: string | null,
+): { whereClause: string; params: string[] } {
+  const conditions: string[] = []
+  const params: string[] = []
+  if (projectFilter) {
+    conditions.push('project_id = ?')
+    params.push(projectFilter)
+  }
+  if (sessionFilter) {
+    conditions.push('id = ?')
+    params.push(sessionFilter)
+  }
+  return {
+    whereClause:
+      conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '',
+    params,
+  }
+}
+
+function queryProjects(
+  sqlite: Database,
+): Record<string, OpencodeProjectIndexRecord> {
+  const projectRows = sqlite
+    .query('SELECT id, worktree FROM project')
+    .all() as OpencodeProjectIndexRecord[]
+  return Object.fromEntries(
+    projectRows.map((row) => [
+      row.id,
+      { id: row.id, worktree: row.worktree ?? null },
+    ]),
+  ) as Record<string, OpencodeProjectIndexRecord>
+}
+
+function querySessions(
+  sqlite: Database,
+  projectFilter: string | null,
+  sessionFilter: string | null,
+): OpencodeSessionRow[] {
+  const { whereClause, params } = buildSessionFilter(
+    projectFilter,
+    sessionFilter,
+  )
+  return sqlite
+    .query(
+      `SELECT id, project_id, slug, title, directory, version,
+      summary_additions, summary_deletions, summary_files,
+      time_created, time_updated
+      FROM session
+      ${whereClause}`,
+    )
+    .all(...params) as OpencodeSessionRow[]
+}
+
+function querySessionStats(sqlite: Database): {
+  messageStatsBySession: Record<string, OpencodeMessageStatsRow>
+  partStatsBySession: Record<string, OpencodePartStatsRow>
+} {
+  const messageStatsRows = sqlite
+    .query(
+      'SELECT session_id, COUNT(*) as message_count, MAX(time_updated) as message_latest_ms FROM message GROUP BY session_id',
+    )
+    .all() as OpencodeMessageStatsRow[]
+  const partStatsRows = sqlite
+    .query(
+      'SELECT session_id, COUNT(*) as part_count, MAX(time_updated) as part_latest_ms FROM part GROUP BY session_id',
+    )
+    .all() as OpencodePartStatsRow[]
+  return {
+    messageStatsBySession: indexBySessionId(messageStatsRows),
+    partStatsBySession: indexBySessionId(partStatsRows),
+  }
+}
+
 export function buildOpencodeSourceIndex(
   options: OpencodeSourceIndexOptions = {},
 ): OpencodeSourceIndex {
@@ -199,54 +212,10 @@ export function buildOpencodeSourceIndex(
 
   const sqlite = new Database(dbPath)
   try {
-    const projectRows = sqlite
-      .query('SELECT id, worktree FROM project')
-      .all() as OpencodeProjectIndexRecord[]
-    const projects = Object.fromEntries(
-      projectRows.map((row) => [
-        row.id,
-        { id: row.id, worktree: row.worktree ?? null },
-      ]),
-    ) as Record<string, OpencodeProjectIndexRecord>
-
-    const sessionConditions: string[] = []
-    const sessionParams: string[] = []
-    if (projectFilter) {
-      sessionConditions.push('project_id = ?')
-      sessionParams.push(projectFilter)
-    }
-    if (sessionFilter) {
-      sessionConditions.push('id = ?')
-      sessionParams.push(sessionFilter)
-    }
-    const sessionWhere =
-      sessionConditions.length > 0
-        ? `WHERE ${sessionConditions.join(' AND ')}`
-        : ''
-
-    const sessions = sqlite
-      .query(
-        `SELECT id, project_id, slug, title, directory, version,
-        summary_additions, summary_deletions, summary_files,
-        time_created, time_updated
-        FROM session
-        ${sessionWhere}`,
-      )
-      .all(...sessionParams) as OpencodeSessionRow[]
-
-    const messageStatsRows = sqlite
-      .query(
-        'SELECT session_id, COUNT(*) as message_count, MAX(time_updated) as message_latest_ms FROM message GROUP BY session_id',
-      )
-      .all() as OpencodeMessageStatsRow[]
-    const partStatsRows = sqlite
-      .query(
-        'SELECT session_id, COUNT(*) as part_count, MAX(time_updated) as part_latest_ms FROM part GROUP BY session_id',
-      )
-      .all() as OpencodePartStatsRow[]
-
-    const messageStatsBySession = indexBySessionId(messageStatsRows)
-    const partStatsBySession = indexBySessionId(partStatsRows)
+    const projects = queryProjects(sqlite)
+    const sessions = querySessions(sqlite, projectFilter, sessionFilter)
+    const { messageStatsBySession, partStatsBySession } =
+      querySessionStats(sqlite)
 
     const entries = sessions.map((session) =>
       buildOpencodeSessionIndexEntry(
@@ -292,9 +261,4 @@ export function buildOpencodeSourceIndex(
   } finally {
     sqlite.close()
   }
-}
-
-function resolvePath(value: string): string {
-  if (isAbsolute(value)) return value
-  return resolve(process.cwd(), value)
 }

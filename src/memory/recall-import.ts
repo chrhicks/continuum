@@ -40,25 +40,120 @@ export type RecallImportResult = {
   skipped: RecallImportSkipped[]
 }
 
-export async function importOpencodeRecall(
-  options: RecallImportOptions = {},
-): Promise<RecallImportResult> {
+type RecallImportLoopState = {
+  importedSessions: string[]
+  skipped: RecallImportSkipped[]
+  preparedInputs: ReturnType<typeof prepareRecallSummaryConsolidationInput>[]
+  imported: number
+  skippedExisting: number
+  skippedInvalid: number
+  skippedFiltered: number
+}
+
+function resolveImportSummaryDir(options: RecallImportOptions): string {
   const workspace = getWorkspaceContext()
-  const summaryDir = resolveOpencodeOutputDir(
+  return resolveOpencodeOutputDir(
     workspace.workspaceRoot,
     options.summaryDir ?? options.outDir ?? null,
   )
+}
+
+function validateImportInputs(summaryDir: string, dbPath?: string): void {
   if (!existsSync(summaryDir)) {
     throw new Error(`Recall summary directory not found: ${summaryDir}`)
   }
-  if (options.dbPath) {
-    const dbPath = resolveOpencodeDbPath(options.dbPath)
-    if (!existsSync(dbPath)) {
-      throw new Error(
-        `OpenCode sqlite database not found: ${dbPath}. OpenCode 1.2.0+ is required.`,
-      )
-    }
+  if (!dbPath) {
+    return
   }
+  const resolvedDbPath = resolveOpencodeDbPath(dbPath)
+  if (!existsSync(resolvedDbPath)) {
+    throw new Error(
+      `OpenCode sqlite database not found: ${resolvedDbPath}. OpenCode 1.2.0+ is required.`,
+    )
+  }
+}
+
+function createImportLoopState(): RecallImportLoopState {
+  return {
+    importedSessions: [],
+    skipped: [],
+    preparedInputs: [],
+    imported: 0,
+    skippedExisting: 0,
+    skippedInvalid: 0,
+    skippedFiltered: 0,
+  }
+}
+
+function processSummaryFile(params: {
+  summaryPath: string
+  projectFilter: string | null
+  sessionFilter: string | null
+  existingSessions: Set<string>
+  dryRun: boolean
+  state: RecallImportLoopState
+}): void {
+  const {
+    summaryPath,
+    projectFilter,
+    sessionFilter,
+    existingSessions,
+    dryRun,
+    state,
+  } = params
+  const content = readFileSync(summaryPath, 'utf-8')
+  const parsed = parseOpencodeSummary(content)
+  if (!parsed) {
+    state.skippedInvalid += 1
+    state.skipped.push({
+      summaryPath,
+      reason: 'Missing or invalid summary format',
+    })
+    return
+  }
+  if (sessionFilter && parsed.sessionId !== sessionFilter) {
+    state.skippedFiltered += 1
+    state.skipped.push({
+      summaryPath,
+      sessionId: parsed.sessionId,
+      reason: `Filtered by session id (${sessionFilter})`,
+    })
+    return
+  }
+  if (projectFilter && parsed.projectId !== projectFilter) {
+    state.skippedFiltered += 1
+    state.skipped.push({
+      summaryPath,
+      sessionId: parsed.sessionId,
+      reason: `Filtered by project id (${projectFilter})`,
+    })
+    return
+  }
+  if (existingSessions.has(parsed.sessionId)) {
+    state.skippedExisting += 1
+    state.skipped.push({
+      summaryPath,
+      sessionId: parsed.sessionId,
+      reason: 'Session already imported',
+    })
+    return
+  }
+
+  state.preparedInputs.push(
+    prepareRecallSummaryConsolidationInput(parsed, summaryPath),
+  )
+  if (!dryRun) {
+    existingSessions.add(parsed.sessionId)
+    state.importedSessions.push(parsed.sessionId)
+    state.imported += 1
+  }
+}
+
+export async function importOpencodeRecall(
+  options: RecallImportOptions = {},
+): Promise<RecallImportResult> {
+  const summaryDir = resolveImportSummaryDir(options)
+  validateImportInputs(summaryDir, options.dbPath)
 
   initMemory()
 
@@ -67,63 +162,22 @@ export async function importOpencodeRecall(
   const existingSessions = loadImportedSessions(memoryDir)
   const projectFilter = options.projectId?.trim() || null
   const sessionFilter = options.sessionId?.trim() || null
-  const importedSessions: string[] = []
-  const skipped: RecallImportSkipped[] = []
-  const preparedInputs = []
-  let imported = 0
-  let skippedExisting = 0
-  let skippedInvalid = 0
-  let skippedFiltered = 0
   const dryRun = options.dryRun ?? false
+  const state = createImportLoopState()
 
   for (const summaryPath of summaryFiles) {
-    const content = readFileSync(summaryPath, 'utf-8')
-    const parsed = parseOpencodeSummary(content)
-    if (!parsed) {
-      skippedInvalid += 1
-      skipped.push({ summaryPath, reason: 'Missing or invalid summary format' })
-      continue
-    }
-    if (sessionFilter && parsed.sessionId !== sessionFilter) {
-      skippedFiltered += 1
-      skipped.push({
-        summaryPath,
-        sessionId: parsed.sessionId,
-        reason: `Filtered by session id (${sessionFilter})`,
-      })
-      continue
-    }
-    if (projectFilter && parsed.projectId !== projectFilter) {
-      skippedFiltered += 1
-      skipped.push({
-        summaryPath,
-        sessionId: parsed.sessionId,
-        reason: `Filtered by project id (${projectFilter})`,
-      })
-      continue
-    }
-    if (existingSessions.has(parsed.sessionId)) {
-      skippedExisting += 1
-      skipped.push({
-        summaryPath,
-        sessionId: parsed.sessionId,
-        reason: 'Session already imported',
-      })
-      continue
-    }
-
-    preparedInputs.push(
-      prepareRecallSummaryConsolidationInput(parsed, summaryPath),
-    )
-    if (!dryRun) {
-      existingSessions.add(parsed.sessionId)
-      importedSessions.push(parsed.sessionId)
-      imported += 1
-    }
+    processSummaryFile({
+      summaryPath,
+      projectFilter,
+      sessionFilter,
+      existingSessions,
+      dryRun,
+      state,
+    })
   }
 
-  if (preparedInputs.length > 0) {
-    await consolidatePreparedInputs(preparedInputs, {
+  if (state.preparedInputs.length > 0) {
+    await consolidatePreparedInputs(state.preparedInputs, {
       dryRun,
       skipSourceCleanup: true,
     })
@@ -134,12 +188,12 @@ export async function importOpencodeRecall(
     memoryDir,
     dryRun,
     totalSummaries: summaryFiles.length,
-    imported,
-    skippedExisting,
-    skippedInvalid,
-    skippedFiltered,
-    importedSessions,
-    skipped,
+    imported: state.imported,
+    skippedExisting: state.skippedExisting,
+    skippedInvalid: state.skippedInvalid,
+    skippedFiltered: state.skippedFiltered,
+    importedSessions: state.importedSessions,
+    skipped: state.skipped,
   }
 }
 

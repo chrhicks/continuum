@@ -9,6 +9,15 @@ import type {
   TaskStatus,
 } from './types'
 
+type ListCursor = {
+  sortValue: string | number
+  id: string
+  secondarySortValue?: string | number
+}
+
+type WhereClause = ReturnType<typeof and> | ReturnType<typeof sql>
+type TaskSortKey = NonNullable<ListTaskFilters['sort']>
+
 function encode_cursor(
   sortValue: string | number,
   id: string,
@@ -45,12 +54,8 @@ function decode_cursor(cursor: string | undefined): {
   }
 }
 
-export async function list_tasks(
-  db: DbClient,
-  filters: ListTaskFilters = {},
-): Promise<ListTasksResult> {
-  const where: Array<ReturnType<typeof and> | ReturnType<typeof sql>> = []
-
+function build_list_where(filters: ListTaskFilters): WhereClause[] {
+  const where: WhereClause[] = []
   const includeDeleted =
     filters.includeDeleted === true || filters.status === 'deleted'
 
@@ -61,9 +66,7 @@ export async function list_tasks(
   if (!filters.status) {
     where.push(ne(tasks.status, 'cancelled'))
     where.push(ne(tasks.status, 'completed'))
-  }
-
-  if (filters.status) {
+  } else {
     where.push(eq(tasks.status, filters.status))
   }
 
@@ -72,13 +75,26 @@ export async function list_tasks(
   }
 
   if (filters.parent_id !== undefined) {
-    if (filters.parent_id === null) {
-      where.push(isNull(tasks.parent_id))
-    } else {
-      where.push(eq(tasks.parent_id, filters.parent_id))
-    }
+    where.push(
+      filters.parent_id === null
+        ? isNull(tasks.parent_id)
+        : eq(tasks.parent_id, filters.parent_id),
+    )
   }
 
+  return where
+}
+
+function resolve_list_sort(filters: ListTaskFilters): {
+  sortKey: TaskSortKey
+  sortColumn:
+    | typeof tasks.priority
+    | typeof tasks.updated_at
+    | typeof tasks.created_at
+  sortOrder: 'asc' | 'desc'
+  limit: number
+  cursor: ListCursor | null
+} {
   const sortKey = filters.sort ?? 'priority'
   const sortColumn =
     sortKey === 'priority'
@@ -86,27 +102,79 @@ export async function list_tasks(
       : sortKey === 'updatedAt'
         ? tasks.updated_at
         : tasks.created_at
-  const sortOrder = filters.order === 'desc' ? 'desc' : 'asc'
-  const limit = filters.limit && filters.limit > 0 ? filters.limit : 50
-  const cursor = decode_cursor(filters.cursor)
+
+  return {
+    sortKey,
+    sortColumn,
+    sortOrder: filters.order === 'desc' ? 'desc' : 'asc',
+    limit: filters.limit && filters.limit > 0 ? filters.limit : 50,
+    cursor: decode_cursor(filters.cursor),
+  }
+}
+
+function append_cursor_where(
+  where: WhereClause[],
+  cursor: ListCursor,
+  sortOrder: 'asc' | 'desc',
+  sortKey: TaskSortKey,
+  sortColumn:
+    | typeof tasks.priority
+    | typeof tasks.updated_at
+    | typeof tasks.created_at,
+): void {
+  const comparator = sortOrder === 'desc' ? '<' : '>'
+  if (sortKey !== 'priority') {
+    where.push(
+      sql`(${sortColumn}, ${tasks.id}) ${sql.raw(comparator)} (${cursor.sortValue}, ${cursor.id})`,
+    )
+    return
+  }
+
+  if (cursor.secondarySortValue !== undefined) {
+    where.push(
+      sql`(${tasks.priority}, ${tasks.created_at}, ${tasks.id}) ${sql.raw(comparator)} (${cursor.sortValue}, ${cursor.secondarySortValue}, ${cursor.id})`,
+    )
+    return
+  }
+
+  where.push(
+    sql`(${tasks.priority}, ${tasks.id}) ${sql.raw(comparator)} (${cursor.sortValue}, ${cursor.id})`,
+  )
+}
+
+function build_next_cursor(
+  sortKey: TaskSortKey,
+  last: {
+    id: string
+    priority: number
+    created_at: string | number
+    updated_at: string | number
+  },
+): string {
+  const sortValue =
+    sortKey === 'priority'
+      ? last.priority
+      : sortKey === 'updatedAt'
+        ? last.updated_at
+        : last.created_at
+
+  return encode_cursor(
+    sortValue,
+    last.id,
+    sortKey === 'priority' ? last.created_at : undefined,
+  )
+}
+
+export async function list_tasks(
+  db: DbClient,
+  filters: ListTaskFilters = {},
+): Promise<ListTasksResult> {
+  const where = build_list_where(filters)
+  const { cursor, limit, sortColumn, sortKey, sortOrder } =
+    resolve_list_sort(filters)
 
   if (cursor) {
-    const comparator = sortOrder === 'desc' ? '<' : '>'
-    if (sortKey === 'priority') {
-      if (cursor.secondarySortValue !== undefined) {
-        where.push(
-          sql`(${tasks.priority}, ${tasks.created_at}, ${tasks.id}) ${sql.raw(comparator)} (${cursor.sortValue}, ${cursor.secondarySortValue}, ${cursor.id})`,
-        )
-      } else {
-        where.push(
-          sql`(${tasks.priority}, ${tasks.id}) ${sql.raw(comparator)} (${cursor.sortValue}, ${cursor.id})`,
-        )
-      }
-    } else {
-      where.push(
-        sql`(${sortColumn}, ${tasks.id}) ${sql.raw(comparator)} (${cursor.sortValue}, ${cursor.id})`,
-      )
-    }
+    append_cursor_where(where, cursor, sortOrder, sortKey, sortColumn)
   }
 
   const orderFn = sortOrder === 'desc' ? desc : asc
@@ -132,18 +200,9 @@ export async function list_tasks(
   }
 
   const last = slice[slice.length - 1]!
-  const sortValue =
-    sortKey === 'priority'
-      ? last.priority
-      : sortKey === 'updatedAt'
-        ? last.updated_at
-        : last.created_at
-  const secondarySortValue =
-    sortKey === 'priority' ? last.created_at : undefined
-
   return {
     tasks: mapped,
-    nextCursor: encode_cursor(sortValue, last.id, secondarySortValue),
+    nextCursor: build_next_cursor(sortKey, last),
   }
 }
 
