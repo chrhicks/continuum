@@ -10,6 +10,24 @@ import type { CollectOptions } from './memory-subcommands'
 
 type CollectSource = 'opencode' | 'task'
 
+type CollectIntegerOption =
+  | 'limit'
+  | 'summaryMaxTokens'
+  | 'summaryTimeoutMs'
+  | 'summaryMaxChars'
+  | 'summaryMaxLines'
+  | 'summaryMergeMaxEstTokens'
+
+const COLLECT_INTEGER_OPTION_ERRORS: Record<CollectIntegerOption, string> = {
+  limit: 'Collect limit must be a positive integer.',
+  summaryMaxTokens: 'Summary max tokens must be a positive integer.',
+  summaryTimeoutMs: 'Summary timeout must be a positive integer.',
+  summaryMaxChars: 'Summary max chars must be a positive integer.',
+  summaryMaxLines: 'Summary max lines must be a positive integer.',
+  summaryMergeMaxEstTokens:
+    'Summary merge token budget must be a positive integer.',
+}
+
 export async function handleCollect(options: CollectOptions): Promise<void> {
   const source = parseCollectSource(options.source)
   const workspace = getWorkspaceContext()
@@ -50,11 +68,7 @@ async function collectFromTaskSource(
       directory: workspace.workspaceRoot,
       taskId: options.task ?? null,
       statuses: parseTaskCollectStatuses(options.status),
-      limit: parseOptionalPositiveInteger(
-        options.limit,
-        null,
-        'Collect limit must be a positive integer.',
-      ),
+      limit: parseCollectIntegerOption(options, 'limit'),
     },
     { stateRepository: checkpointRepository },
   )
@@ -88,39 +102,18 @@ async function collectFromOpencodeSource(
       outDir: options.out ?? null,
       projectId: options.project ?? null,
       sessionId: options.session ?? null,
-      limit: parseOptionalPositiveInteger(
-        options.limit,
-        null,
-        'Collect limit must be a positive integer.',
-      ),
+      limit: parseCollectIntegerOption(options, 'limit'),
       summarize: options.summarize,
       summaryModel: options.summaryModel ?? null,
       summaryApiUrl: options.summaryApiUrl ?? null,
       summaryApiKey: options.summaryApiKey ?? null,
-      summaryMaxTokens: parseOptionalPositiveInteger(
-        options.summaryMaxTokens,
-        null,
-        'Summary max tokens must be a positive integer.',
-      ),
-      summaryTimeoutMs: parseOptionalPositiveInteger(
-        options.summaryTimeoutMs,
-        null,
-        'Summary timeout must be a positive integer.',
-      ),
-      summaryMaxChars: parseOptionalPositiveInteger(
-        options.summaryMaxChars,
-        null,
-        'Summary max chars must be a positive integer.',
-      ),
-      summaryMaxLines: parseOptionalPositiveInteger(
-        options.summaryMaxLines,
-        null,
-        'Summary max lines must be a positive integer.',
-      ),
-      summaryMergeMaxEstTokens: parseOptionalPositiveInteger(
-        options.summaryMergeMaxEstTokens,
-        null,
-        'Summary merge token budget must be a positive integer.',
+      summaryMaxTokens: parseCollectIntegerOption(options, 'summaryMaxTokens'),
+      summaryTimeoutMs: parseCollectIntegerOption(options, 'summaryTimeoutMs'),
+      summaryMaxChars: parseCollectIntegerOption(options, 'summaryMaxChars'),
+      summaryMaxLines: parseCollectIntegerOption(options, 'summaryMaxLines'),
+      summaryMergeMaxEstTokens: parseCollectIntegerOption(
+        options,
+        'summaryMergeMaxEstTokens',
       ),
     },
     { stateRepository: checkpointRepository },
@@ -141,6 +134,17 @@ async function collectFromOpencodeSource(
   }
 
   printOpencodeCollectionSummary(result, imported)
+}
+
+function parseCollectIntegerOption(
+  options: CollectOptions,
+  key: CollectIntegerOption,
+): number | null {
+  return parseOptionalPositiveInteger(
+    options[key],
+    null,
+    COLLECT_INTEGER_OPTION_ERRORS[key],
+  )
 }
 
 function printTaskCollectionSummary(

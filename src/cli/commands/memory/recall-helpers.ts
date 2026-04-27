@@ -1,6 +1,7 @@
 import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { type RecallSearchMode } from '../../../recall/search'
+import { resolveRecallOutputPath } from '../../../recall/resolve-path'
 import {
   type OpencodeDiffEntry,
   type OpencodeDiffReport,
@@ -8,6 +9,43 @@ import {
 import { parseOptionalPositiveInteger } from '../shared'
 
 const DEFAULT_SYNC_PROCESSED_VERSION = 1
+
+function createRecallPositiveIntegerParser(
+  defaultValue: number,
+  errorMessage: string,
+): (value?: string) => number
+function createRecallPositiveIntegerParser(
+  defaultValue: null,
+  errorMessage: string,
+): (value?: string) => number | null
+function createRecallPositiveIntegerParser(
+  defaultValue: number | null,
+  errorMessage: string,
+): (value?: string) => number | null {
+  return (value?: string) => {
+    if (defaultValue === null) {
+      return parseOptionalPositiveInteger(value, null, errorMessage)
+    }
+    return parseOptionalPositiveInteger(value, defaultValue, errorMessage)
+  }
+}
+
+const parseLimit = createRecallPositiveIntegerParser(
+  5,
+  'Limit must be a positive integer.',
+)
+const parseDiffLimitValue = createRecallPositiveIntegerParser(
+  10,
+  'Limit must be a positive integer.',
+)
+const parseSyncLimitValue = createRecallPositiveIntegerParser(
+  null,
+  'Limit must be a positive integer.',
+)
+const parseProcessedVersionValue = createRecallPositiveIntegerParser(
+  DEFAULT_SYNC_PROCESSED_VERSION,
+  'Processed version must be a positive integer.',
+)
 
 export function parseRecallMode(value?: string): RecallSearchMode {
   if (!value) return 'auto'
@@ -23,35 +61,19 @@ export function parseRecallMode(value?: string): RecallSearchMode {
 }
 
 export function parseRecallLimit(value?: string): number {
-  return parseOptionalPositiveInteger(
-    value,
-    5,
-    'Limit must be a positive integer.',
-  )
+  return parseLimit(value)
 }
 
 export function parseDiffLimit(value?: string): number {
-  return parseOptionalPositiveInteger(
-    value,
-    10,
-    'Limit must be a positive integer.',
-  )
+  return parseDiffLimitValue(value)
 }
 
 export function parseSyncLimit(value?: string): number | null {
-  return parseOptionalPositiveInteger(
-    value,
-    null,
-    'Limit must be a positive integer.',
-  )
+  return parseSyncLimitValue(value)
 }
 
 export function parseProcessedVersion(value?: string): number {
-  return parseOptionalPositiveInteger(
-    value,
-    DEFAULT_SYNC_PROCESSED_VERSION,
-    'Processed version must be a positive integer.',
-  )
+  return parseProcessedVersionValue(value)
 }
 
 export function resolveRecallPath(
@@ -59,10 +81,7 @@ export function resolveRecallPath(
   value: string | null,
   defaultFileName: string,
 ): string {
-  if (value) {
-    return resolve(process.cwd(), value)
-  }
-  return join(dataRoot, 'recall', 'opencode', defaultFileName)
+  return resolveRecallOutputPath(dataRoot, value, defaultFileName)
 }
 
 export function writeJsonFile(filePath: string, payload: unknown): void {

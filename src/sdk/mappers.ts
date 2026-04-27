@@ -20,6 +20,9 @@ import type {
 
 type ServiceCreateTaskInput = Parameters<typeof create_task_for_directory>[1]
 type ServiceUpdateTaskInput = Parameters<typeof update_task_for_directory>[2]
+type SdkNoteCollectionPatch = NonNullable<SdkUpdateTaskInput['discoveries']>
+type SdkNoteAddInput = NonNullable<SdkNoteCollectionPatch['add']>[number]
+type SdkNoteUpdateInput = NonNullable<SdkNoteCollectionPatch['update']>[number]
 
 function map_step(step: Step): SdkTaskStep {
   return {
@@ -42,6 +45,34 @@ function map_note(note: Discovery | Decision): SdkTaskNote {
     impact: note.impact ?? null,
     createdAt: note.created_at,
     updatedAt: note.created_at,
+  }
+}
+
+function map_note_add_input(note: SdkNoteAddInput) {
+  return {
+    content: note.content,
+    source: note.source,
+    rationale: note.rationale,
+    impact: note.impact,
+  }
+}
+
+function map_note_update_input(note: SdkNoteUpdateInput) {
+  return {
+    id: note.id,
+    content: note.content,
+    source: note.source,
+    rationale: note.rationale,
+    impact: note.impact,
+  }
+}
+
+function map_note_collection_patch(patch?: SdkNoteCollectionPatch) {
+  if (!patch) return undefined
+  return {
+    add: patch.add?.map(map_note_add_input),
+    update: patch.update?.map(map_note_update_input),
+    delete: patch.delete,
   }
 }
 
@@ -129,41 +160,7 @@ export function map_update_input(
           delete: input.steps.delete,
         }
       : undefined,
-    discoveries: input.discoveries
-      ? {
-          add: input.discoveries.add?.map((note) => ({
-            content: note.content,
-            source: note.source,
-            rationale: note.rationale,
-            impact: note.impact,
-          })),
-          update: input.discoveries.update?.map((note) => ({
-            id: note.id,
-            content: note.content,
-            source: note.source,
-            rationale: note.rationale,
-            impact: note.impact,
-          })),
-          delete: input.discoveries.delete,
-        }
-      : undefined,
-    decisions: input.decisions
-      ? {
-          add: input.decisions.add?.map((note) => ({
-            content: note.content,
-            source: note.source,
-            rationale: note.rationale,
-            impact: note.impact,
-          })),
-          update: input.decisions.update?.map((note) => ({
-            id: note.id,
-            content: note.content,
-            source: note.source,
-            rationale: note.rationale,
-            impact: note.impact,
-          })),
-          delete: input.decisions.delete,
-        }
-      : undefined,
+    discoveries: map_note_collection_patch(input.discoveries),
+    decisions: map_note_collection_patch(input.decisions),
   }
 }

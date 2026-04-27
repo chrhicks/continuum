@@ -28,75 +28,118 @@ export type AtomicWriteTarget = {
   rotateExistingTo?: string
 }
 
+type AtomicBackup = { path: string; backupPath: string }
+type AtomicRotation = { from: string; to: string }
+
 export function writeFilesAtomically(targets: AtomicWriteTarget[]): void {
-  const tempPaths = new Map<string, string>()
-  const backups: { path: string; backupPath: string }[] = []
-  const rotations: { from: string; to: string }[] = []
+  const tempPaths = writeTempTargets(targets)
+  const rotations: AtomicRotation[] = []
+  const backups: AtomicBackup[] = []
 
   try {
-    for (const target of targets) {
-      const tempPath = `${target.path}.tmp-${randomSuffix()}`
-      writeFileSync(tempPath, target.content, 'utf-8')
-      tempPaths.set(target.path, tempPath)
-    }
-
-    for (const target of targets) {
-      if (!target.rotateExistingTo || !existsSync(target.path)) {
-        continue
-      }
-      if (existsSync(target.rotateExistingTo)) {
-        rmSync(target.rotateExistingTo)
-      }
-      renameSync(target.path, target.rotateExistingTo)
-      rotations.push({ from: target.rotateExistingTo, to: target.path })
-    }
-
-    for (const target of targets) {
-      if (!existsSync(target.path)) {
-        continue
-      }
-      const backupPath = `${target.path}.bak`
-      if (existsSync(backupPath)) {
-        const rotatedBackup = `${backupPath}.old`
-        if (existsSync(rotatedBackup)) {
-          rmSync(rotatedBackup)
-        }
-        renameSync(backupPath, rotatedBackup)
-      }
-      const existingContent = readFileSync(target.path, 'utf-8')
-      writeFileSync(backupPath, existingContent, 'utf-8')
-      backups.push({ path: target.path, backupPath })
-    }
-
-    for (const target of targets) {
-      const tempPath = tempPaths.get(target.path)
-      if (!tempPath) {
-        continue
-      }
-      renameSync(tempPath, target.path)
-    }
+    rotateExistingTargets(targets, rotations)
+    backupExistingTargets(targets, backups)
+    commitTempTargets(targets, tempPaths)
   } catch (error) {
-    for (const tempPath of tempPaths.values()) {
-      if (existsSync(tempPath)) {
-        rmSync(tempPath)
-      }
-    }
-
-    for (const { path, backupPath } of backups) {
-      if (!existsSync(backupPath)) {
-        continue
-      }
-      const backupContent = readFileSync(backupPath, 'utf-8')
-      writeFileSync(path, backupContent, 'utf-8')
-    }
-
-    for (const rotation of rotations) {
-      if (existsSync(rotation.from) && !existsSync(rotation.to)) {
-        renameSync(rotation.from, rotation.to)
-      }
-    }
-
+    rollbackAtomicWrite(tempPaths, backups, rotations)
     throw error
+  }
+}
+
+function writeTempTargets(targets: AtomicWriteTarget[]): Map<string, string> {
+  const tempPaths = new Map<string, string>()
+  for (const target of targets) {
+    const tempPath = `${target.path}.tmp-${randomSuffix()}`
+    writeFileSync(tempPath, target.content, 'utf-8')
+    tempPaths.set(target.path, tempPath)
+  }
+  return tempPaths
+}
+
+function rotateExistingTargets(
+  targets: AtomicWriteTarget[],
+  rotations: AtomicRotation[],
+): void {
+  for (const target of targets) {
+    if (!target.rotateExistingTo || !existsSync(target.path)) {
+      continue
+    }
+    if (existsSync(target.rotateExistingTo)) {
+      rmSync(target.rotateExistingTo)
+    }
+    renameSync(target.path, target.rotateExistingTo)
+    rotations.push({ from: target.rotateExistingTo, to: target.path })
+  }
+}
+
+function backupExistingTargets(
+  targets: AtomicWriteTarget[],
+  backups: AtomicBackup[],
+): void {
+  for (const target of targets) {
+    if (!existsSync(target.path)) {
+      continue
+    }
+    const backupPath = `${target.path}.bak`
+    if (existsSync(backupPath)) {
+      const rotatedBackup = `${backupPath}.old`
+      if (existsSync(rotatedBackup)) {
+        rmSync(rotatedBackup)
+      }
+      renameSync(backupPath, rotatedBackup)
+    }
+    const existingContent = readFileSync(target.path, 'utf-8')
+    writeFileSync(backupPath, existingContent, 'utf-8')
+    backups.push({ path: target.path, backupPath })
+  }
+}
+
+function commitTempTargets(
+  targets: AtomicWriteTarget[],
+  tempPaths: Map<string, string>,
+): void {
+  for (const target of targets) {
+    const tempPath = tempPaths.get(target.path)
+    if (!tempPath) {
+      continue
+    }
+    renameSync(tempPath, target.path)
+  }
+}
+
+function rollbackAtomicWrite(
+  tempPaths: Map<string, string>,
+  backups: AtomicBackup[],
+  rotations: AtomicRotation[],
+): void {
+  cleanupTempPaths(tempPaths)
+  restoreBackups(backups)
+  restoreRotations(rotations)
+}
+
+function cleanupTempPaths(tempPaths: Map<string, string>): void {
+  for (const tempPath of tempPaths.values()) {
+    if (existsSync(tempPath)) {
+      rmSync(tempPath)
+    }
+  }
+}
+
+function restoreBackups(backups: AtomicBackup[]): void {
+  for (const { path, backupPath } of backups) {
+    if (!existsSync(backupPath)) {
+      continue
+    }
+    const backupContent = readFileSync(backupPath, 'utf-8')
+    writeFileSync(path, backupContent, 'utf-8')
+  }
+}
+
+function restoreRotations(rotations: AtomicRotation[]): void {
+  for (const rotation of rotations) {
+    if (existsSync(rotation.from) && !existsSync(rotation.to)) {
+      renameSync(rotation.from, rotation.to)
+    }
   }
 }
 
