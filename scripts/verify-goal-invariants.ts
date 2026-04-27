@@ -735,6 +735,8 @@ const run = () => {
     runCommandStatus('bun', ['run', 'typecheck']),
     runCommandStatus('bun', ['test']),
     runCommandStatus('continuum', ['task', 'list', '--json']),
+    runCommandStatus('continuum', ['memory', 'status']),
+    runCommandStatus('continuum', ['memory', 'recall', 'diff', '--help']),
   ]
 
   printHeader('File Length (src <= 300 lines)')
