@@ -4,10 +4,14 @@ import { buildOpencodeSourceIndex } from '../../../recall/index/opencode-source-
 import {
   formatRecallModeLabel,
   formatScore,
+} from './output-formatters'
+import {
   parseRecallLimit,
   parseRecallMode,
+} from './option-parsers'
+import {
   writeJsonFile,
-} from './recall-helpers'
+} from './recall-io'
 import type {
   RecallImportOptions,
   RecallIndexOptions,

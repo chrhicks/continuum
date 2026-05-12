@@ -8,11 +8,13 @@ import {
 } from '../../../recall/sync/opencode-sync'
 import {
   appendJsonLine,
-  parseProcessedVersion,
-  parseSyncLimit,
   resolveRecallPath,
   writeJsonFile,
-} from './recall-helpers'
+} from './recall-io'
+import {
+  parseProcessedVersion,
+  parseSyncLimit,
+} from './option-parsers'
 import { resolveRecallDataRoot } from '../../../recall/index/opencode-source-index'
 import type { RecallSyncOptions } from './recall-subcommands'
 

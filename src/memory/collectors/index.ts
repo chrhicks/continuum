@@ -1,5 +1,5 @@
 import type { Task } from '../../task/types'
-import type { OpencodeRecallSummary } from '../../recall/opencode/summary-parse'
+import type { OpencodeRecallSummary } from '../opencode/summary-parse'
 import {
   buildCollectedRecord,
   extractFilePathsFromText,

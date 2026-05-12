@@ -1,97 +1,37 @@
-import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
-import { type RecallSearchMode } from '../../../recall/search'
-import { resolveRecallOutputPath } from '../../../recall/resolve-path'
 import {
   type OpencodeDiffEntry,
   type OpencodeDiffReport,
 } from '../../../recall/diff/opencode-diff'
-import { parseOptionalPositiveInteger } from '../shared'
 
-const DEFAULT_SYNC_PROCESSED_VERSION = 1
-
-function createRecallPositiveIntegerParser(
-  defaultValue: number,
-  errorMessage: string,
-): (value?: string) => number
-function createRecallPositiveIntegerParser(
-  defaultValue: null,
-  errorMessage: string,
-): (value?: string) => number | null
-function createRecallPositiveIntegerParser(
-  defaultValue: number | null,
-  errorMessage: string,
-): (value?: string) => number | null {
-  return (value?: string) => {
-    if (defaultValue === null) {
-      return parseOptionalPositiveInteger(value, null, errorMessage)
-    }
-    return parseOptionalPositiveInteger(value, defaultValue, errorMessage)
+export function formatBytes(bytes: number | null): string {
+  if (bytes === null) {
+    return 'n/a'
   }
-}
-
-const parseLimit = createRecallPositiveIntegerParser(
-  5,
-  'Limit must be a positive integer.',
-)
-const parseDiffLimitValue = createRecallPositiveIntegerParser(
-  10,
-  'Limit must be a positive integer.',
-)
-const parseSyncLimitValue = createRecallPositiveIntegerParser(
-  null,
-  'Limit must be a positive integer.',
-)
-const parseProcessedVersionValue = createRecallPositiveIntegerParser(
-  DEFAULT_SYNC_PROCESSED_VERSION,
-  'Processed version must be a positive integer.',
-)
-
-export function parseRecallMode(value?: string): RecallSearchMode {
-  if (!value) return 'auto'
-  const normalized = value.toLowerCase()
-  if (
-    normalized === 'bm25' ||
-    normalized === 'semantic' ||
-    normalized === 'auto'
-  ) {
-    return normalized
+  if (bytes < 1024) {
+    return `${bytes} B`
   }
-  throw new Error('Invalid mode. Use: bm25, semantic, or auto.')
+  const units = ['KB', 'MB', 'GB']
+  let value = bytes / 1024
+  let unitIndex = 0
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024
+    unitIndex += 1
+  }
+  const rounded = Math.round(value * 10) / 10
+  return `${rounded} ${units[unitIndex]}`
 }
 
-export function parseRecallLimit(value?: string): number {
-  return parseLimit(value)
-}
-
-export function parseDiffLimit(value?: string): number {
-  return parseDiffLimitValue(value)
-}
-
-export function parseSyncLimit(value?: string): number | null {
-  return parseSyncLimitValue(value)
-}
-
-export function parseProcessedVersion(value?: string): number {
-  return parseProcessedVersionValue(value)
-}
-
-export function resolveRecallPath(
-  dataRoot: string,
-  value: string | null,
-  defaultFileName: string,
-): string {
-  return resolveRecallOutputPath(dataRoot, value, defaultFileName)
-}
-
-export function writeJsonFile(filePath: string, payload: unknown): void {
-  mkdirSync(dirname(filePath), { recursive: true })
-  writeFileSync(filePath, `${JSON.stringify(payload, null, 2)}\n`, 'utf-8')
-}
-
-export function appendJsonLine(filePath: string, payload: unknown): void {
-  mkdirSync(dirname(filePath), { recursive: true })
-  appendFileSync(filePath, `${JSON.stringify(payload)}\n`, 'utf-8')
+export function formatAgeMinutes(minutes: number): string {
+  if (!Number.isFinite(minutes) || minutes < 0) {
+    return 'n/a'
+  }
+  if (minutes < 60) {
+    return `${minutes}m`
+  }
+  if (minutes < 60 * 24) {
+    return `${Math.round(minutes / 60)}h`
+  }
+  return `${Math.round(minutes / (60 * 24))}d`
 }
 
 export function formatScore(score: number): string {

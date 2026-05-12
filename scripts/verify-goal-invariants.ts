@@ -128,6 +128,13 @@ const collectFileLineViolations = (
   return violations.sort((a, b) => a.file.localeCompare(b.file))
 }
 
+const collectGenericFileNameViolations = (files: string[]): string[] =>
+  files
+    .filter((file) => isSourceTsFile(file))
+    .map((file) => toRelative(file))
+    .filter((file) => /(?:^|\/)[^/]*-(helpers|utils|misc)\.tsx?$/.test(file))
+    .sort((a, b) => a.localeCompare(b))
+
 const isSourceTsFile = (file: string): boolean =>
   /\.(ts|tsx)$/.test(file) && !file.endsWith('.d.ts')
 
@@ -389,6 +396,7 @@ const runCommandStatus = (command: string, args: string[]): CommandStatus => {
 const run = () => {
   const files = listFiles(SRC_DIR)
   const fileLineViolations = collectFileLineViolations(files)
+  const genericFileNameViolations = collectGenericFileNameViolations(files)
   const functionLineViolations = collectFunctionLineViolations(files)
   const exportReturnTypeViolations = collectExportReturnTypeViolations(files)
   const asAnyMatches = collectPatternMatches(files, /\bas any\b/)
@@ -481,7 +489,7 @@ const run = () => {
     files,
     /\bexport\s+function\s+parsePositiveInteger\s*\(/,
   )
-  const parsePositiveIntegerTaskImports = collectPatternMatches(
+  const parsePositiveIntegerSharedImports = collectPatternMatches(
     files,
     /\bimport\s+\{[^}]*\bparsePositiveInteger\b[^}]*\}\s+from\s+['"]\.\.\/shared['"]\s*;?/,
   )
@@ -688,17 +696,17 @@ const run = () => {
       {
         label: 'src/cli/commands/task/parse.ts parsePositiveInteger import',
         actual: countMatchesInFile(
-          parsePositiveIntegerTaskImports,
+          parsePositiveIntegerSharedImports,
           'src/cli/commands/task/parse.ts',
         ),
         expected: 1,
       },
       {
         label:
-          'src/cli/commands/memory/handlers-helpers.ts parsePositiveInteger import',
+          'src/cli/commands/memory/option-parsers.ts parsePositiveInteger import',
         actual: countMatchesInFile(
-          parsePositiveIntegerTaskImports,
-          'src/cli/commands/memory/handlers-helpers.ts',
+          parsePositiveIntegerSharedImports,
+          'src/cli/commands/memory/option-parsers.ts',
         ),
         expected: 1,
       },
@@ -759,6 +767,15 @@ const run = () => {
     }
   }
 
+  printHeader('Generic Catch-All File Names')
+  if (genericFileNameViolations.length === 0) {
+    console.log('- pass')
+  } else {
+    for (const file of genericFileNameViolations) {
+      console.log(`- ${file}`)
+    }
+  }
+
   printHeader('Exported Functions With Explicit Return Types')
   if (exportReturnTypeViolations.length === 0) {
     console.log('- pass')
@@ -806,6 +823,7 @@ const run = () => {
 
   const hasFailures =
     fileLineViolations.length > 0 ||
+    genericFileNameViolations.length > 0 ||
     functionLineViolations.length > 0 ||
     exportReturnTypeViolations.length > 0 ||
     asAnyMatches.length > 0 ||

@@ -12,7 +12,7 @@ import {
 import {
   collectSessionArtifacts,
   createOpencodeCollectionAccumulator,
-} from './opencode-collection-helpers'
+} from './opencode-artifact-collector'
 import { resolveSummaryConfig } from './opencode-summary-config'
 import type { CollectedRecord } from '../types'
 import { createCheckpointInput } from '../state/file-repository'

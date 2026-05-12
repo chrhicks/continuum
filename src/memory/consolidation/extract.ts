@@ -5,7 +5,7 @@ import {
   normalizeOpencodeSummaryRecord,
 } from '../collectors'
 import type { CollectedRecord, MemorySummary } from '../types'
-import type { OpencodeRecallSummary } from '../../recall/opencode/summary-parse'
+import type { OpencodeRecallSummary } from '../opencode/summary-parse'
 import { normalizeTags } from '../util'
 
 export type PreparedConsolidationInput = {

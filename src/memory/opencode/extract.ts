@@ -19,7 +19,7 @@ import {
   type PartRow,
   type ProjectRow,
   type SessionRow,
-} from './extract-helpers'
+} from './opencode-record-mappers'
 import { resolveOpencodeDbPath, resolveOpencodeOutputDir } from './paths'
 
 export type OpencodeExtractionOptions = {
@@ -41,7 +41,7 @@ export type {
   OpencodeMessageRecord,
   OpencodePartState,
   OpencodePartRecord,
-} from './extract-helpers'
+} from './opencode-record-mappers'
 
 export type OpencodeMessageBlock = {
   message: OpencodeMessageRecord
