@@ -19,6 +19,7 @@
     "setup": "bun install && bun run install:global",
     "format": "prettier --write .",
     "typecheck": "tsc --noEmit",
+    "validate": "bun run typecheck && bun run scripts/run-tests-for-validate.ts && bun run verify:goal",
     "verify:goal": "bun run scripts/verify-goal-invariants.ts"
   },
   "dependencies": {

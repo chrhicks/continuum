@@ -12,7 +12,13 @@ import { resolveWorkspaceContext } from './workspace/resolve'
 
 const PREVIOUS_WORKSPACE_CONTEXT = Symbol('previous-workspace-context')
 
-export async function main(): Promise<void> {
+type MainOptions = {
+  preserveProcessExitCode?: boolean
+}
+
+export async function main(options: MainOptions = {}): Promise<void> {
+  const previousExitCode = process.exitCode
+  process.exitCode = undefined
   const removeExitHandlers = installExitHandlers()
   const program = createProgram()
 
@@ -27,6 +33,9 @@ export async function main(): Promise<void> {
   } finally {
     removeExitHandlers()
     clearActiveWorkspaceContext()
+    if (!options.preserveProcessExitCode) {
+      process.exitCode = previousExitCode
+    }
   }
 }
 

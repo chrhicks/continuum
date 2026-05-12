@@ -77,9 +77,14 @@ subdirectory still targets the repo root.
 ### GOAL invariant verification
 
 ```bash
-# Run GOAL.md invariant checks + validation command statuses
+# Canonical validation workflow (typecheck -> tests -> GOAL invariants)
+bun run validate
+
+# Run only GOAL.md invariant checks + validation command statuses
 bun run verify:goal
 ```
+
+`bun run validate` is the canonical contributor workflow for this repo. It runs `bun run typecheck`, then executes `bun test` via `scripts/run-tests-for-validate.ts`, then runs `bun run verify:goal`.
 
 `bun run verify:goal` runs a deterministic repo-local verifier (`scripts/verify-goal-invariants.ts`) and exits non-zero on any failure.
 

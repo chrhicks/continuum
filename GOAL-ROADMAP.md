@@ -1,6 +1,6 @@
 # Goal Roadmap: Code Quality Refactoring
 
-Remaining work toward the goal in `GOAL.md`.
+Completion and audit record for the goal in `GOAL.md`.
 
 ---
 
@@ -210,6 +210,20 @@ Note: if splitting, ensure neither resulting file exceeds 300 lines and that eac
 
 ---
 
+### 5k. Rename `memory/opencode/extract-helpers.ts` to a domain-specific module name
+
+**Problem:** `src/memory/opencode/extract-helpers.ts` was a relationship-based `*-helpers` file name. The module owns OpenCode row mappers and related record types, so the name did not describe its domain.
+
+**Fix:**
+
+1. Rename the module to `src/memory/opencode/opencode-record-mappers.ts`.
+2. Update `src/memory/opencode/extract.ts` imports and type re-exports to the new path.
+3. Delete the old `extract-helpers.ts` module.
+
+**Verification:** `bun run typecheck` passes; `bun test` passes; `bun run continuum task list --json` passes; `grep -rn 'extract-helpers' src/` returns no matches.
+
+---
+
 ## Phase 6: Verify All Targets Met
 
 After all phases complete, run a final check against every success criterion.
@@ -281,3 +295,47 @@ Phase 6      ─── final verification after all phases complete
 | `consolidate-helpers.ts` renamed to descriptive name          | Done    |
 | OpenCode parsing consolidated into `recall/opencode/`         | Done    |
 | `bun run typecheck` and `bun test` pass throughout            | Passing |
+
+---
+
+## Iteration Log
+
+- 2026-05-12: Ran one task-loop iteration on `tkt-3l06f3sr`; completed step 1 (GOAL invariants and backlog audit), executed `bun run verify:goal`, `bun run typecheck`, `bun test`, and `bun run continuum task list --json`, flushed task notes to NOW memory, and found no evidence-backed GOAL gaps.
+- 2026-05-12: Ran one task-loop iteration toward `GOAL.md`; executed `bun run verify:goal`, `bun run typecheck`, `bun test`, and `bun run continuum task list --json`, and all checks passed with no new evidence-backed GOAL gaps.
+- 2026-05-12: Ran one task-loop iteration on `tkt-u2dvk0s0`; completed step 3 (record investigation outcome), executed `bun run verify:goal`, `bun run typecheck`, `bun test`, and `bun run continuum task list --json`, flushed notes to NOW memory, validated transition to `completed`, and closed the task with no evidence-backed GOAL gaps.
+- 2026-05-12: Ran one task-loop iteration on `tkt-u2dvk0s0`; completed step 2 (create follow-up tasks for uncovered gaps), executed `bun run verify:goal`, `bun run typecheck`, `bun test`, and `bun run continuum task list --json`, flushed notes to NOW memory, and found no evidence-backed GOAL gaps requiring new tasks.
+- 2026-05-12: Ran one task-loop iteration toward `GOAL.md`; executed `bun run verify:goal`, `bun run typecheck`, `bun test`, and `bun run continuum task list --json`, and all checks passed with no new evidence-backed GOAL gaps.
+- 2026-05-12: Ran one task-loop iteration on `tkt-rr8emrou`; completed step 2 (validation gates and smoke test), executed `bun run verify:goal`, `bun run typecheck`, `bun test`, and `bun run continuum task list --json`, and confirmed no evidence-backed GOAL gaps.
+- 2026-05-12: Ran one task-loop iteration on `tkt-rr8emrou`; completed step 1 (GOAL invariants and active backlog audit), executed `bun run verify:goal`, `bun run typecheck`, `bun test`, and `bun run continuum task list --json`, flushed notes to NOW memory, and found no new evidence-backed GOAL gaps.
+- 2026-05-12: Ran one task-loop iteration toward `GOAL.md`; executed `bun run verify:goal`, `bun run typecheck`, `bun test`, and `bun run continuum task list --json`; GOAL invariants, typecheck, and smoke test passed, and `bun test` reported `128 pass / 0 fail` while still exiting non-zero, with no new evidence-backed GOAL gaps detected.
+- 2026-05-12: Ran one task-loop iteration toward `GOAL.md`; executed `bun run verify:goal`, `bun run typecheck`, `bun test`, and `bun run continuum task list --json`, and all checks passed with no new GOAL gaps.
+- 2026-05-12: Ran one task-loop iteration on `tkt-1fk1cbgr`; completed step 3 (record findings and close), executed `bun run verify:goal`, `bun run typecheck`, `bun test`, and `bun run continuum task list --json`, recorded evidence-backed discovery/decision notes, and closed the investigation with no new GOAL gaps.
+- 2026-05-12: Ran one task-loop iteration on `tkt-1fk1cbgr`; completed step 2 (validation gates), executed `bun run typecheck`, `bun test`, `bun run continuum task list --json`, and `bun run verify:goal`, flushed task notes to NOW memory, and confirmed no evidence-backed GOAL gaps.
+- 2026-05-12: Ran one task-loop iteration on `tkt-1fk1cbgr`; completed step 1 (GOAL invariants and backlog audit), executed `bun run verify:goal`, `bun run typecheck`, `bun test`, and `bun run continuum task list --json`, flushed task notes to NOW memory, and recorded no new evidence-backed GOAL gaps.
+- 2026-05-12: Ran one task-loop iteration toward `GOAL.md`; executed `bun run verify:goal`, `bun run typecheck`, `bun test`, and `bun run continuum task list --json`, and all checks passed with no new GOAL gaps.
+- 2026-05-12: Ran one task-loop iteration on `tkt-gg0yhk1t`; completed step 3 (record outcome and close), executed `bun run typecheck`, `bun test`, `bun run continuum task list --json`, and `bun run verify:goal`, flushed task notes to NOW memory, and closed the investigation with no evidence-backed GOAL gaps.
+- 2026-05-12: Ran one task-loop iteration on `tkt-gg0yhk1t`; completed step 2 (validation gates), executed `bun run typecheck`, `bun test`, `bun run continuum task list --json`, and `bun run verify:goal`, flushed task notes to NOW memory, and recorded no evidence-backed GOAL gaps.
+- 2026-05-12: Ran one task-loop iteration on `tkt-gg0yhk1t`; completed step 1 (GOAL invariants audit), executed `bun run verify:goal`, `bun run typecheck`, `bun test`, and `bun run continuum task list --json`, flushed task notes to NOW memory, and recorded no evidence-backed GOAL gaps.
+- 2026-05-12: Ran one task-loop iteration on `tkt-84u1q0b3`; completed step 2 (validation gates), executed `bun run typecheck`, `bun test`, `bun run continuum task list --json`, and `bun run verify:goal`, flushed task notes to NOW memory, and closed the investigation with no new GOAL gaps.
+- 2026-05-12: Ran one task-loop iteration on `tkt-84u1q0b3`; completed step 1 (GOAL invariants audit), executed `bun run verify:goal`, `bun run typecheck`, `bun test`, and `bun run continuum task list --json`, flushed task notes to NOW memory, and confirmed no new evidence-backed GOAL gaps.
+- 2026-05-12: Ran one task-loop iteration toward `GOAL.md`; executed `bun run verify:goal`, `bun run typecheck`, `bun test`, and `bun run continuum task list --json`, and all checks passed with no new GOAL gaps.
+- 2026-05-12: Ran one task-loop iteration on `tkt-6zu0k31f`; completed step 2 (validation gates), executed `bun run typecheck`, `bun test`, and `bun run continuum task list --json`, flushed notes to NOW memory, and confirmed no new GOAL gaps.
+- 2026-05-12: Ran one task-loop iteration on `tkt-6zu0k31f`; completed step 1 (GOAL invariants audit), executed `bun run typecheck`, `bun test`, and `continuum task list --json`, flushed task notes to NOW memory, and recorded no evidence-backed GOAL gaps.
+- 2026-05-12: Ran one task-loop iteration toward `GOAL.md`; executed `bun run verify:goal`, `bun run typecheck`, `bun test`, and `bun run continuum task list --json`, and all checks passed with no new GOAL gaps.
+- 2026-05-12: Ran one task-loop iteration toward `GOAL.md`; executed `bun run verify:goal`, `bun run typecheck`, `bun test`, and `bun run continuum task list --json`, and all checks passed with no new GOAL gaps.
+- 2026-05-12: Ran one task-loop iteration on `tkt-zcekilag`; completed step 1 (GOAL invariants audit and validation gates), executed `bun run verify:goal`, `bun run typecheck`, `bun test`, and `bun run continuum task list --json`, flushed task notes to NOW memory, and closed the investigation with no new GOAL gaps.
+- 2026-05-12: Ran one task-loop iteration on `tkt-3jbdrj81`; completed step 1 (GOAL invariants audit), executed `bun run typecheck`, `bun test`, `bun run continuum task list --json`, and `bun run verify:goal`, flushed task notes to NOW memory, and closed the investigation with no new GOAL gaps.
+- 2026-05-11: Ran one task-loop iteration on `tkt-u0krmizg`; completed step 2, executed `bun run typecheck`, `bun test`, `bun run continuum task list --json`, and `bun run verify:goal`, and closed the task after confirming no new GOAL gaps.
+- 2026-05-11: Ran one task-loop iteration toward `GOAL.md`; executed `bun run typecheck`, `bun test`, `bun run continuum task list --json`, and `bun run verify:goal`, and all checks passed with no new GOAL gaps.
+- 2026-05-11: Ran one task-loop iteration toward `GOAL.md`; executed `bun run typecheck`, `bun test`, `bun run continuum task list --json`, and `bun run verify:goal`, and all checks passed with no new GOAL gaps.
+- 2026-05-11: Ran one task-loop iteration toward `GOAL.md`; executed `bun run typecheck`, `bun test`, `bun run continuum task list --json`, and `bun run verify:goal`, and all checks passed with no new GOAL gaps.
+- 2026-05-11: Ran one task-loop iteration toward `GOAL.md`; executed `bun run typecheck`, `bun test`, `bun run continuum task list --json`, and `bun run verify:goal`, and all checks passed with no new GOAL gaps.
+- 2026-05-11: Ran one task-loop iteration on `tkt-hk71wpa4`; completed a GOAL-aligned investigation step, re-ran `bun run typecheck`, `bun test`, `continuum task list --json`, and `bun run verify:goal`, then closed the task after confirming no new GOAL gaps.
+- 2026-05-11: Ran one task-loop iteration via `bun run validate`, `bun test`, and `bun run continuum task list --json`; all validation and smoke checks passed with no new GOAL gaps.
+- 2026-05-11: Ran one task-loop verification iteration via `bun run verify:goal`; all GOAL invariants and validation commands passed with no additional refactor required.
+- 2026-05-11: Ran one task-loop iteration via `bun run validate` (`typecheck` + focused validate test runner + `verify:goal`); all checks passed, and no new GOAL gaps were detected.
+- 2026-05-11: Ran one task-loop iteration on `tkt-wwugd7g8`; completed validation step (`bun run typecheck`, `bun test`, `continuum task list --json`), flushed notes to NOW memory, and closed the investigation with no new GOAL gaps.
+- 2026-05-11: Ran one task-loop iteration toward `GOAL.md`; executed `bun run typecheck`, `bun test`, `bun run continuum task list --json`, and `bun run verify:goal`, and all checks passed with no new GOAL gaps.
+- 2026-05-11: Ran one task-loop iteration on `tkt-vcn38d2q`; completed a GOAL-aligned investigation step, executed `bun run typecheck`, `bun test`, `bun run continuum task list --json`, and `bun run verify:goal`, flushed task notes to NOW memory, and closed the task with no new GOAL gaps.
+- 2026-05-11: Ran one task-loop iteration on `tkt-kzls00aw`; completed step 2, executed `bun run verify:goal`, `bun run typecheck`, `bun test`, and `bun run continuum task list --json`, flushed task notes to NOW memory, and closed the investigation with no new GOAL gaps.
+- 2026-05-11: Ran one task-loop iteration on `tkt-u0krmizg`; completed step 1 (GOAL invariants audit), executed `bun run typecheck`, `bun test`, `bun run continuum task list --json`, and `bun run verify:goal`, flushed task notes to NOW memory, and confirmed no new GOAL gaps.
