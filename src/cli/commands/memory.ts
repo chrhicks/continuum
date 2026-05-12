@@ -17,6 +17,10 @@ export function createMemoryCommand(): Command {
   const memoryCommand = new Command('memory').description(
     'Memory management commands',
   )
+  memoryCommand.addHelpText(
+    'after',
+    '\nAgent memory guide: continuum guide memory\nCurrent briefing: continuum summary',
+  )
 
   memoryCommand.action(() => {
     memoryCommand.outputHelp()

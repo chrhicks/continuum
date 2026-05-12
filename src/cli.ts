@@ -2,6 +2,8 @@ import { Command } from 'commander'
 import { createMemoryCommand, endSessionIfActive } from './cli/commands/memory'
 import { createTaskCommand } from './cli/commands/task'
 import { createSetupCommand } from './cli/commands/setup'
+import { createGuideCommand } from './cli/commands/guide'
+import { createSummaryCommand } from './cli/commands/summary'
 import { runCommand } from './cli/io'
 import continuum from './sdk'
 import {
@@ -50,9 +52,15 @@ function createProgram(): Command {
     .option('--quiet', 'Suppress non-JSON output')
     .showHelpAfterError()
     .showSuggestionAfterError()
+    .addHelpText(
+      'after',
+      '\nAgent workflow guide: continuum guide\nCurrent briefing: continuum summary',
+    )
 
   addInitCommand(program)
   program.addCommand(createSetupCommand())
+  program.addCommand(createGuideCommand())
+  program.addCommand(createSummaryCommand())
   program.addCommand(createMemoryCommand())
   program.addCommand(createTaskCommand())
   program.exitOverride()

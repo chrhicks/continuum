@@ -52,6 +52,10 @@ function createTaskRootCommand(): Command {
   const taskCommand = new Command('task').description(
     'Task management commands',
   )
+  taskCommand.addHelpText(
+    'after',
+    '\nAgent task guide: continuum guide task\nCurrent briefing: continuum summary',
+  )
   taskCommand.action(() => {
     taskCommand.outputHelp()
   })

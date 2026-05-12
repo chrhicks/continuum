@@ -464,6 +464,95 @@ describe('memory recall CLI', () => {
   })
 })
 
+describe('agent guide and summary CLI', () => {
+  test('guide task prints workflow-oriented command examples', async () => {
+    await withTempCwd(async () => {
+      const originalArgv = process.argv
+      process.argv = ['node', 'continuum', 'guide', 'task']
+
+      try {
+        const logs = await withCapturedLogs(async () => {
+          await main()
+        })
+        const output = logs.join('\n')
+        expect(output).toContain('# Continuum Task Guide')
+        expect(output).toContain('continuum task list --status ready')
+        expect(output).toContain('Do not delete tasks')
+      } finally {
+        process.argv = originalArgv
+      }
+    })
+  })
+
+  test('summary prints useful task and memory briefing', async () => {
+    await withTempCwd(async () => {
+      await continuum.task.init()
+      const task = await continuum.task.create({
+        title: 'Build summary command',
+        type: 'feature',
+        status: 'ready',
+        priority: 10,
+        description: 'Expose task and memory context for agents.',
+      })
+      await continuum.task.steps.add(task.id, {
+        steps: [
+          {
+            title: 'Evaluate output against repo state',
+            description: 'Make sure the summary is useful for agents.',
+          },
+        ],
+      })
+      await continuum.task.notes.add(task.id, {
+        kind: 'discovery',
+        source: 'agent',
+        content: 'Agents need a deterministic briefing before choosing work.',
+      })
+      const session = startSession()
+      writeFileSync(
+        session.filePath,
+        `${readFileSync(
+          session.filePath,
+          'utf-8',
+        )}\nAgent picked up summary work.\nNext: validate output.\n`,
+      )
+      writeFileSync(
+        join(process.cwd(), '.continuum', 'memory', 'RECENT.md'),
+        '# RECENT\n\n- Prior session discussed guide command.\n',
+      )
+
+      const originalArgv = process.argv
+      process.argv = [
+        'node',
+        'continuum',
+        'summary',
+        '--limit',
+        '2',
+        '--memory-lines',
+        '3',
+      ]
+
+      try {
+        const logs = await withCapturedLogs(async () => {
+          await main()
+        })
+        const output = logs.join('\n')
+        expect(output).toContain('# Continuum Summary')
+        expect(output).toContain(`- next: ${task.id} P10 feature/ready`)
+        expect(output).toContain('latest discovery')
+        expect(output).toContain('### NOW tail')
+        expect(output).toContain('Next: validate output.')
+        expect(output).toContain('### RECENT excerpt')
+        expect(output).toContain('Prior session discussed guide command.')
+        expect(output).toContain(
+          `continuum task get ${task.id} --expand parent,children,blockers`,
+        )
+      } finally {
+        process.argv = originalArgv
+      }
+    })
+  })
+})
+
 describe('task CLI', () => {
   test('task create auto-initializes when missing', async () => {
     await withTempCwd(async () => {
