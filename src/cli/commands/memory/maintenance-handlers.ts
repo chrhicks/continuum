@@ -1,4 +1,5 @@
 import { readConsolidationLog } from '../../../memory/log'
+import { repairRecent } from '../../../memory/repair-recent'
 import { recoverStaleNowFiles } from '../../../memory/recover'
 import { validateMemory } from '../../../memory/validate'
 
@@ -66,4 +67,24 @@ export async function handleRecover(
   } else {
     console.log('Run with --consolidate to recover these sessions.')
   }
+}
+
+export function handleRepairRecent(dryRun: boolean): void {
+  const result = repairRecent({ dryRun })
+  if (result.rebuiltEntries === 0) {
+    console.log('No consolidated memory sections found to rebuild RECENT.')
+    return
+  }
+
+  if (dryRun) {
+    console.log('RECENT rebuild dry run (no files written):')
+  } else {
+    console.log('RECENT rebuilt from memory files:')
+  }
+  console.log(`- Path: ${result.recentPath}`)
+  console.log(`- Entries: ${result.rebuiltEntries}`)
+  console.log(`- Meaningful entries: ${result.meaningfulEntries}`)
+  console.log(`- Reused durations: ${result.reusedDurations}`)
+  console.log(`- Unknown durations: ${result.unknownDurations}`)
+  console.log(`- Lines: ${result.recentLines}`)
 }

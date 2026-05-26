@@ -1,10 +1,14 @@
 import { existsSync } from 'node:fs'
 import { initMemory } from './init'
-import { resolveMemoryDir } from './paths'
+import { memoryPath, resolveMemoryDir } from './paths'
 import { getMemoryConfig } from './config'
 import { resolveCurrentSessionPath } from './session'
 import { withMemoryLockAsync } from './lock'
 import { dedupeEntriesByAnchor, insertEntryInSection } from './memory-index'
+import {
+  formatDate,
+  isClearedNowBody,
+} from './memory-content-builders'
 import {
   prepareNowConsolidationInput,
   type PreparedConsolidationInput,
@@ -87,6 +91,22 @@ export async function consolidatePreparedInput(
       throw new Error(
         'Memory directory not initialized. Run: continuum memory init',
       )
+    }
+
+    // Skip already-cleared NOW files to prevent degrading existing memory
+    if (
+      input.clearSourceAfterPersist &&
+      isClearedNowBody(input.record.body, input.frontmatter)
+    ) {
+      const dateStamp = formatDate(input.timestampStart)
+      return {
+        recentPath: memoryPath('RECENT.md'),
+        memoryPath: memoryPath(`MEMORY-${dateStamp}.md`),
+        memoryIndexPath: memoryPath('MEMORY.md'),
+        logPath: memoryPath('consolidation.log'),
+        nowPath: input.sourcePath,
+        dryRun,
+      }
     }
 
     const config = getMemoryConfig()

@@ -24,6 +24,7 @@ import {
 } from './output-formatters'
 import {
   handleLog,
+  handleRepairRecent,
   handleRecover,
   handleValidate,
 } from './maintenance-handlers'
@@ -75,6 +76,7 @@ export function registerMemoryHandlers(
       const hours = options.hours ? parseHours(options.hours) : undefined
       return handleRecover(hours, options.consolidate ?? false)
     },
+    onRepairRecent: (options) => handleRepairRecent(options.dryRun ?? false),
     onValidate: () => handleValidate(),
     onCollect: (options) => handleCollect(options),
   })

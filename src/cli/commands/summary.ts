@@ -6,6 +6,10 @@ import type { Task, TaskNote } from '../../sdk/types'
 import { getWorkspaceContext, memoryPath } from '../../memory/paths'
 import { getStatus } from '../../memory/status'
 import { parseFrontmatter } from '../../utils/frontmatter'
+import {
+  extractRecentEntries,
+  isMeaningfulEntry,
+} from '../../memory/memory-content-builders'
 import { parseOptionalPositiveInteger } from './shared'
 
 type SummaryOptions = {
@@ -221,14 +225,214 @@ function renderMemorySummary(memoryLines: number): string {
   if (status.nowPath) {
     appendExcerpt(lines, 'NOW tail', status.nowPath, memoryLines, 'tail')
   }
-  appendExcerpt(
-    lines,
-    'RECENT excerpt',
-    memoryPath('RECENT.md'),
-    memoryLines,
-    'head',
-  )
+
+  // Structured RECENT rendering
+  const recentPath = memoryPath('RECENT.md')
+  const recentEntries = loadRecentEntries(recentPath)
+  const meaningfulCount = recentEntries.filter(isMeaningfulEntry).length
+
+  if (recentEntries.length > 0) {
+    lines.push('', '### Recent Sessions')
+    const shown = recentEntries.slice(0, 3)
+    for (const entry of shown) {
+      const parsed = parseRecentEntry(entry)
+      lines.push(`- **${parsed.label}** (${parsed.date} ${parsed.duration})`)
+      if (parsed.source) {
+        lines.push(`  - Source: ${parsed.source}`)
+      }
+      if (parsed.narrative) {
+        lines.push(`  - ${parsed.narrative}`)
+      }
+      appendRecentEntryList(lines, 'Next steps', parsed.nextSteps)
+      appendRecentEntryList(lines, 'Blockers', parsed.blockers)
+      appendRecentEntryList(lines, 'Open questions', parsed.openQuestions)
+      appendRecentEntryList(lines, 'Decisions', parsed.decisions)
+      appendRecentEntryList(lines, 'Discoveries', parsed.discoveries)
+    }
+
+    // Fallback beyond RECENT when context is sparse
+    if (meaningfulCount < 2) {
+      const fallback = loadMemoryFallback(3)
+      if (fallback.length > 0) {
+        lines.push('', '### Additional Context from Memory Index')
+        for (const item of fallback) {
+          lines.push(`- **${item.label}** - ${item.summary}`)
+        }
+      }
+    }
+  }
+
   return lines.join('\n')
+}
+
+function appendRecentEntryList(
+  lines: string[],
+  label: string,
+  items: string[],
+): void {
+  if (items.length === 0) return
+  lines.push(`  - ${label}: ${items.join('; ')}`)
+}
+
+function loadRecentEntries(path: string): string[] {
+  if (!existsSync(path)) return []
+  const content = readFileSync(path, 'utf-8')
+  return extractRecentEntries(content.split('\n'))
+}
+
+type ParsedRecentEntry = {
+  label: string
+  date: string
+  duration: string
+  source: string
+  narrative: string
+  blockers: string[]
+  openQuestions: string[]
+  nextSteps: string[]
+  decisions: string[]
+  discoveries: string[]
+}
+
+function parseRecentEntry(entry: string): ParsedRecentEntry {
+  const lines = entry.split('\n')
+  const result: ParsedRecentEntry = {
+    label: 'Session',
+    date: '',
+    duration: '',
+    source: '',
+    narrative: '',
+    blockers: [],
+    openQuestions: [],
+    nextSteps: [],
+    decisions: [],
+    discoveries: [],
+  }
+
+  // Parse heading: "## Label Date Time (Duration)"
+  const headingLine = lines.find((line) => line.startsWith('## '))
+  if (headingLine) {
+    const headingMatch = headingLine.match(
+      /^##\s+(.+?)\s+(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2})\s+\(([^)]+)\)/,
+    )
+    if (headingMatch) {
+      result.label = headingMatch[1]
+      result.date = `${headingMatch[2]} ${headingMatch[3]}`
+      result.duration = headingMatch[4]
+    } else {
+      result.label = headingLine.replace('## ', '').trim()
+    }
+  }
+
+  let currentSection:
+    | 'blockers'
+    | 'decisions'
+    | 'discoveries'
+    | 'nextSteps'
+    | 'openQuestions'
+    | null = null
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (!trimmed || trimmed === '---') continue
+    if (trimmed.startsWith('## ')) continue
+
+    if (trimmed.startsWith('**Source**')) {
+      const sourceMatch = trimmed.match(/^\*\*Source\*\*:\s*(.+)/)
+      if (sourceMatch) {
+        result.source = sourceMatch[1]
+      }
+      currentSection = null
+      continue
+    }
+    if (trimmed.startsWith('**Link**')) {
+      currentSection = null
+      continue
+    }
+    if (trimmed.startsWith('**Decisions**')) {
+      currentSection = 'decisions'
+      continue
+    }
+    if (trimmed.startsWith('**Discoveries**')) {
+      currentSection = 'discoveries'
+      continue
+    }
+    if (trimmed.startsWith('**Blockers**')) {
+      currentSection = 'blockers'
+      continue
+    }
+    if (trimmed.startsWith('**Open questions**')) {
+      currentSection = 'openQuestions'
+      continue
+    }
+    if (trimmed.startsWith('**Next steps**')) {
+      currentSection = 'nextSteps'
+      continue
+    }
+    if (trimmed.startsWith('**') && trimmed.endsWith('**:')) {
+      currentSection = null
+      continue
+    }
+
+    if (trimmed.startsWith('- ')) {
+      const item = trimmed.slice(2)
+      if (currentSection === 'blockers') {
+        result.blockers.push(item)
+      } else if (currentSection === 'decisions') {
+        result.decisions.push(item)
+      } else if (currentSection === 'discoveries') {
+        result.discoveries.push(item)
+      } else if (currentSection === 'nextSteps') {
+        result.nextSteps.push(item)
+      } else if (currentSection === 'openQuestions') {
+        result.openQuestions.push(item)
+      }
+      continue
+    }
+
+    // Treat as narrative if we haven't captured one yet
+    if (!result.narrative) {
+      result.narrative = trimmed
+    }
+  }
+
+  return result
+}
+
+function loadMemoryFallback(limit: number): Array<{
+  label: string
+  summary: string
+}> {
+  const indexPath = memoryPath('MEMORY.md')
+  if (!existsSync(indexPath)) return []
+
+  const content = readFileSync(indexPath, 'utf-8')
+  const entries: Array<{ label: string; summary: string; timestamp: number }> = []
+
+  for (const line of content.split('\n')) {
+    const trimmed = line.trim()
+    if (!trimmed.startsWith('- ')) continue
+    // Parse: - **[Label Date Time](file#anchor)** - Summary
+    const match = trimmed.match(
+      /^-\s+\*\*\[(.+?)\]\([^)]+\)\*\*\s+-\s+(.+)/,
+    )
+    if (match) {
+      entries.push({
+        label: match[1],
+        summary: match[2],
+        timestamp: extractIndexedEntryTimestamp(match[1]),
+      })
+    }
+  }
+
+  return entries
+    .sort((left, right) => right.timestamp - left.timestamp)
+    .slice(0, limit)
+    .map(({ label, summary }) => ({ label, summary }))
+}
+
+function extractIndexedEntryTimestamp(label: string): number {
+  const match = label.match(/(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2})$/)
+  if (!match) return 0
+  return Date.parse(`${match[1]}T${match[2]}:00.000Z`) || 0
 }
 
 function appendExcerpt(

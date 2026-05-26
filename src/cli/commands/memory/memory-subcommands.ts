@@ -23,6 +23,10 @@ type RecoverOptions = {
   consolidate?: boolean
 }
 
+type RepairRecentOptions = {
+  dryRun?: boolean
+}
+
 export type CollectOptions = {
   source?: string
   db?: string
@@ -211,6 +215,27 @@ function registerValidateSubcommand(
     .action(() => onValidate())
 }
 
+function registerRepairSubcommands(
+  memoryCommand: Command,
+  onRepairRecent: MemorySubcommandHandlers['onRepairRecent'],
+): void {
+  const repairCommand = new Command('repair').description(
+    'Repair generated memory artifacts',
+  )
+
+  repairCommand.action(() => {
+    repairCommand.outputHelp()
+  })
+
+  repairCommand
+    .command('recent')
+    .description('Rebuild RECENT.md from consolidated MEMORY files')
+    .option('--dry-run', 'Preview RECENT rebuild without writing files')
+    .action((options: RepairRecentOptions) => onRepairRecent(options))
+
+  memoryCommand.addCommand(repairCommand)
+}
+
 type MemorySubcommandHandlers = {
   onSessionAppend: (kind: string, textParts: string[]) => void | Promise<void>
   onStatus: () => void
@@ -220,6 +245,7 @@ type MemorySubcommandHandlers = {
   onSearch: (query: string, options: SearchOptions) => void | Promise<void>
   onLog: (options: LogOptions) => void
   onRecover: (options: RecoverOptions) => void | Promise<void>
+  onRepairRecent: (options: RepairRecentOptions) => void | Promise<void>
   onValidate: () => void
   onCollect: (options: CollectOptions) => void | Promise<void>
 }
@@ -235,6 +261,7 @@ export function registerMemorySubcommands(
   registerSearchSubcommand(memoryCommand, handlers.onSearch)
   registerLogSubcommand(memoryCommand, handlers.onLog)
   registerRecoverSubcommand(memoryCommand, handlers.onRecover)
+  registerRepairSubcommands(memoryCommand, handlers.onRepairRecent)
   registerCollectSubcommand(memoryCommand, handlers.onCollect)
   registerValidateSubcommand(memoryCommand, handlers.onValidate)
 }

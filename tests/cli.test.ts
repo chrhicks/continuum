@@ -517,7 +517,32 @@ describe('agent guide and summary CLI', () => {
       )
       writeFileSync(
         join(process.cwd(), '.continuum', 'memory', 'RECENT.md'),
-        '# RECENT\n\n- Prior session discussed guide command.\n',
+        [
+          '# RECENT - Last 3 Sessions',
+          '',
+          '## Session 2026-02-02 16:00 (5m)',
+          '',
+          '**Source**: NOW session',
+          '',
+          'Prior session discussed guide command, compared multiple briefing shapes, and captured enough detail to verify that the summary command should print the full memory text without adding ellipses or trimming the important context away.',
+          '',
+          '**Blockers**:',
+          '- Need fixture data and a realistic long-form regression case so the output preserves the entire blocker text instead of silently clipping it.',
+          '',
+          '**Open questions**:',
+          '- Should summary show more memory context when the entry already contains enough detail to stand on its own without an additional excerpt pass?',
+          '',
+          '**Next steps**:',
+          '- Validate output against CLI snapshots and confirm the full text remains visible even when the narrative and section items are much longer than the old truncation thresholds.',
+          '',
+          '**Decisions**:',
+          '- Keep the briefing structured, but do not truncate the RECENT narrative or the section items because the lost context makes the cold-start briefing much less useful.',
+          '',
+          '**Discoveries**:',
+          '- Agents need recent context in plain text, and the plain text needs to stay intact to avoid dropping the exact rationale or next action hidden at the end of a longer sentence.',
+          '',
+          '**Link**: [Full details](MEMORY-2026-02-02.md#session-2026-02-02-16-00-sess_test)',
+        ].join('\n') + '\n',
       )
 
       const originalArgv = process.argv
@@ -541,11 +566,125 @@ describe('agent guide and summary CLI', () => {
         expect(output).toContain('latest discovery')
         expect(output).toContain('### NOW tail')
         expect(output).toContain('Next: validate output.')
-        expect(output).toContain('### RECENT excerpt')
-        expect(output).toContain('Prior session discussed guide command.')
+        expect(output).toContain('### Recent Sessions')
+        expect(output).toContain(
+          'Prior session discussed guide command, compared multiple briefing shapes, and captured enough detail to verify that the summary command should print the full memory text without adding ellipses or trimming the important context away.',
+        )
+        expect(output).toContain(
+          'Next steps: Validate output against CLI snapshots and confirm the full text remains visible even when the narrative and section items are much longer than the old truncation thresholds.',
+        )
+        expect(output).toContain(
+          'Blockers: Need fixture data and a realistic long-form regression case so the output preserves the entire blocker text instead of silently clipping it.',
+        )
+        expect(output).toContain(
+          'Open questions: Should summary show more memory context when the entry already contains enough detail to stand on its own without an additional excerpt pass?',
+        )
+        expect(output).not.toContain('...')
         expect(output).toContain(
           `continuum task get ${task.id} --expand parent,children,blockers`,
         )
+      } finally {
+        process.argv = originalArgv
+      }
+    })
+  })
+
+  test('summary fallback prefers newest memory index entries', async () => {
+    await withTempCwd(async () => {
+      const memoryDir = join(process.cwd(), '.continuum', 'memory')
+      mkdirSync(memoryDir, { recursive: true })
+
+      writeFileSync(
+        join(memoryDir, 'RECENT.md'),
+        [
+          '# RECENT - Last 3 Sessions',
+          '',
+          '## Session 2026-02-04 09:00 (1m)',
+          '',
+          '**Source**: NOW session',
+          '',
+          'No summary available.',
+          '**Link**: [Full details](MEMORY-2026-02-04.md#session-2026-02-04-09-00-sess_sparse)',
+        ].join('\n') + '\n',
+      )
+      writeFileSync(
+        join(memoryDir, 'MEMORY.md'),
+        [
+          '# Long-term Memory Index',
+          '',
+          '## Architecture Decisions',
+          '- **[Session 2026-02-03 09:00](MEMORY-2026-02-03.md#newest)** - Newest context should be surfaced.',
+          '- **[Session 2026-02-01 09:00](MEMORY-2026-02-01.md#older)** - Older context can still appear.',
+          '',
+          '## Technical Discoveries',
+          '- **[Session 2026-02-02 09:00](MEMORY-2026-02-02.md#second_newest)** - Second newest context should also be surfaced.',
+          '',
+          '## Sessions',
+          '- **[Session 2026-01-31 09:00](MEMORY-2026-01-31.md#oldest)** - Oldest context should be dropped first.',
+          '',
+        ].join('\n'),
+        'utf-8',
+      )
+
+      const originalArgv = process.argv
+      process.argv = ['node', 'continuum', 'summary', '--no-tasks']
+
+      try {
+        const logs = await withCapturedLogs(async () => {
+          await main()
+        })
+        const output = logs.join('\n')
+        expect(output).toContain('### Additional Context from Memory Index')
+        expect(output).toContain('Newest context should be surfaced.')
+        expect(output).toContain('Second newest context should also be surfaced.')
+        expect(output).not.toContain('Oldest context should be dropped first.')
+      } finally {
+        process.argv = originalArgv
+      }
+    })
+  })
+
+  test('memory repair recent rebuilds RECENT from MEMORY files', async () => {
+    await withTempCwd(async () => {
+      const memoryDir = join(process.cwd(), '.continuum', 'memory')
+      mkdirSync(memoryDir, { recursive: true })
+      writeFileSync(
+        join(memoryDir, 'MEMORY-2026-02-10.md'),
+        [
+          '---',
+          'source_sessions: [ses_test]',
+          'tags: []',
+          '---',
+          '',
+          '# Consolidated Memory',
+          '',
+          '## Recall Import 2026-02-10 10:00 UTC (ses_test)',
+          '<a name="session-missing"></a>',
+          '',
+          '**Source**: Imported OpenCode summary',
+          '',
+          'Implement recall import flow.',
+          '',
+          '**Decisions**:',
+          '- Use consolidate pipeline',
+        ].join('\n'),
+        'utf-8',
+      )
+
+      const originalArgv = process.argv
+      process.argv = ['node', 'continuum', 'memory', 'repair', 'recent']
+
+      try {
+        const logs = await withCapturedLogs(async () => {
+          await main()
+        })
+        const output = logs.join('\n')
+        const recent = readFileSync(join(memoryDir, 'RECENT.md'), 'utf-8')
+
+        expect(output).toContain('RECENT rebuilt from memory files:')
+        expect(output).toContain('- Entries: 1')
+        expect(recent).toContain('## Recall Import 2026-02-10 10:00 (unknown)')
+        expect(recent).toContain('Use consolidate pipeline')
       } finally {
         process.argv = originalArgv
       }
