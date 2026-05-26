@@ -93,6 +93,11 @@ export async function collectOpencodeRecords(
   const accumulator = createOpencodeCollectionAccumulator()
 
   for (const session of extraction.sessions) {
+    const title = session.session.title ?? session.session.slug ?? session.session.id
+    const messageCount = session.messageBlocks.length
+    console.error(
+      `[collect] Processing session ${title} (${messageCount} messages)...`,
+    )
     await collectSessionArtifacts({
       session,
       projectId: extraction.project.id,
@@ -104,6 +109,7 @@ export async function collectOpencodeRecords(
       llmClientFactory: dependencies.llmClientFactory,
       accumulator,
     })
+    console.error(`[collect] Done session ${title}`)
   }
 
   const checkpoint = dependencies.stateRepository

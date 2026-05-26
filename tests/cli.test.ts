@@ -1104,6 +1104,9 @@ describe('memory session CLI', () => {
         expect(
           existsSync(join(repoRoot, '.continuum', 'memory', '.gitignore')),
         ).toBe(true)
+        expect(
+          existsSync(join(repoRoot, '.continuum', 'memory', 'config.yml')),
+        ).toBe(true)
         expect(existsSync(join(nested, '.continuum'))).toBe(false)
       } finally {
         process.argv = originalArgv

@@ -1,9 +1,11 @@
-import { writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   buildOpencodeArtifactFilename,
   type OpencodeArtifactKind,
 } from '../opencode/paths'
+import { parseOpencodeSummary } from '../opencode/summary-parse'
+import { parseFrontmatter } from '../../utils/frontmatter'
 import type { RecallSummaryResult } from '../opencode/summary-schema'
 import type { OpencodeSessionBundle } from '../opencode/extract'
 import type { CollectedRecord } from '../types'
@@ -107,22 +109,74 @@ async function collectSummaryArtifacts(
   summaryConfig: ResolvedSummaryConfig,
   allowedFiles: string[],
 ): Promise<void> {
-  const summaryChunkCount = countSummaryChunks(
-    normalizedMessages,
-    summaryConfig,
+  const summaryPath = join(
+    input.outDir,
+    buildOpencodeArtifactFilename(
+      'summary',
+      input.session.session.time?.created,
+      input.session.session.id,
+    ),
   )
-  const summary = input.summarizeSessionOverride
-    ? await input.summarizeSessionOverride(
-        input.session,
-        normalizedMessages,
-        summaryConfig,
-      )
-    : await summarizeOpencodeSession(
-        input.session,
-        normalizedMessages,
-        summaryConfig,
-        input.llmClientFactory,
-      )
+
+  let summary: RecallSummaryResult
+  let summaryChunkCount: number
+
+  if (existsSync(summaryPath)) {
+    const title =
+      input.session.session.title ??
+      input.session.session.slug ??
+      input.session.session.id
+    console.error(`[collect] Reusing existing summary for ${title}`)
+    const content = readFileSync(summaryPath, 'utf-8')
+    const parsed = parseOpencodeSummary(content)
+    if (!parsed) {
+      throw new Error(`Failed to parse existing summary: ${summaryPath}`)
+    }
+    summary = {
+      focus: parsed.focus,
+      decisions: parsed.decisions,
+      discoveries: parsed.discoveries,
+      patterns: parsed.patterns,
+      tasks: parsed.tasks,
+      files: parsed.files,
+      blockers: parsed.blockers,
+      open_questions: parsed.openQuestions,
+      next_steps: parsed.nextSteps,
+      confidence:
+        parsed.confidence === 'medium'
+          ? 'med'
+          : (parsed.confidence ?? 'low'),
+    }
+    const { frontmatter } = parseFrontmatter(content)
+    summaryChunkCount =
+      typeof frontmatter.summary_chunks === 'number'
+        ? frontmatter.summary_chunks
+        : 0
+  } else {
+    summaryChunkCount = countSummaryChunks(normalizedMessages, summaryConfig)
+    const cacheDir = join(input.outDir, '.chunks')
+    summary = input.summarizeSessionOverride
+      ? await input.summarizeSessionOverride(
+          input.session,
+          normalizedMessages,
+          summaryConfig,
+        )
+      : await summarizeOpencodeSession(
+          input.session,
+          normalizedMessages,
+          summaryConfig,
+          input.llmClientFactory,
+          cacheDir,
+        )
+    if (existsSync(cacheDir)) {
+      try {
+        rmSync(cacheDir, { recursive: true, force: true })
+      } catch {
+        // ignore cleanup failures
+      }
+    }
+  }
+
   const normalizedSummary = normalizeSummary(summary, allowedFiles)
   input.accumulator.summaryPaths.push(
     writeOpencodeArtifact(

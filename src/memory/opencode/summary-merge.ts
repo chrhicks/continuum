@@ -119,6 +119,9 @@ export async function mergeRecallSummaryItems(
   const passes: RecallSummaryMergePassReport[] = []
 
   while (current.length > 1) {
+    console.error(
+      `[merge] Pass ${pass}: merging ${current.length} items...`,
+    )
     const grouped = groupSummaryItemsByTokenBudget(current, maxTokens)
     const needsPairFallback =
       grouped.length === current.length &&
@@ -130,27 +133,34 @@ export async function mergeRecallSummaryItems(
     const groupTokens = groups.map((group) => sumGroupTokens(group))
     const groupSizes = groups.map((group) => group.length)
 
-    const merged = await Promise.all(
-      groups.map(async (group, index) => {
-        if (group.length === 1) {
-          return { item: group[0], maxTokensUsed: null }
-        }
-        const context: RecallSummaryMergeContext = {
-          pass,
-          groupIndex: index + 1,
-          groupCount: groups.length,
-          mode,
-        }
-        const result = await merge(
-          group.map((item) => item.summary),
-          context,
-        )
-        const normalized = normalizeMergeResult(result)
-        return {
-          item: buildRecallSummaryItem(normalized.summary),
-          maxTokensUsed: normalized.maxTokensUsed,
-        }
-      }),
+    const merged: { item: RecallSummaryItem; maxTokensUsed: number | null }[] = []
+    for (let index = 0; index < groups.length; index++) {
+      const group = groups[index]
+      if (group.length === 1) {
+        merged.push({ item: group[0], maxTokensUsed: null })
+        continue
+      }
+      const context: RecallSummaryMergeContext = {
+        pass,
+        groupIndex: index + 1,
+        groupCount: groups.length,
+        mode,
+      }
+      console.error(
+        `[merge] Pass ${pass}, group ${context.groupIndex}/${context.groupCount} (${mode}) - merging ${group.length} items...`,
+      )
+      const result = await merge(
+        group.map((item) => item.summary),
+        context,
+      )
+      const normalized = normalizeMergeResult(result)
+      merged.push({
+        item: buildRecallSummaryItem(normalized.summary),
+        maxTokensUsed: normalized.maxTokensUsed,
+      })
+    }
+    console.error(
+      `[merge] Pass ${pass} complete: ${groups.length} groups -> ${merged.length} items`,
     )
 
     passes.push({
