@@ -8,6 +8,9 @@ export type ConsolidationLlmConfig = {
   model: string
   max_tokens: number
   timeout_ms: number
+  summary_max_chars: number
+  summary_max_lines: number
+  merge_max_est_tokens: number
 }
 
 export type MemoryConfig = {
@@ -29,8 +32,11 @@ const DEFAULT_SECTIONS = [
 const DEFAULT_CONSOLIDATION_MAX_TOKENS = 4000
 const DEFAULT_CONSOLIDATION_TIMEOUT_MS = 120000
 const DEFAULT_CONSOLIDATION_API_URL =
-  'https://opencode.ai/zen/v1/chat/completions'
-const DEFAULT_CONSOLIDATION_MODEL = 'kimi-k2.5'
+  'https://opencode.ai/zen/v1/responses'
+const DEFAULT_CONSOLIDATION_MODEL = 'gpt-5.4-mini'
+const DEFAULT_CONSOLIDATION_SUMMARY_MAX_CHARS = 40000
+const DEFAULT_CONSOLIDATION_SUMMARY_MAX_LINES = 1200
+const DEFAULT_CONSOLIDATION_MERGE_MAX_EST_TOKENS = 12000
 
 const DEFAULT_CONFIG: MemoryConfig = {
   now_max_lines: 200,
@@ -123,6 +129,18 @@ function resolveConsolidationConfig(
     timeout_ms: readPositiveInt(
       rec?.timeout_ms,
       DEFAULT_CONSOLIDATION_TIMEOUT_MS,
+    ),
+    summary_max_chars: readPositiveInt(
+      rec?.summary_max_chars,
+      DEFAULT_CONSOLIDATION_SUMMARY_MAX_CHARS,
+    ),
+    summary_max_lines: readPositiveInt(
+      rec?.summary_max_lines,
+      DEFAULT_CONSOLIDATION_SUMMARY_MAX_LINES,
+    ),
+    merge_max_est_tokens: readPositiveInt(
+      rec?.merge_max_est_tokens,
+      DEFAULT_CONSOLIDATION_MERGE_MAX_EST_TOKENS,
     ),
   }
 }

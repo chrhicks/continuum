@@ -28,7 +28,10 @@ describe('memory config', () => {
       try {
         const config = getMemoryConfig()
         expect(config.consolidation?.api_key).toBe('test-key')
-        expect(config.consolidation?.model).toBe('kimi-k2.5')
+        expect(config.consolidation?.api_url).toBe(
+          'https://opencode.ai/zen/v1/responses',
+        )
+        expect(config.consolidation?.model).toBe('gpt-5.4-mini')
       } finally {
         if (originalKey === undefined) {
           delete process.env.OPENCODE_ZEN_API_KEY

@@ -5,12 +5,25 @@ export type LlmMessage = {
   content: string
 }
 
+export type LlmTransport = 'chat_completions' | 'responses'
+
+export type LlmJsonSchema = {
+  name: string
+  schema: Record<string, unknown>
+  strict?: boolean
+}
+
+export type LlmStructuredOutputOptions<T = unknown> = {
+  jsonSchema: LlmJsonSchema
+  validate?: (raw: unknown) => T
+}
+
 /**
  * Configuration for an LLM client. Intentionally provider-agnostic:
  * any OpenAI-compatible endpoint works (Anthropic via proxy, kimi, etc.).
  */
 export type LlmConfig = {
-  /** Full chat completions URL, e.g. https://opencode.ai/zen/v1/chat/completions */
+  /** Full provider URL, e.g. https://opencode.ai/zen/v1/chat/completions */
   apiUrl: string
   apiKey: string
   model: string
@@ -20,16 +33,19 @@ export type LlmConfig = {
   timeoutMs: number
 }
 
-export type LlmResponse = {
+export type LlmResponse<T = unknown> = {
   content: string
   /** Raw finish_reason from the provider, e.g. 'stop' | 'length' | null */
   finishReason: string | null
+  /** Parsed schema-constrained payload when structured output was requested. */
+  structuredOutput: T | null
 }
 
-export type LlmCallOptions = {
+export type LlmCallOptions<T = unknown> = {
   messages: LlmMessage[]
   /** Override the config default max tokens for this specific call */
   maxTokens?: number
+  structuredOutput?: LlmStructuredOutputOptions<T>
 }
 
 /**
@@ -42,4 +58,8 @@ export type LlmRetryOptions = {
   maxTokensCap?: number
   /** How many tokens to add on each retry (default: 2000) */
   tokenStep?: number
+  /** How many times to retry on network/timeout errors (default: 1) */
+  errorRetries?: number
+  /** Delay between error retries in ms (default: 5000) */
+  errorRetryDelayMs?: number
 }

@@ -1,4 +1,4 @@
-import { describe, expect, test, beforeEach, afterEach, mock } from 'bun:test'
+import { describe, expect, test, mock } from 'bun:test'
 import { createLlmClient } from '../src/llm/client'
 import { extractJsonObject, parseJsonResponse } from '../src/llm/json'
 import type { LlmConfig } from '../src/llm/types'
@@ -11,6 +11,14 @@ const BASE_CONFIG: LlmConfig = {
   apiUrl: 'https://example.com/v1/chat/completions',
   apiKey: 'test-key',
   model: 'test-model',
+  maxTokens: 1000,
+  timeoutMs: 5000,
+}
+
+const ZEN_CHAT_CONFIG: LlmConfig = {
+  apiUrl: 'https://opencode.ai/zen/v1/chat/completions',
+  apiKey: 'test-key',
+  model: 'gpt-5.4-mini',
   maxTokens: 1000,
   timeoutMs: 5000,
 }
@@ -44,10 +52,34 @@ function makeFetchMock(responses: Response[]): {
   }
 }
 
-function makeOkResponse(content: string, finishReason = 'stop'): Response {
+function makeChatOkResponse(content: string, finishReason = 'stop'): Response {
   return new Response(
     JSON.stringify({
       choices: [{ message: { content }, finish_reason: finishReason }],
+    }),
+    { status: 200, headers: { 'Content-Type': 'application/json' } },
+  )
+}
+
+function makeResponsesOkResponse(
+  content: string,
+  options: { status?: string; incompleteReason?: string | null } = {},
+): Response {
+  const status = options.status ?? 'completed'
+  return new Response(
+    JSON.stringify({
+      status,
+      incomplete_details: options.incompleteReason
+        ? { reason: options.incompleteReason }
+        : null,
+      output_text: content,
+      output: [
+        {
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'output_text', text: content }],
+        },
+      ],
     }),
     { status: 200, headers: { 'Content-Type': 'application/json' } },
   )
@@ -63,7 +95,7 @@ function makeErrorResponse(status: number, body: string): Response {
 
 describe('LlmClient.call', () => {
   test('sends correct request shape', async () => {
-    const { calls, restore } = makeFetchMock([makeOkResponse('hello')])
+    const { calls, restore } = makeFetchMock([makeChatOkResponse('hello')])
     try {
       const client = createLlmClient(BASE_CONFIG)
       await client.call({
@@ -82,7 +114,9 @@ describe('LlmClient.call', () => {
   })
 
   test('returns content and finishReason', async () => {
-    const { restore } = makeFetchMock([makeOkResponse('result text', 'stop')])
+    const { restore } = makeFetchMock([
+      makeChatOkResponse('result text', 'stop'),
+    ])
     try {
       const client = createLlmClient(BASE_CONFIG)
       const result = await client.call({
@@ -96,7 +130,7 @@ describe('LlmClient.call', () => {
   })
 
   test('per-call maxTokens overrides config default', async () => {
-    const { calls, restore } = makeFetchMock([makeOkResponse('ok')])
+    const { calls, restore } = makeFetchMock([makeChatOkResponse('ok')])
     try {
       const client = createLlmClient(BASE_CONFIG)
       await client.call({
@@ -137,6 +171,71 @@ describe('LlmClient.call', () => {
       restore()
     }
   })
+
+  test('sends structured output schema to chat completions', async () => {
+    const { calls, restore } = makeFetchMock([
+      makeChatOkResponse('{"ok":true}'),
+    ])
+    try {
+      const client = createLlmClient(BASE_CONFIG)
+      const result = await client.call({
+        messages: [{ role: 'user', content: 'hi' }],
+        structuredOutput: {
+          jsonSchema: {
+            name: 'tiny_probe',
+            schema: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['ok'],
+              properties: { ok: { type: 'boolean' } },
+            },
+          },
+          validate: (raw) => raw as { ok: boolean },
+        },
+      })
+      expect(calls[0].body.response_format).toEqual({
+        type: 'json_schema',
+        json_schema: {
+          name: 'tiny_probe',
+          strict: true,
+          schema: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['ok'],
+            properties: { ok: { type: 'boolean' } },
+          },
+        },
+      })
+      expect(result.structuredOutput).toEqual({ ok: true })
+    } finally {
+      restore()
+    }
+  })
+
+  test('routes zen gpt models to responses endpoint', async () => {
+    const { calls, restore } = makeFetchMock([makeResponsesOkResponse('hello')])
+    try {
+      const client = createLlmClient(ZEN_CHAT_CONFIG)
+      const result = await client.call({
+        messages: [
+          { role: 'system', content: 'Be terse.' },
+          { role: 'user', content: 'ping' },
+        ],
+      })
+      expect(calls).toHaveLength(1)
+      expect(calls[0].url).toBe('https://opencode.ai/zen/v1/responses')
+      expect(calls[0].body.max_output_tokens).toBe(ZEN_CHAT_CONFIG.maxTokens)
+      expect(calls[0].body.input).toEqual([
+        { role: 'developer', content: 'Be terse.' },
+        { role: 'user', content: 'ping' },
+      ])
+      expect(calls[0].body.messages).toBeUndefined()
+      expect(result.content).toBe('hello')
+      expect(result.finishReason).toBe('stop')
+    } finally {
+      restore()
+    }
+  })
 })
 
 // ---------------------------------------------------------------------------
@@ -145,7 +244,9 @@ describe('LlmClient.call', () => {
 
 describe('LlmClient.callWithRetry', () => {
   test('returns immediately on stop', async () => {
-    const { calls, restore } = makeFetchMock([makeOkResponse('done', 'stop')])
+    const { calls, restore } = makeFetchMock([
+      makeChatOkResponse('done', 'stop'),
+    ])
     try {
       const client = createLlmClient(BASE_CONFIG)
       const result = await client.callWithRetry({
@@ -160,8 +261,8 @@ describe('LlmClient.callWithRetry', () => {
 
   test('bumps max_tokens and retries on length finish reason', async () => {
     const { calls, restore } = makeFetchMock([
-      makeOkResponse('truncated', 'length'),
-      makeOkResponse('complete', 'stop'),
+      makeChatOkResponse('truncated', 'length'),
+      makeChatOkResponse('complete', 'stop'),
     ])
     try {
       const client = createLlmClient(BASE_CONFIG)
@@ -181,8 +282,8 @@ describe('LlmClient.callWithRetry', () => {
 
   test('stops retrying when maxTokensCap is reached', async () => {
     const { calls, restore } = makeFetchMock([
-      makeOkResponse('truncated', 'length'),
-      makeOkResponse('still truncated', 'length'),
+      makeChatOkResponse('truncated', 'length'),
+      makeChatOkResponse('still truncated', 'length'),
     ])
     try {
       const client = createLlmClient({ ...BASE_CONFIG, maxTokens: 900 })
@@ -200,8 +301,8 @@ describe('LlmClient.callWithRetry', () => {
 
   test('config is frozen and not mutated by retry', async () => {
     const { restore } = makeFetchMock([
-      makeOkResponse('truncated', 'length'),
-      makeOkResponse('ok', 'stop'),
+      makeChatOkResponse('truncated', 'length'),
+      makeChatOkResponse('ok', 'stop'),
     ])
     try {
       const client = createLlmClient(BASE_CONFIG)
@@ -211,6 +312,47 @@ describe('LlmClient.callWithRetry', () => {
       )
       // config.maxTokens should be unchanged after retry
       expect(client.config.maxTokens).toBe(BASE_CONFIG.maxTokens)
+    } finally {
+      restore()
+    }
+  })
+
+  test('retries responses requests when max_output_tokens is reached', async () => {
+    const { calls, restore } = makeFetchMock([
+      makeResponsesOkResponse('{"ok":true}', {
+        status: 'incomplete',
+        incompleteReason: 'max_output_tokens',
+      }),
+      makeResponsesOkResponse('{"ok":true}'),
+    ])
+    try {
+      const client = createLlmClient(ZEN_CHAT_CONFIG)
+      const result = await client.callWithRetry(
+        {
+          messages: [{ role: 'user', content: 'hi' }],
+          structuredOutput: {
+            jsonSchema: {
+              name: 'tiny_probe',
+              schema: {
+                type: 'object',
+                additionalProperties: false,
+                required: ['ok'],
+                properties: { ok: { type: 'boolean' } },
+              },
+            },
+            validate: (raw) => raw as { ok: boolean },
+          },
+        },
+        { tokenStep: 500 },
+      )
+      expect(calls).toHaveLength(2)
+      expect(calls[0].url).toBe('https://opencode.ai/zen/v1/responses')
+      expect(calls[0].body.max_output_tokens).toBe(ZEN_CHAT_CONFIG.maxTokens)
+      expect(calls[1].body.max_output_tokens).toBe(
+        ZEN_CHAT_CONFIG.maxTokens + 500,
+      )
+      expect(result.finishReason).toBe('stop')
+      expect(result.structuredOutput).toEqual({ ok: true })
     } finally {
       restore()
     }

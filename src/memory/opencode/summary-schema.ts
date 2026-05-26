@@ -11,9 +11,12 @@ export const RECALL_SUMMARY_FIELDS = [
   'open_questions',
   'next_steps',
   'confidence',
+  'keywords',
 ] as const
 
 export const RECALL_SUMMARY_CONFIDENCE_VALUES = ['low', 'med', 'high'] as const
+
+export const RECALL_SUMMARY_SCHEMA_NAME = 'recall_summary'
 
 export type RecallSummaryConfidence =
   (typeof RECALL_SUMMARY_CONFIDENCE_VALUES)[number]
@@ -89,7 +92,7 @@ const recallSummarySchema = z
     open_questions: z.array(z.string()),
     next_steps: z.array(z.string()),
     confidence: z.enum(RECALL_SUMMARY_CONFIDENCE_VALUES),
-    keywords: recallSummaryKeywordSchema.optional(),
+    keywords: recallSummaryKeywordSchema.nullable(),
   })
   .strict()
 
@@ -125,7 +128,9 @@ export const RECALL_SUMMARY_JSON_SCHEMA = {
     open_questions: { type: 'array', items: { type: 'string' } },
     next_steps: { type: 'array', items: { type: 'string' } },
     confidence: { type: 'string', enum: [...RECALL_SUMMARY_CONFIDENCE_VALUES] },
-    keywords: RECALL_SUMMARY_KEYWORD_JSON_SCHEMA,
+    keywords: {
+      anyOf: [RECALL_SUMMARY_KEYWORD_JSON_SCHEMA, { type: 'null' }],
+    },
   },
 } as const
 
@@ -141,7 +146,10 @@ export function validateRecallSummaryInput(
       `Invalid recall summary JSON.\n${errors.map((error) => `- ${error}`).join('\n')}`,
     )
   }
-  return result.data
+  return {
+    ...result.data,
+    keywords: result.data.keywords ?? undefined,
+  }
 }
 
 export function parseRecallSummaryJson(content: string): RecallSummaryResult {
@@ -158,13 +166,71 @@ export function parseRecallSummaryJson(content: string): RecallSummaryResult {
 
 export function extractJsonFromText(content: string): string {
   const trimmed = content.trim()
-  if (trimmed.startsWith('{') && trimmed.endsWith('}')) return trimmed
-  const start = trimmed.indexOf('{')
-  const end = trimmed.lastIndexOf('}')
-  if (start === -1 || end === -1 || end <= start) {
-    throw new Error('Summary response is not valid JSON.')
+  // Fast path: already clean
+  if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+    // But verify it parses before returning
+    try {
+      JSON.parse(trimmed)
+      return trimmed
+    } catch {
+      // Fall through to extraction
+    }
   }
-  return trimmed.slice(start, end + 1)
+
+  // Remove markdown fences if present
+  let cleaned = trimmed
+  if (cleaned.startsWith('```')) {
+    const firstNewline = cleaned.indexOf('\n')
+    if (firstNewline !== -1) {
+      cleaned = cleaned.slice(firstNewline + 1)
+    }
+  }
+  if (cleaned.endsWith('```')) {
+    cleaned = cleaned.slice(0, -3).trimEnd()
+  }
+
+  const start = cleaned.indexOf('{')
+  if (start === -1) {
+    throw new Error('Summary response is not valid JSON: no opening brace found.')
+  }
+
+  // Find matching closing brace by counting braces, ignoring braces inside strings
+  let depth = 0
+  let inString = false
+  let escapeNext = false
+  let end = -1
+
+  for (let i = start; i < cleaned.length; i++) {
+    const char = cleaned[i]
+    if (escapeNext) {
+      escapeNext = false
+      continue
+    }
+    if (char === '\\') {
+      escapeNext = true
+      continue
+    }
+    if (char === '"') {
+      inString = !inString
+      continue
+    }
+    if (inString) continue
+    if (char === '{') {
+      depth++
+    } else if (char === '}') {
+      depth--
+      if (depth === 0) {
+        end = i
+        break
+      }
+    }
+  }
+
+  if (end === -1) {
+    throw new Error('Summary response is not valid JSON: no matching closing brace found (truncated?).')
+  }
+
+  return cleaned.slice(start, end + 1)
 }
 
 function formatRecallSummaryIssue(issue: z.ZodIssue): string {

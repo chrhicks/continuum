@@ -1,7 +1,7 @@
 import { getMemoryConfig } from '../config'
 import type { ResolvedSummaryConfig } from './opencode-artifacts'
 
-const DEFAULT_SUMMARY_API_URL = 'https://opencode.ai/zen/v1/chat/completions'
+const DEFAULT_SUMMARY_API_URL = 'https://opencode.ai/zen/v1/responses'
 const DEFAULT_SUMMARY_MAX_TOKENS = 4000
 const DEFAULT_SUMMARY_TIMEOUT_MS = 120000
 const DEFAULT_SUMMARY_MAX_CHARS = 40000
@@ -67,12 +67,15 @@ export function resolveSummaryConfig(
       DEFAULT_SUMMARY_TIMEOUT_MS,
     maxChars:
       normalizePositiveInteger(options.summaryMaxChars) ??
+      memoryConfig?.summary_max_chars ??
       DEFAULT_SUMMARY_MAX_CHARS,
     maxLines:
       normalizePositiveInteger(options.summaryMaxLines) ??
+      memoryConfig?.summary_max_lines ??
       DEFAULT_SUMMARY_MAX_LINES,
     mergeMaxEstTokens:
       normalizePositiveInteger(options.summaryMergeMaxEstTokens) ??
+      memoryConfig?.merge_max_est_tokens ??
       DEFAULT_SUMMARY_MERGE_MAX_EST_TOKENS,
   }
 }

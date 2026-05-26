@@ -279,9 +279,9 @@ memory_sections:
 
 # Optional: LLM-powered narrative consolidation
 consolidation:
-  api_url: https://opencode.ai/zen/v1/chat/completions
+  api_url: https://opencode.ai/zen/v1/responses
   api_key: sk-... # or set OPENCODE_ZEN_API_KEY / OPENAI_API_KEY env var
-  model: gpt-4o-mini
+  model: gpt-5.4-mini
   max_tokens: 4000
   timeout_ms: 120000
 ```

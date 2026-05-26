@@ -1,5 +1,4 @@
 import { createLlmClient } from '../llm/client'
-import { parseJsonResponse } from '../llm/json'
 import type { ConsolidationLlmConfig } from './config'
 import type { MemorySummary } from './types'
 
@@ -24,29 +23,6 @@ Entries are structured task-loop records with fields like:
   Tests: ...
   Outcome: ...
 
-Return JSON only. No markdown, no backticks, no fences.
-
-Required keys (in this order):
-  narrative       - 2-4 sentence paragraph synthesising what was done and why.
-                    Write prose, not bullet points. Explain the intent and the
-                    reasoning behind the approach, not just the fact that files changed.
-  decisions       - array of strings. Each is a decision made during the session
-                    with a brief "because..." clause. Only include real choices
-                    between alternatives. Empty array if none.
-  discoveries     - array of strings. Each is something that was surprising,
-                    non-obvious, or newly understood. Empty array if none.
-  whatWorked      - array of strings. Approaches that succeeded and are worth
-                    repeating. Empty array if nothing notable.
-  whatFailed      - array of strings. Approaches tried and abandoned, with why.
-                    Empty array if nothing failed.
-  openQuestions   - array of strings. Unresolved questions or risks to watch.
-                    Empty array if none.
-  nextSteps       - array of strings. Concrete follow-on work stated or implied.
-                    Empty array if none.
-  tasks           - array of task IDs (tkt-* or tkt_*) mentioned. Empty array if none.
-  files           - array of source file paths explicitly mentioned in Changes fields.
-                    Only real paths, no guesses. Empty array if none.
-
 Rules:
 - Use only facts present in the NOW content. Do not invent.
 - narrative must be prose paragraphs, not a list.
@@ -55,6 +31,47 @@ Rules:
   because file hashes break on regeneration" beats "improved deduplication".
 - If the session content is sparse or unclear, write a short honest narrative
   and return empty arrays for most fields.`
+
+const NOW_SUMMARY_JSON_SCHEMA = {
+  $schema: 'https://json-schema.org/draft/2020-12/schema',
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'narrative',
+    'decisions',
+    'discoveries',
+    'patterns',
+    'whatWorked',
+    'whatFailed',
+    'blockers',
+    'openQuestions',
+    'nextSteps',
+    'tasks',
+    'files',
+    'confidence',
+  ],
+  properties: {
+    narrative: { type: 'string' },
+    decisions: { type: 'array', items: { type: 'string' } },
+    discoveries: { type: 'array', items: { type: 'string' } },
+    patterns: { type: 'array', items: { type: 'string' } },
+    whatWorked: { type: 'array', items: { type: 'string' } },
+    whatFailed: { type: 'array', items: { type: 'string' } },
+    blockers: { type: 'array', items: { type: 'string' } },
+    openQuestions: { type: 'array', items: { type: 'string' } },
+    nextSteps: { type: 'array', items: { type: 'string' } },
+    tasks: { type: 'array', items: { type: 'string' } },
+    files: { type: 'array', items: { type: 'string' } },
+    confidence: {
+      anyOf: [
+        { type: 'string', enum: ['low', 'medium', 'high'] },
+        { type: 'null' },
+      ],
+    },
+  },
+} as const
+
+const NOW_SUMMARY_SCHEMA_NAME = 'now_summary'
 
 export async function summarizeNow(
   body: string,
@@ -73,9 +90,20 @@ export async function summarizeNow(
       { role: 'system', content: SYSTEM_PROMPT },
       { role: 'user', content: `NOW file content:\n\n${body}` },
     ],
+    structuredOutput: {
+      jsonSchema: {
+        name: NOW_SUMMARY_SCHEMA_NAME,
+        schema: NOW_SUMMARY_JSON_SCHEMA,
+      },
+      validate: validateNowSummary,
+    },
   })
 
-  return parseJsonResponse(response.content, validateNowSummary)
+  if (!response.structuredOutput) {
+    throw new Error('LLM structured output missing NOW summary payload.')
+  }
+
+  return response.structuredOutput
 }
 
 function validateNowSummary(raw: unknown): NowSummary {
