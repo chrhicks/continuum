@@ -82,7 +82,11 @@ Memory management. Run `continuum memory` for help.
 ### Import + initialization
 
 ```ts
-import continuum, { isContinuumError, isValidTaskType, TASK_TYPES } from 'continuum-memory-mvp'
+import continuum, {
+  isContinuumError,
+  isValidTaskType,
+  TASK_TYPES,
+} from 'continuum-memory-mvp'
 import type { Task, TaskStatus, ContinuumSDK } from 'continuum-memory-mvp'
 ```
 

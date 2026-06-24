@@ -5,10 +5,7 @@ import { getMemoryConfig } from './config'
 import { resolveCurrentSessionPath } from './session'
 import { withMemoryLockAsync } from './lock'
 import { dedupeEntriesByAnchor, insertEntryInSection } from './memory-index'
-import {
-  formatDate,
-  isClearedNowBody,
-} from './memory-content-builders'
+import { formatDate, isClearedNowBody } from './memory-content-builders'
 import {
   prepareNowConsolidationInput,
   type PreparedConsolidationInput,

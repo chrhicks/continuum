@@ -405,15 +405,14 @@ function loadMemoryFallback(limit: number): Array<{
   if (!existsSync(indexPath)) return []
 
   const content = readFileSync(indexPath, 'utf-8')
-  const entries: Array<{ label: string; summary: string; timestamp: number }> = []
+  const entries: Array<{ label: string; summary: string; timestamp: number }> =
+    []
 
   for (const line of content.split('\n')) {
     const trimmed = line.trim()
     if (!trimmed.startsWith('- ')) continue
     // Parse: - **[Label Date Time](file#anchor)** - Summary
-    const match = trimmed.match(
-      /^-\s+\*\*\[(.+?)\]\([^)]+\)\*\*\s+-\s+(.+)/,
-    )
+    const match = trimmed.match(/^-\s+\*\*\[(.+?)\]\([^)]+\)\*\*\s+-\s+(.+)/)
     if (match) {
       entries.push({
         label: match[1],

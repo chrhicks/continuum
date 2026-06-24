@@ -59,9 +59,12 @@ export function createLlmClient(config: LlmConfig): LlmClient {
   const frozen = Object.freeze({ ...config })
   return {
     config: frozen,
-    call: <T = unknown>(options: LlmCallOptions<T>) => callOnce(frozen, options),
-    callWithRetry: <T = unknown>(options: LlmCallOptions<T>, retry?: LlmRetryOptions) =>
-      callWithRetry(frozen, options, retry),
+    call: <T = unknown>(options: LlmCallOptions<T>) =>
+      callOnce(frozen, options),
+    callWithRetry: <T = unknown>(
+      options: LlmCallOptions<T>,
+      retry?: LlmRetryOptions,
+    ) => callWithRetry(frozen, options, retry),
   }
 }
 
@@ -302,7 +305,10 @@ function parseResponsesApiResponse<T>(
 }
 
 function extractResponsesOutputText(response: ResponsesApiResponse): string {
-  if (typeof response.output_text === 'string' && response.output_text.length > 0) {
+  if (
+    typeof response.output_text === 'string' &&
+    response.output_text.length > 0
+  ) {
     return response.output_text
   }
 
@@ -334,7 +340,9 @@ function extractResponsesOutputText(response: ResponsesApiResponse): string {
   return ''
 }
 
-function mapResponsesFinishReason(response: ResponsesApiResponse): string | null {
+function mapResponsesFinishReason(
+  response: ResponsesApiResponse,
+): string | null {
   const reason = response.incomplete_details?.reason ?? null
   if (reason === 'max_output_tokens') {
     return 'length'

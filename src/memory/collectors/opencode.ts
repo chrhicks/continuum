@@ -93,7 +93,8 @@ export async function collectOpencodeRecords(
   const accumulator = createOpencodeCollectionAccumulator()
 
   for (const session of extraction.sessions) {
-    const title = session.session.title ?? session.session.slug ?? session.session.id
+    const title =
+      session.session.title ?? session.session.slug ?? session.session.id
     const messageCount = session.messageBlocks.length
     console.error(
       `[collect] Processing session ${title} (${messageCount} messages)...`,

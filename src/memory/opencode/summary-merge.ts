@@ -119,9 +119,7 @@ export async function mergeRecallSummaryItems(
   const passes: RecallSummaryMergePassReport[] = []
 
   while (current.length > 1) {
-    console.error(
-      `[merge] Pass ${pass}: merging ${current.length} items...`,
-    )
+    console.error(`[merge] Pass ${pass}: merging ${current.length} items...`)
     const grouped = groupSummaryItemsByTokenBudget(current, maxTokens)
     const needsPairFallback =
       grouped.length === current.length &&
@@ -133,7 +131,8 @@ export async function mergeRecallSummaryItems(
     const groupTokens = groups.map((group) => sumGroupTokens(group))
     const groupSizes = groups.map((group) => group.length)
 
-    const merged: { item: RecallSummaryItem; maxTokensUsed: number | null }[] = []
+    const merged: { item: RecallSummaryItem; maxTokensUsed: number | null }[] =
+      []
     for (let index = 0; index < groups.length; index++) {
       const group = groups[index]
       if (group.length === 1) {

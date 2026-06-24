@@ -18,10 +18,7 @@ import {
   parseSearchTier,
   parseTail,
 } from './option-parsers'
-import {
-  formatAgeMinutes,
-  formatBytes,
-} from './output-formatters'
+import { formatAgeMinutes, formatBytes } from './output-formatters'
 import {
   handleLog,
   handleRepairRecent,

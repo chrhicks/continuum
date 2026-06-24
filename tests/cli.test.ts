@@ -636,7 +636,9 @@ describe('agent guide and summary CLI', () => {
         const output = logs.join('\n')
         expect(output).toContain('### Additional Context from Memory Index')
         expect(output).toContain('Newest context should be surfaced.')
-        expect(output).toContain('Second newest context should also be surfaced.')
+        expect(output).toContain(
+          'Second newest context should also be surfaced.',
+        )
         expect(output).not.toContain('Oldest context should be dropped first.')
       } finally {
         process.argv = originalArgv

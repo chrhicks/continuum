@@ -67,9 +67,9 @@ export function repairRecent(
     config.recent_max_lines,
     header,
   )
-  const meaningfulEntries = extractRecentEntries(updatedRecent.split('\n')).filter(
-    isMeaningfulEntry,
-  ).length
+  const meaningfulEntries = extractRecentEntries(
+    updatedRecent.split('\n'),
+  ).filter(isMeaningfulEntry).length
 
   if (!dryRun && rebuiltEntries.length > 0) {
     writeFilesAtomically([{ path: recentPath, content: updatedRecent }])
@@ -106,7 +106,9 @@ function buildRepairedRecentContent(
   }
 
   let rebuilt = ''
-  for (const entry of entries.slice().sort((left, right) => left.timestamp - right.timestamp)) {
+  for (const entry of entries
+    .slice()
+    .sort((left, right) => left.timestamp - right.timestamp)) {
     rebuilt = upsertRecent(
       recentPath,
       entry.content,
@@ -177,7 +179,10 @@ function loadDurationByAnchor(recentPath: string): Map<string, string> {
   return durationByAnchor
 }
 
-function extractMemorySections(fileName: string, content: string): MemorySection[] {
+function extractMemorySections(
+  fileName: string,
+  content: string,
+): MemorySection[] {
   const { body } = parseFrontmatter(content)
   const lines = body.split('\n')
   const sections: MemorySection[] = []
@@ -234,10 +239,13 @@ function buildRecentEntryFromMemorySection(
   ]
 
   return {
-    anchor: section.anchor ?? `${basename(section.fileName)}-${section.dateStamp}-${section.timeStamp}`,
+    anchor:
+      section.anchor ??
+      `${basename(section.fileName)}-${section.dateStamp}-${section.timeStamp}`,
     content: lines.join('\n'),
     reusedDuration: durationByAnchor.has(section.anchor ?? ''),
-    timestamp: Date.parse(`${section.dateStamp}T${section.timeStamp}:00.000Z`) || 0,
+    timestamp:
+      Date.parse(`${section.dateStamp}T${section.timeStamp}:00.000Z`) || 0,
   }
 }
 

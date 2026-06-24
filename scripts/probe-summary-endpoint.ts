@@ -1,4 +1,10 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+} from 'node:fs'
 import { basename, join, resolve } from 'node:path'
 
 import { resolveLlmApiUrl, resolveLlmTransport } from '../src/llm/client'
@@ -33,8 +39,7 @@ type ProbeResult = {
   parser?: 'none' | 'json' | 'summary'
 }
 
-const TINY_JSON_PROMPT =
-  'Return an object with ok=true.'
+const TINY_JSON_PROMPT = 'Return an object with ok=true.'
 
 const TINY_JSON_SCHEMA = {
   $schema: 'https://json-schema.org/draft/2020-12/schema',
@@ -61,7 +66,10 @@ Merge rules:
 - All fields must be populated, even when most arrays are empty.`
 
 async function main(): Promise<void> {
-  if (process.argv.slice(2).includes('--help') || process.argv.slice(2).includes('-h')) {
+  if (
+    process.argv.slice(2).includes('--help') ||
+    process.argv.slice(2).includes('-h')
+  ) {
     printUsage()
     return
   }
@@ -110,7 +118,9 @@ async function main(): Promise<void> {
   console.log(`- Probe dir: ${probeDir}`)
 
   if (chunkSummaries.length === 0) {
-    console.log('- Merge-like probes: skipped (no cached chunk summaries found)')
+    console.log(
+      '- Merge-like probes: skipped (no cached chunk summaries found)',
+    )
   }
 
   const results: ProbeResult[] = []
@@ -468,7 +478,9 @@ function extractResponsesResult(data: unknown): {
     (parsed.output ?? [])
       .filter((item) => item?.type === 'message')
       .flatMap((item) => item.content ?? [])
-      .filter((part) => part?.type === 'output_text' && typeof part.text === 'string')
+      .filter(
+        (part) => part?.type === 'output_text' && typeof part.text === 'string',
+      )
       .map((part) => part.text)
       .join('')
 

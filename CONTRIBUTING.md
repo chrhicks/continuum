@@ -70,21 +70,25 @@ See the README's Architecture section for the memory tier model (NOW / RECENT / 
 These are enforced by `scripts/verify-goal-invariants.ts` (run via `bun run verify:goal`). A PR that fails any of them will fail `bun run validate`.
 
 **Structural limits:**
+
 - No file in `src/` exceeds 300 lines.
 - No function or arrow assigned to a variable exceeds 80 lines.
 - All exported functions have explicit return-type annotations.
 - Zero `as any` casts in `src/`.
 
 **Naming:**
+
 - File names describe what the code does, not its relationship to another file. `*-helpers.ts`, `*-utils.ts`, `*-misc.ts` are dumping grounds and are rejected — prefer domain-named files (e.g. `memory-content-builders.ts`, not `consolidate-helpers.ts`).
 
 **Single source of truth:**
+
 - A constant, type, or interface is defined in exactly one place. Re-exporting from a second file is acceptable only at a public API boundary (the SDK surface). Internal barrel files that exist only to reshuffle imports are a defect.
 - Nested re-export chains (`A → re-exports B → re-exports C → definition`) are a defect. Import directly from the defining module.
 - No circular dependencies. If module A imports types from B and B imports functions from A, one of them is in the wrong file.
 - Generic utilities used in more than one domain belong in a shared module, not copy-pasted across domain files.
 
 **Splitting discipline:**
+
 - Size limits serve clarity, not compliance. Split when each part is easier to understand independently — a split that exists only to pass a line-count check, with no coherent domain boundary, is worse than the original.
 - No duplication as a side-effect of splitting. If a split requires a shared function, extract it to a single shared location and import from both. Identical private implementations in sibling files are a defect.
 

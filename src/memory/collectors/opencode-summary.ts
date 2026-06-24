@@ -104,7 +104,9 @@ export async function summarizeOpencodeSession(
     )
     const start = Date.now()
 
-    const cachePath = cacheDir ? getChunkCachePath(cacheDir, chunk.content) : null
+    const cachePath = cacheDir
+      ? getChunkCachePath(cacheDir, chunk.content)
+      : null
     let summary: RecallSummaryResult | null = null
 
     if (cachePath && existsSync(cachePath)) {
@@ -122,7 +124,11 @@ export async function summarizeOpencodeSession(
     if (!summary) {
       summary = await summarizeChunk(client, chunk.content, cacheDir)
       if (cachePath) {
-        writeFileSync(cachePath, JSON.stringify(summary, null, 2) + '\n', 'utf-8')
+        writeFileSync(
+          cachePath,
+          JSON.stringify(summary, null, 2) + '\n',
+          'utf-8',
+        )
       }
     }
 
@@ -147,13 +153,13 @@ export async function summarizeOpencodeSession(
         `[summarize] Merge pass ${context.pass}, group ${context.groupIndex}/${context.groupCount} (${context.mode})...`,
       )
       const result = await mergeSummaryChunkResults(client, summaries, cacheDir)
-      console.error(`[summarize] Merge pass ${context.pass}, group ${context.groupIndex} done`)
+      console.error(
+        `[summarize] Merge pass ${context.pass}, group ${context.groupIndex} done`,
+      )
       return result
     },
   )
-  console.error(
-    `[summarize] Merge complete in ${Date.now() - mergeStart}ms`,
-  )
+  console.error(`[summarize] Merge complete in ${Date.now() - mergeStart}ms`)
   return merged.summary
 }
 
@@ -186,7 +192,10 @@ async function summarizeChunk(
         },
       })
       if (cacheDir) {
-        const cachePath = join(cacheDir, `chunk-attempt-${attempt}-${Date.now()}.json`)
+        const cachePath = join(
+          cacheDir,
+          `chunk-attempt-${attempt}-${Date.now()}.json`,
+        )
         writeFileSync(
           cachePath,
           JSON.stringify(
@@ -206,8 +215,7 @@ async function summarizeChunk(
       }
       return response.structuredOutput
     } catch (error) {
-      lastError =
-        error instanceof Error ? error : new Error(String(error))
+      lastError = error instanceof Error ? error : new Error(String(error))
       if (!isRetryableSummaryFormatError(lastError)) {
         throw lastError
       }
@@ -231,11 +239,15 @@ async function mergeSummaryChunkResults(
 ): Promise<RecallSummaryResult> {
   const maxParseRetries = 3
   let lastError: Error | undefined
-  const mergeCachePath = cacheDir ? getMergeCachePath(cacheDir, summaries) : null
+  const mergeCachePath = cacheDir
+    ? getMergeCachePath(cacheDir, summaries)
+    : null
 
   if (mergeCachePath && existsSync(mergeCachePath)) {
     try {
-      const cached = JSON.parse(readFileSync(mergeCachePath, 'utf-8')) as unknown
+      const cached = JSON.parse(
+        readFileSync(mergeCachePath, 'utf-8'),
+      ) as unknown
       return validateRecallSummaryInput(cached)
     } catch {
       // Ignore stale or corrupted cache and recompute.
@@ -248,26 +260,29 @@ async function mergeSummaryChunkResults(
         phase: 'request',
         summaries,
       })
-      const response = await client.callWithRetry({
-        messages: [
-          { role: 'system', content: SUMMARY_MERGE_PROMPT },
-          {
-            role: 'user',
-            content: `Chunk summaries (JSON array):\n\n${JSON.stringify(summaries, null, 2)}`,
+      const response = await client.callWithRetry(
+        {
+          messages: [
+            { role: 'system', content: SUMMARY_MERGE_PROMPT },
+            {
+              role: 'user',
+              content: `Chunk summaries (JSON array):\n\n${JSON.stringify(summaries, null, 2)}`,
+            },
+          ],
+          structuredOutput: {
+            jsonSchema: {
+              name: RECALL_SUMMARY_SCHEMA_NAME,
+              schema: RECALL_SUMMARY_JSON_SCHEMA,
+            },
+            validate: validateRecallSummaryInput,
           },
-        ],
-        structuredOutput: {
-          jsonSchema: {
-            name: RECALL_SUMMARY_SCHEMA_NAME,
-            schema: RECALL_SUMMARY_JSON_SCHEMA,
-          },
-          validate: validateRecallSummaryInput,
         },
-      }, {
-        // Merge passes can accumulate a lot of list items before they collapse.
-        // Give structured output more headroom than the default call cap.
-        maxTokensCap: Math.max(client.config.maxTokens * 6, 24000),
-      })
+        {
+          // Merge passes can accumulate a lot of list items before they collapse.
+          // Give structured output more headroom than the default call cap.
+          maxTokensCap: Math.max(client.config.maxTokens * 6, 24000),
+        },
+      )
       writeMergeDebugArtifact(cacheDir, summaries, attempt, {
         phase: 'response',
         finishReason: response.finishReason,
@@ -277,7 +292,9 @@ async function mergeSummaryChunkResults(
       const parsed = response.structuredOutput
       if (!parsed) {
         if (response.finishReason === 'length') {
-          throw new Error('LLM structured output was truncated at the merge token cap.')
+          throw new Error(
+            'LLM structured output was truncated at the merge token cap.',
+          )
         }
         throw new Error('LLM structured output missing recall summary payload.')
       }
@@ -290,8 +307,7 @@ async function mergeSummaryChunkResults(
       }
       return parsed
     } catch (error) {
-      lastError =
-        error instanceof Error ? error : new Error(String(error))
+      lastError = error instanceof Error ? error : new Error(String(error))
       writeMergeDebugArtifact(cacheDir, summaries, attempt, {
         phase: 'error',
         error: lastError.message,
@@ -309,7 +325,9 @@ async function mergeSummaryChunkResults(
     }
   }
 
-  throw lastError ?? new Error('Failed to merge chunk summaries into valid JSON.')
+  throw (
+    lastError ?? new Error('Failed to merge chunk summaries into valid JSON.')
+  )
 }
 
 function getMergeCachePath(

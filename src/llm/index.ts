@@ -11,6 +11,10 @@ export type {
 } from './types'
 
 export type { LlmClient } from './client'
-export { createLlmClient, resolveLlmApiUrl, resolveLlmTransport } from './client'
+export {
+  createLlmClient,
+  resolveLlmApiUrl,
+  resolveLlmTransport,
+} from './client'
 
 export { extractJsonObject, parseJsonResponse } from './json'

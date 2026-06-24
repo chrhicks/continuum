@@ -1,17 +1,9 @@
 import { importOpencodeRecall } from '../../../memory/recall-import'
 import { searchRetrieval } from '../../../memory/retrieval/search'
 import { buildOpencodeSourceIndex } from '../../../recall/index/opencode-source-index'
-import {
-  formatRecallModeLabel,
-  formatScore,
-} from './output-formatters'
-import {
-  parseRecallLimit,
-  parseRecallMode,
-} from './option-parsers'
-import {
-  writeJsonFile,
-} from './recall-io'
+import { formatRecallModeLabel, formatScore } from './output-formatters'
+import { parseRecallLimit, parseRecallMode } from './option-parsers'
+import { writeJsonFile } from './recall-io'
 import type {
   RecallImportOptions,
   RecallIndexOptions,

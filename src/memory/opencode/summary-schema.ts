@@ -191,7 +191,9 @@ export function extractJsonFromText(content: string): string {
 
   const start = cleaned.indexOf('{')
   if (start === -1) {
-    throw new Error('Summary response is not valid JSON: no opening brace found.')
+    throw new Error(
+      'Summary response is not valid JSON: no opening brace found.',
+    )
   }
 
   // Find matching closing brace by counting braces, ignoring braces inside strings
@@ -227,7 +229,9 @@ export function extractJsonFromText(content: string): string {
   }
 
   if (end === -1) {
-    throw new Error('Summary response is not valid JSON: no matching closing brace found (truncated?).')
+    throw new Error(
+      'Summary response is not valid JSON: no matching closing brace found (truncated?).',
+    )
   }
 
   return cleaned.slice(start, end + 1)

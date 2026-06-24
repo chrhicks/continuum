@@ -1,4 +1,10 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { join } from 'node:path'
 import {
   buildOpencodeArtifactFilename,
@@ -143,9 +149,7 @@ async function collectSummaryArtifacts(
       open_questions: parsed.openQuestions,
       next_steps: parsed.nextSteps,
       confidence:
-        parsed.confidence === 'medium'
-          ? 'med'
-          : (parsed.confidence ?? 'low'),
+        parsed.confidence === 'medium' ? 'med' : (parsed.confidence ?? 'low'),
     }
     const { frontmatter } = parseFrontmatter(content)
     summaryChunkCount =

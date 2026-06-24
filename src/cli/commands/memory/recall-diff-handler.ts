@@ -17,16 +17,9 @@ import {
   type OpencodeSourceIndex,
 } from '../../../recall/index/opencode-source-index'
 import { resolveOpencodeOutputDir } from '../../../memory/opencode/paths'
-import {
-  renderRecallDiffReport,
-} from './output-formatters'
-import {
-  parseDiffLimit,
-} from './option-parsers'
-import {
-  resolveRecallPath,
-  writeJsonFile,
-} from './recall-io'
+import { renderRecallDiffReport } from './output-formatters'
+import { parseDiffLimit } from './option-parsers'
+import { resolveRecallPath, writeJsonFile } from './recall-io'
 import type { RecallDiffOptions } from './recall-subcommands'
 
 type RecallDiffContext = {

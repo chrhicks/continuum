@@ -3,19 +3,13 @@ import { existsSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 
 import { createLlmClient } from '../src/llm/client'
-import {
-  normalizeSessionMessages,
-} from '../src/memory/collectors/opencode-message-normalization'
-import {
-  renderNormalizedMessageBlock,
-} from '../src/memory/collectors/opencode-artifacts'
+import { normalizeSessionMessages } from '../src/memory/collectors/opencode-message-normalization'
+import { renderNormalizedMessageBlock } from '../src/memory/collectors/opencode-artifacts'
 import {
   resolveSummaryConfig,
   type OpencodeSummaryOptionInput,
 } from '../src/memory/collectors/opencode-summary-config'
-import {
-  summarizeOpencodeSession,
-} from '../src/memory/collectors/opencode-summary'
+import { summarizeOpencodeSession } from '../src/memory/collectors/opencode-summary'
 import { extractOpencodeSessions } from '../src/memory/opencode/extract'
 import { planRecallSummaryChunks } from '../src/memory/opencode/summary-chunks'
 
@@ -29,7 +23,10 @@ type CliOptions = OpencodeSummaryOptionInput & {
 }
 
 async function main(): Promise<void> {
-  if (process.argv.slice(2).includes('--help') || process.argv.slice(2).includes('-h')) {
+  if (
+    process.argv.slice(2).includes('--help') ||
+    process.argv.slice(2).includes('-h')
+  ) {
     printUsage()
     return
   }
@@ -86,7 +83,9 @@ async function main(): Promise<void> {
   )
   const missingChunkIndexes = chunks
     .map((chunk, index) => ({ chunk, index: index + 1 }))
-    .filter(({ chunk }) => !existsSync(getChunkCachePath(cacheDir, chunk.content)))
+    .filter(
+      ({ chunk }) => !existsSync(getChunkCachePath(cacheDir, chunk.content)),
+    )
     .map(({ index }) => index)
 
   console.log('OpenCode Summary Replay')
