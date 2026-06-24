@@ -54,6 +54,31 @@ describe('collectOpencodeRecords', () => {
     })
   })
 
+  test('resolves project id from session.directory when project.worktree is stale (renamed repo)', async () => {
+    await withTempDir(async (root) => {
+      const repoRoot = join(root, 'repo')
+      const staleWorktree = join(root, 'seestar-old')
+      const dbPath = join(root, 'opencode.db')
+      const outDir = join(repoRoot, '.continuum', 'recall', 'opencode')
+      seedOpencodeDbWithStaleWorktree(dbPath, {
+        projectId: 'proj_stale',
+        staleWorktree,
+        currentRepo: repoRoot,
+      })
+
+      const result = await collectOpencodeRecords({
+        repoPath: repoRoot,
+        dbPath,
+        outDir,
+        summarize: false,
+      })
+
+      expect(result.projectId).toBe('proj_stale')
+      expect(result.sessionsProcessed).toBe(1)
+      expect(result.records).toHaveLength(1)
+    })
+  })
+
   test('generates summary artifacts and summary records when summarization is enabled', async () => {
     await withTempDir(async (root) => {
       const repoRoot = join(root, 'repo')
@@ -103,6 +128,101 @@ describe('collectOpencodeRecords', () => {
     })
   })
 })
+
+function seedOpencodeDbWithStaleWorktree(
+  dbPath: string,
+  params: { projectId: string; staleWorktree: string; currentRepo: string },
+): void {
+  const db = new Database(dbPath)
+  const createdAt = Date.parse('2026-03-07T20:00:00.000Z')
+  const updatedAt = Date.parse('2026-03-07T20:05:00.000Z')
+  try {
+    db.exec(`
+      CREATE TABLE project (id TEXT PRIMARY KEY, worktree TEXT, time_created INTEGER, time_updated INTEGER);
+      CREATE TABLE session (
+        id TEXT PRIMARY KEY,
+        project_id TEXT,
+        parent_id TEXT,
+        slug TEXT,
+        directory TEXT,
+        title TEXT,
+        version TEXT,
+        summary_additions INTEGER,
+        summary_deletions INTEGER,
+        summary_files INTEGER,
+        time_created INTEGER,
+        time_updated INTEGER
+      );
+      CREATE TABLE message (
+        id TEXT PRIMARY KEY,
+        session_id TEXT,
+        time_created INTEGER,
+        time_updated INTEGER,
+        data TEXT
+      );
+      CREATE TABLE part (
+        id TEXT PRIMARY KEY,
+        message_id TEXT,
+        session_id TEXT,
+        time_created INTEGER,
+        time_updated INTEGER,
+        data TEXT
+      );
+    `)
+
+    // Project row points at a worktree path that no longer matches the repo
+    // (simulating a rename seestar -> astro-console).
+    db.query(
+      'INSERT INTO project (id, worktree, time_created, time_updated) VALUES (?, ?, ?, ?)',
+    ).run(params.projectId, params.staleWorktree, createdAt, updatedAt)
+
+    // Session row uses the current repo directory, mirroring how OpenCode
+    // actually assigns project_id by session directory.
+    db.query(
+      `INSERT INTO session (id, project_id, parent_id, slug, directory, title, version, summary_additions, summary_deletions, summary_files, time_created, time_updated)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      'ses_renamed',
+      params.projectId,
+      null,
+      'renamed-repo',
+      params.currentRepo,
+      'Renamed repo session',
+      '1',
+      0,
+      0,
+      0,
+      createdAt,
+      updatedAt,
+    )
+
+    db.query(
+      'INSERT INTO message (id, session_id, time_created, time_updated, data) VALUES (?, ?, ?, ?, ?)',
+    ).run(
+      'msg_renamed',
+      'ses_renamed',
+      createdAt,
+      createdAt,
+      JSON.stringify({ role: 'user', time: { created: createdAt } }),
+    )
+    db.query(
+      'INSERT INTO part (id, message_id, session_id, time_created, time_updated, data) VALUES (?, ?, ?, ?, ?, ?)',
+    ).run(
+      'part_renamed',
+      'msg_renamed',
+      'ses_renamed',
+      createdAt,
+      createdAt,
+      JSON.stringify({
+        type: 'text',
+        text: 'Session captured after the repo was renamed.',
+        time: { start: createdAt, end: createdAt },
+      }),
+    )
+  } finally {
+    db.close()
+  }
+}
 
 function seedOpencodeDb(dbPath: string, repoRoot: string): void {
   const db = new Database(dbPath)

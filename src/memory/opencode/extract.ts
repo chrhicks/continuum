@@ -128,13 +128,37 @@ function selectProject(
   const projectRows = sqlite
     .query('SELECT id, worktree FROM project')
     .all() as ProjectRow[]
+  const projectById = new Map(projectRows.map((row) => [row.id, row]))
   const resolvedRepo = resolve(repoPath)
-  const projectRow = projectId
-    ? (projectRows.find((candidate) => candidate.id === projectId) ?? null)
-    : (projectRows.find(
+
+  // OpenCode assigns project_id to sessions by the directory the session ran
+  // in, not by `project.worktree`. When a repo is moved/renamed, the
+  // `project.worktree` row can become stale while the session rows still
+  // point at the current path. Resolve the project id from the most recent
+  // session whose directory matches the repo, which mirrors how OpenCode
+  // itself tracks project membership.
+  let resolvedProjectId: string | null = projectId ?? null
+  if (!resolvedProjectId) {
+    const sessionRow = sqlite
+      .query(
+        'SELECT project_id FROM session WHERE directory = ? ORDER BY time_created DESC, id DESC LIMIT 1',
+      )
+      .get(resolvedRepo) as { project_id: string } | null
+    resolvedProjectId = sessionRow?.project_id ?? null
+  }
+
+  let projectRow = resolvedProjectId
+    ? (projectById.get(resolvedProjectId) ?? null)
+    : null
+
+  // Defensive fallback: a repo may have a project row but no sessions yet.
+  if (!projectRow) {
+    projectRow =
+      projectRows.find(
         (candidate) =>
           candidate.worktree && resolve(candidate.worktree) === resolvedRepo,
-      ) ?? null)
+      ) ?? null
+  }
 
   if (!projectRow) {
     if (projectId) {
