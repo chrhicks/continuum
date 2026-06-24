@@ -6,7 +6,7 @@ import {
   extractRecentEntries,
   isMeaningfulEntry,
   upsertRecent,
-} from './memory-content-builders'
+} from './recent-content-builders'
 import { extractAnchorFromEntry } from './memory-index'
 import { initMemory } from './init'
 import { memoryPath, resolveMemoryDir } from './paths'

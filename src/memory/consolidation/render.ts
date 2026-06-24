@@ -2,13 +2,12 @@ import { buildIndexEntry, upsertMemoryIndex } from '../memory-index'
 import {
   buildClearedNowContent,
   buildMemorySection,
-  buildRecentEntry,
   formatAnchorTime,
   formatDate,
   formatDisplayTime,
   upsertMemoryFile,
-  upsertRecent,
 } from '../memory-content-builders'
+import { buildRecentEntry, upsertRecent } from '../recent-content-builders'
 import { buildLogEntry } from '../consolidate-io'
 import { memoryPath } from '../paths'
 import type { MemoryConfig } from '../config'

@@ -124,64 +124,96 @@ async function collectSummaryArtifacts(
     ),
   )
 
-  let summary: RecallSummaryResult
-  let summaryChunkCount: number
+  const { summary, summaryChunkCount } = await loadOrGenerateSummary(
+    input,
+    summaryPath,
+    normalizedMessages,
+    summaryConfig,
+  )
+  const normalizedSummary = normalizeSummary(summary, allowedFiles)
+  persistSummaryArtifacts(
+    input,
+    normalizedSummary,
+    summaryConfig,
+    summaryChunkCount,
+  )
+}
 
+async function loadOrGenerateSummary(
+  input: CollectSessionArtifactsInput,
+  summaryPath: string,
+  normalizedMessages: NormalizedOpencodeMessage[],
+  summaryConfig: ResolvedSummaryConfig,
+): Promise<{ summary: RecallSummaryResult; summaryChunkCount: number }> {
   if (existsSync(summaryPath)) {
-    const title =
-      input.session.session.title ??
-      input.session.session.slug ??
-      input.session.session.id
-    console.error(`[collect] Reusing existing summary for ${title}`)
-    const content = readFileSync(summaryPath, 'utf-8')
-    const parsed = parseOpencodeSummary(content)
-    if (!parsed) {
-      throw new Error(`Failed to parse existing summary: ${summaryPath}`)
-    }
-    summary = {
-      focus: parsed.focus,
-      decisions: parsed.decisions,
-      discoveries: parsed.discoveries,
-      patterns: parsed.patterns,
-      tasks: parsed.tasks,
-      files: parsed.files,
-      blockers: parsed.blockers,
-      open_questions: parsed.openQuestions,
-      next_steps: parsed.nextSteps,
-      confidence:
-        parsed.confidence === 'medium' ? 'med' : (parsed.confidence ?? 'low'),
-    }
-    const { frontmatter } = parseFrontmatter(content)
-    summaryChunkCount =
-      typeof frontmatter.summary_chunks === 'number'
-        ? frontmatter.summary_chunks
-        : 0
-  } else {
-    summaryChunkCount = countSummaryChunks(normalizedMessages, summaryConfig)
-    const cacheDir = join(input.outDir, '.chunks')
-    summary = input.summarizeSessionOverride
-      ? await input.summarizeSessionOverride(
-          input.session,
-          normalizedMessages,
-          summaryConfig,
-        )
-      : await summarizeOpencodeSession(
-          input.session,
-          normalizedMessages,
-          summaryConfig,
-          input.llmClientFactory,
-          cacheDir,
-        )
-    if (existsSync(cacheDir)) {
-      try {
-        rmSync(cacheDir, { recursive: true, force: true })
-      } catch {
-        // ignore cleanup failures
-      }
+    return loadExistingSummary(input, summaryPath)
+  }
+  const summaryChunkCount = countSummaryChunks(normalizedMessages, summaryConfig)
+  const cacheDir = join(input.outDir, '.chunks')
+  const summary = input.summarizeSessionOverride
+    ? await input.summarizeSessionOverride(
+        input.session,
+        normalizedMessages,
+        summaryConfig,
+      )
+    : await summarizeOpencodeSession(
+        input.session,
+        normalizedMessages,
+        summaryConfig,
+        input.llmClientFactory,
+        cacheDir,
+      )
+  if (existsSync(cacheDir)) {
+    try {
+      rmSync(cacheDir, { recursive: true, force: true })
+    } catch {
+      // ignore cleanup failures
     }
   }
+  return { summary, summaryChunkCount }
+}
 
-  const normalizedSummary = normalizeSummary(summary, allowedFiles)
+function loadExistingSummary(
+  input: CollectSessionArtifactsInput,
+  summaryPath: string,
+): { summary: RecallSummaryResult; summaryChunkCount: number } {
+  const title =
+    input.session.session.title ??
+    input.session.session.slug ??
+    input.session.session.id
+  console.error(`[collect] Reusing existing summary for ${title}`)
+  const content = readFileSync(summaryPath, 'utf-8')
+  const parsed = parseOpencodeSummary(content)
+  if (!parsed) {
+    throw new Error(`Failed to parse existing summary: ${summaryPath}`)
+  }
+  const summary: RecallSummaryResult = {
+    focus: parsed.focus,
+    decisions: parsed.decisions,
+    discoveries: parsed.discoveries,
+    patterns: parsed.patterns,
+    tasks: parsed.tasks,
+    files: parsed.files,
+    blockers: parsed.blockers,
+    open_questions: parsed.openQuestions,
+    next_steps: parsed.nextSteps,
+    confidence:
+      parsed.confidence === 'medium' ? 'med' : (parsed.confidence ?? 'low'),
+  }
+  const { frontmatter } = parseFrontmatter(content)
+  const summaryChunkCount =
+    typeof frontmatter.summary_chunks === 'number'
+      ? frontmatter.summary_chunks
+      : 0
+  return { summary, summaryChunkCount }
+}
+
+function persistSummaryArtifacts(
+  input: CollectSessionArtifactsInput,
+  normalizedSummary: RecallSummaryResult,
+  summaryConfig: ResolvedSummaryConfig,
+  summaryChunkCount: number,
+): void {
   input.accumulator.summaryPaths.push(
     writeOpencodeArtifact(
       input.outDir,

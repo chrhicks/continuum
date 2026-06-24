@@ -1,13 +1,15 @@
 import { describe, expect, test } from 'bun:test'
 import {
   buildClearedNowContent,
+} from '../src/memory/memory-content-builders'
+import {
   extractRecentEntries,
   isClearedNowBody,
   isMeaningfulEntry,
   isPlaceholderNarrative,
   scoreEntryMeaningfulness,
   upsertRecent,
-} from '../src/memory/memory-content-builders'
+} from '../src/memory/recent-content-builders'
 
 describe('extractRecentEntries', () => {
   test('recognizes Session headings', () => {

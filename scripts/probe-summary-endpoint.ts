@@ -7,7 +7,7 @@ import {
 } from 'node:fs'
 import { basename, join, resolve } from 'node:path'
 
-import { resolveLlmApiUrl, resolveLlmTransport } from '../src/llm/client'
+import { resolveLlmApiUrl, resolveLlmTransport } from '../src/llm/llm-request'
 import {
   RECALL_SUMMARY_JSON_SCHEMA,
   RECALL_SUMMARY_SCHEMA_NAME,
