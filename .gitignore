@@ -16,3 +16,4 @@ task-loop-opencode.json
 
 *.tmp
 *.lock
+!bun.lock
