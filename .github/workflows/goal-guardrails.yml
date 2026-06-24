@@ -29,5 +29,10 @@ jobs:
       - name: Run tests
         run: bun run scripts/run-tests-for-validate.ts
 
+      - name: Initialize continuum for smoke tests
+        run: |
+          continuum init
+          continuum memory init
+
       - name: Verify GOAL invariants
         run: bun run verify:goal
