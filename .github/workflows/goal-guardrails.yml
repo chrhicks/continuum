@@ -20,6 +20,9 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Link CLI
+        run: bun link
+
       - name: Typecheck
         run: bun run typecheck
 
