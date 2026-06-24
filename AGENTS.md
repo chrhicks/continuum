@@ -1,29 +1,19 @@
 # Continuum
 
-## Architecture
+## Continuum
 
-CLI → SDK → Task Service → Database
+We use the `continuum` command (this repo is the source code) to keep track of our tasks and to serve as our tool for saving memory.
 
-Drizzle for ORM/DB
+At the beginning of a session run these commands. Use the guides as instruction on how to manage this repository:
 
-- repository per domain, aka `Task` gets `task.repository.ts` and `task.service.ts`
-- DB models are internal and the SDK interface is public (SDK/CLI)
+- `continuum guide` -- explains usage and workflows and links to command specific guides
+- `continuum init`
 
-## Testing / Validation
-
-I always want you to run tests and check types
-
-- **Full suite** - `bun test`
-- **Smoke-test** - `continuum <command>` (example: `continuum task list --json`)
-- **Typecheck** - `bun run typecheck`
-
-## Temporary Files
-
-- When creating temporary files, use a local `.tmp/` directory as you do not have permission to access anything outside the current project directory.
+Project documentation lives in `README.md`, `CONTRIBUTING.md`, and `LICENSE`. The sections below are agent-operational guidance not covered there.
 
 ## Searching for Files & Directories
 
-- The `Glob` tool can be unreliable. If you do not see results, use `Bash` and `ls` or `tree` (scoped). Pipe to `grep` to filter results.
+- The `Glob` tool can be unreliable. If you do not see results, `ast-grep`
 
 ## Introspection of OpenCode sessions
 
