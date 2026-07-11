@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { main } from '../src/cli'
+import { renderMemorySummary } from '../src/cli/commands/summary-memory'
+import type { MemoryEvidence } from '../src/memory/application/query'
 
 const roots: string[] = []
 const originalArgv = process.argv
@@ -70,6 +72,40 @@ describe('canonical memory CLI', () => {
     )
   })
 
+  test('summary renders complete memory without legacy storage markup', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'continuum-summary-full-'))
+    roots.push(root)
+    process.chdir(root)
+    await capture(['init'])
+    const fullContent = `# Session: legacy\n\n${'complete memory detail '.repeat(20)}\n\n<a name="legacy-anchor"></a>\n\n**Link**: [Full details](MEMORY-2026-07-10.md#legacy-anchor)`
+    await capture(['memory', 'append', 'agent', fullContent])
+
+    const output = await capture(['summary', '--no-tasks'])
+
+    expect(output).toContain('complete memory detail '.repeat(20).trim())
+    expect(output).not.toContain('...')
+    expect(output).not.toContain('legacy-anchor')
+    expect(output).not.toContain('Full details')
+  })
+
+  test('summary shows all pending entries and three full consolidations', () => {
+    const evidence: MemoryEvidence[] = [
+      ...Array.from({ length: 4 }, (_, index) =>
+        memoryEvidence('journal', `pending-${index + 1}`),
+      ),
+      ...Array.from({ length: 4 }, (_, index) =>
+        memoryEvidence('consolidation', `consolidation-${index + 1}`),
+      ),
+    ]
+
+    const output = renderMemorySummary(evidence, 3)
+
+    expect(output).toContain('pending-4')
+    expect(output).toContain('consolidation-1')
+    expect(output).toContain('consolidation-3')
+    expect(output).not.toContain('consolidation-4')
+  })
+
   test('renders human and JSON append, consolidate, search, and summary contracts', () => {
     const root = mkdtempSync(join(tmpdir(), 'continuum-cli-golden-'))
     roots.push(root)
@@ -130,9 +166,8 @@ describe('canonical memory CLI', () => {
     const summaryJson = JSON.parse(
       cli(root, ['--json', 'summary', '--no-tasks']).stdout,
     )
-    expect(summaryJson.data.output).toContain(
-      '[derived/consolidation] filtered needle',
-    )
+    expect(summaryJson.data.output).toContain('#### Derived consolidation')
+    expect(summaryJson.data.output).toContain('filtered needle')
   })
 })
 
@@ -154,4 +189,20 @@ async function capture(args: string[]): Promise<string> {
     console.log = original
   }
   return lines.join('\n')
+}
+
+function memoryEvidence(
+  type: 'journal' | 'consolidation',
+  content: string,
+): MemoryEvidence {
+  return {
+    type,
+    provenance: type === 'journal' ? 'raw' : 'derived',
+    id: content,
+    content,
+    createdAt: '2026-07-11T00:00:00.000Z',
+    source: type === 'journal' ? 'journal' : 'journal consolidation',
+    tags: [],
+    current: true,
+  }
 }

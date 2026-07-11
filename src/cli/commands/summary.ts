@@ -16,7 +16,7 @@ type SummaryOptions = {
 }
 
 const DEFAULT_LIMIT = 5
-const DEFAULT_MEMORY_LINES = 12
+const DEFAULT_MEMORY_LINES = 3
 
 export function createSummaryCommand(): Command {
   return new Command('summary')
@@ -24,7 +24,7 @@ export function createSummaryCommand(): Command {
     .option('--limit <n>', 'Max tasks per bucket', String(DEFAULT_LIMIT))
     .option(
       '--memory-lines <n>',
-      'Max memory excerpt lines',
+      'Maximum recent consolidation and recall summaries',
       String(DEFAULT_MEMORY_LINES),
     )
     .option('--no-tasks', 'Omit task summary')
@@ -71,7 +71,7 @@ function renderSummary(
     if (options.memory !== false) {
       const evidence = yield* listMemoryEvidence(
         context.dbPath,
-        { limit: memoryLines },
+        {},
         context.handle,
       )
       sections.push('', renderMemorySummary(evidence, memoryLines))

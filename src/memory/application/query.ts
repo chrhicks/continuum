@@ -95,7 +95,7 @@ export function listMemoryEvidence(
             type: 'consolidation',
             provenance: 'derived',
             id: row.id,
-            content: flattenSummary(summary),
+            content: formatSummary(summary),
             createdAt: row.completed_at,
             source: 'journal consolidation',
             tags: [],
@@ -225,7 +225,7 @@ function filterEvidence(
   })
 }
 
-function flattenSummary(summary: {
+function formatSummary(summary: {
   readonly narrative: string
   readonly decisions: readonly string[]
   readonly discoveries: readonly string[]
@@ -238,19 +238,27 @@ function flattenSummary(summary: {
   readonly tasks: readonly string[]
   readonly files: readonly string[]
 }): string {
-  return [
-    summary.narrative,
-    ...summary.decisions,
-    ...summary.discoveries,
-    ...summary.patterns,
-    ...summary.whatWorked,
-    ...summary.whatFailed,
-    ...summary.blockers,
-    ...summary.openQuestions,
-    ...summary.nextSteps,
-    ...summary.tasks,
-    ...summary.files,
-  ].join('\n')
+  const lines = [summary.narrative]
+  appendSummaryItems(lines, 'Decisions', summary.decisions)
+  appendSummaryItems(lines, 'Discoveries', summary.discoveries)
+  appendSummaryItems(lines, 'Patterns', summary.patterns)
+  appendSummaryItems(lines, 'What Worked', summary.whatWorked)
+  appendSummaryItems(lines, 'What Failed', summary.whatFailed)
+  appendSummaryItems(lines, 'Blockers', summary.blockers)
+  appendSummaryItems(lines, 'Open Questions', summary.openQuestions)
+  appendSummaryItems(lines, 'Next Steps', summary.nextSteps)
+  appendSummaryItems(lines, 'Tasks', summary.tasks)
+  appendSummaryItems(lines, 'Files', summary.files)
+  return lines.filter(Boolean).join('\n\n')
+}
+
+function appendSummaryItems(
+  lines: string[],
+  title: string,
+  items: readonly string[],
+): void {
+  if (items.length === 0) return
+  lines.push(`**${title}**\n${items.map((item) => `- ${item}`).join('\n')}`)
 }
 
 function countOccurrences(content: string, term: string): number {
