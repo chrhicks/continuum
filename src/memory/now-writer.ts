@@ -1,18 +1,11 @@
-import {
-  closeSync,
-  existsSync,
-  openSync,
-  readFileSync,
-  statSync,
-  unlinkSync,
-  writeFileSync,
-} from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { memoryPath } from './paths'
 import { parseFrontmatter, replaceFrontmatter } from '../utils/frontmatter'
 import { ensureCurrentSessionPath, startSession, endSession } from './session'
 import { consolidateNow } from './consolidate'
 import { getMemoryConfig } from './config'
 import { initMemory } from './init'
+import { MemoryLockError, withFileLockAsync } from './lock'
 
 const MAX_LOCK_RETRIES = 3
 const LOCK_RETRY_DELAY_MS = 200
@@ -87,46 +80,17 @@ async function appendEntry(
 
 async function withLock(action: () => void | Promise<void>): Promise<void> {
   initMemory()
-  let attempt = 0
-  while (attempt < MAX_LOCK_RETRIES) {
-    try {
-      const lockFile = getNowLockPath()
-      const descriptor = openSync(lockFile, 'wx')
-      closeSync(descriptor)
-      try {
-        await action()
-      } finally {
-        unlinkSync(lockFile)
-      }
-      return
-    } catch {
-      if (tryClearStaleLock()) {
-        continue
-      }
-      attempt += 1
-      if (attempt >= MAX_LOCK_RETRIES) {
-        throw new Error('NOW file is locked. Try again shortly.')
-      }
-      await sleep(LOCK_RETRY_DELAY_MS)
-    }
-  }
-}
-
-function tryClearStaleLock(): boolean {
-  const lockFile = getNowLockPath()
-  if (!existsSync(lockFile)) {
-    return false
-  }
   try {
-    const stats = statSync(lockFile)
-    const ageMs = Date.now() - stats.mtimeMs
-    if (ageMs <= STALE_LOCK_MS) {
-      return false
+    await withFileLockAsync(getNowLockPath(), async () => action(), {
+      retries: MAX_LOCK_RETRIES,
+      retryDelayMs: LOCK_RETRY_DELAY_MS,
+      staleLockMs: STALE_LOCK_MS,
+    })
+  } catch (error) {
+    if (error instanceof MemoryLockError) {
+      throw new Error('NOW file is locked. Try again shortly.')
     }
-    unlinkSync(lockFile)
-    return true
-  } catch {
-    return false
+    throw error
   }
 }
 
@@ -137,10 +101,6 @@ function mergeTags(current: unknown, incoming?: string[]): string[] {
     [...currentTags, ...incomingTags].filter((tag) => tag.length > 0),
   )
   return Array.from(merged)
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 function shouldRolloverNow(

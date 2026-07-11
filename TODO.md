@@ -139,7 +139,9 @@
 
 - [ ] YAML frontmatter parsing
 - [ ] Timestamp generation and formatting
-- [ ] File locking mechanism
+- [x] File locking mechanism
+  - [ ] Add subprocess integration coverage for chained and concurrent CLI writers
+  - [ ] Add lock lease renewal or live-PID checks for operations exceeding the stale timeout
 - [ ] Atomic write operations
 - [ ] Consolidation logic for simple cases
 - [ ] Pattern extraction regex patterns

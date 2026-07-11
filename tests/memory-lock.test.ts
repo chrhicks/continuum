@@ -1,7 +1,9 @@
 import {
   existsSync,
   mkdtempSync,
+  readFileSync,
   rmSync,
+  unlinkSync,
   utimesSync,
   writeFileSync,
 } from 'node:fs'
@@ -9,7 +11,11 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 
 import { initMemory } from '../src/memory/init'
-import { getMemoryLockPath, withMemoryLock } from '../src/memory/lock'
+import {
+  getMemoryLockPath,
+  withMemoryLock,
+  withMemoryLockAsync,
+} from '../src/memory/lock'
 
 async function withTempCwd(run: () => Promise<void> | void): Promise<void> {
   const root = mkdtempSync(join(tmpdir(), 'continuum-memory-lock-'))
@@ -53,6 +59,43 @@ describe('memory lock', () => {
         }),
       ).toThrow('Memory operations are locked. Try again shortly.')
       expect(existsSync(memoryLockPath)).toBe(true)
+    })
+  })
+
+  test('preserves action errors without retrying the action', async () => {
+    await withTempCwd(async () => {
+      initMemory()
+      const expected = new Error('underlying operation failed')
+      let attempts = 0
+
+      await expect(
+        withMemoryLockAsync(async () => {
+          attempts += 1
+          throw expected
+        }),
+      ).rejects.toBe(expected)
+
+      expect(attempts).toBe(1)
+      expect(existsSync(getMemoryLockPath())).toBe(false)
+    })
+  })
+
+  test('does not remove a replacement lock owned by another operation', async () => {
+    await withTempCwd(() => {
+      initMemory()
+      const memoryLockPath = getMemoryLockPath()
+      const replacement = JSON.stringify({
+        pid: 999_999,
+        timestamp: new Date().toISOString(),
+        token: 'replacement-owner',
+      })
+
+      withMemoryLock(() => {
+        unlinkSync(memoryLockPath)
+        writeFileSync(memoryLockPath, replacement, 'utf-8')
+      })
+
+      expect(readFileSync(memoryLockPath, 'utf-8')).toBe(replacement)
     })
   })
 })
