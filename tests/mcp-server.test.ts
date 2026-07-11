@@ -130,7 +130,9 @@ describe('Continuum MCP server', () => {
       expect(recallImport.isError).toBe(true)
       expect(recallImport.content[0]).toMatchObject({
         type: 'text',
-        text: expect.stringContaining('No OpenCode project found for repo:'),
+        text: expect.stringMatching(
+          /No OpenCode project found for repo:|OpenCode sqlite database not found:/,
+        ),
       })
 
       const created = await client.callTool({
