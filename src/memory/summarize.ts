@@ -198,7 +198,8 @@ export function mechanicalSummary(body: string): NowSummary {
 }
 
 function extractNarrative(body: string): string {
-  // Prefer Goal alignment lines, then first ## User: line
+  // Prefer explicit high-signal context, then retain the source text so the
+  // no-LLM fallback remains searchable after raw entries are consolidated.
   const goalMatch = body.match(/^\s*[-*]?\s*Goal alignment\s*:\s*(.+)$/im)
   if (goalMatch?.[1]) {
     return goalMatch[1].trim()
@@ -207,7 +208,7 @@ function extractNarrative(body: string): string {
   if (userMatch?.[1]) {
     return userMatch[1].trim()
   }
-  return 'No summary available.'
+  return body.trim() || 'No summary available.'
 }
 
 function extractMarkers(body: string, pattern: RegExp): string[] {

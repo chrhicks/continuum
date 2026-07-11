@@ -2,12 +2,13 @@
 
 ## Continuum
 
-We use the `continuum` command (this repo is the source code) to keep track of our tasks and to serve as our tool for saving memory.
+We use Continuum MCP tools (this repo is the source code) to keep track of tasks and save memory. Prefer the typed MCP tools through Executor; use the `continuum` CLI only as a fallback or for human operation.
 
-At the beginning of a session run these commands. Use the guides as instruction on how to manage this repository:
+At the beginning of a session:
 
-- `continuum guide` -- explains usage and workflows and links to command specific guides
-- `continuum init`
+- Call `continuum_summary` for the current briefing.
+- Call `continuum_init` only when the workspace is not initialized.
+- Use `continuum guide` for CLI fallback documentation.
 
 Project documentation lives in `README.md`, `CONTRIBUTING.md`, and `LICENSE`. The sections below are agent-operational guidance not covered there.
 

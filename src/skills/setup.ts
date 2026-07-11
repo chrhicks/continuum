@@ -36,6 +36,10 @@ export function installSkills(
   const targetDir = join(targetRoot, '.agents', 'skills')
   mkdirSync(targetDir, { recursive: true })
 
+  for (const legacySkill of ['continuum-task', 'memory-manager', 'task-loop']) {
+    rmSync(join(targetDir, legacySkill), { recursive: true, force: true })
+  }
+
   const rootSkillFile = join(targetDir, 'SKILL.md')
   if (existsSync(rootSkillFile) && statSync(rootSkillFile).isFile()) {
     rmSync(rootSkillFile)

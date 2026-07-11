@@ -53,12 +53,13 @@ export function importCanonicalOpencodeRecall(
   options: CanonicalRecallImportOptions = {},
 ): Effect.Effect<CanonicalRecallImportResult, unknown> {
   return Effect.gen(function* () {
-    const workspace = getWorkspaceContext()
+    const workspace =
+      options.repoPath && options.continuumDbPath ? null : getWorkspaceContext()
     const extraction = yield* Effect.try({
       try: () =>
         (options.extract ?? extractOpencodeSessions)({
           dbPath: options.dbPath,
-          repoPath: options.repoPath ?? workspace.workspaceRoot,
+          repoPath: options.repoPath ?? workspace!.workspaceRoot,
           projectId: options.projectId,
           sessionId: options.sessionId,
           afterDate: options.afterDate,
@@ -69,7 +70,7 @@ export function importCanonicalOpencodeRecall(
     const repository =
       options.repository ??
       recallRepositoryForPath(
-        options.continuumDbPath ?? workspace.continuumDbPath,
+        options.continuumDbPath ?? workspace!.continuumDbPath,
       )
     const config = options.summaryConfig ?? resolveSummaryConfig({})
     const sessions = applySessionFilters(

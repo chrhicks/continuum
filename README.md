@@ -38,6 +38,23 @@ Global options must precede the command:
 
 Workspace resolution walks upward from the effective working directory to the nearest `.continuum` or `.git` directory.
 
+### MCP
+
+`continuum mcp` serves the primary agent interface over local stdio MCP. It
+provides typed tools for:
+
+- workspace initialization and summary
+- task CRUD, validation, graph queries, steps, and notes
+- memory append, search, and consolidation
+- OpenCode recall status and import
+
+Each tool requires an absolute `workspace` path. Tool arguments are structured,
+so multiline Markdown and shell-special characters are passed without shell
+quoting. Configure an MCP client or gateway such as Executor to launch
+`continuum mcp`.
+
+The CLI remains the human, scripting, and recovery interface.
+
 ### Tasks
 
 `continuum task` provides persistent task planning and execution:

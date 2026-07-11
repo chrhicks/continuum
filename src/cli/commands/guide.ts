@@ -35,6 +35,9 @@ const overviewGuide = `# Continuum Agent Guide
 
 Use Continuum for durable task state and project memory.
 
+Agents should prefer the typed Continuum MCP tools through Executor. The CLI
+commands below are equivalent fallback and human-operated workflows.
+
 Start of session:
 1. continuum summary
 2. continuum task list --status ready --sort priority --order asc
