@@ -28,6 +28,7 @@ export type OpencodeExtractionOptions = {
   outDir?: string | null
   projectId?: string | null
   sessionId?: string | null
+  afterDate?: Date | null
   limit?: number | null
 }
 
@@ -85,6 +86,7 @@ export function extractOpencodeSessions(
       sqlite,
       project.id,
       options.sessionId ?? null,
+      options.afterDate ?? null,
     )
     const limitedSessions = applyLimit(sessions, options.limit)
 
@@ -177,12 +179,17 @@ function selectSessions(
   sqlite: Database,
   projectId: string,
   sessionId: string | null,
+  afterDate: Date | null,
 ): OpencodeSessionRecord[] {
   const conditions = ['project_id = ?']
   const params: string[] = [projectId]
   if (sessionId) {
     conditions.push('id = ?')
     params.push(sessionId)
+  }
+  if (afterDate) {
+    conditions.push('time_created >= ?')
+    params.push(String(afterDate.getTime()))
   }
   const where = `WHERE ${conditions.join(' AND ')}`
   const sessionRows = sqlite

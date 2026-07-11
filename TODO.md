@@ -41,11 +41,11 @@
   - [x] Update MEMORY.md index
   - [x] Write consolidation.log
   - [x] Support dry-run mode (`--dry-run`)
-  - [ ] Clear NOW.md (atomic operation)
-- [ ] Error handling for file operations
-  - Lock files for concurrency
-  - Atomic writes (temp + rename)
-  - Backup on error
+  - [x] Clear NOW.md (atomic operation)
+- [x] Error handling for file operations
+  - [x] Lock files for concurrency
+  - [x] Atomic writes (temp + rename)
+  - [x] Backup before commit and rollback on error
 - [ ] Session end automation
   - Detect /exit command
   - Detect SIGINT (Ctrl+C)

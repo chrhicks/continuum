@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { join } from 'node:path'
 import type { LlmClient } from '../../llm/client'
@@ -12,6 +12,7 @@ import {
   delayBeforeRetry,
   isRetryableSummaryFormatError,
 } from './summary-chunk-llm'
+import { writeFileAtomically } from '../file-io'
 
 const SUMMARY_MERGE_PROMPT = `You merge multiple chunk summaries into one session summary.
 
@@ -60,10 +61,9 @@ export async function mergeSummaryChunkResults(
         attempt,
       )
       if (mergeCachePath) {
-        writeFileSync(
+        writeFileAtomically(
           mergeCachePath,
           JSON.stringify(parsed, null, 2) + '\n',
-          'utf-8',
         )
       }
       return parsed
@@ -165,5 +165,5 @@ function writeMergeDebugArtifact(
     cacheDir,
     `merge-debug-${hash}-${phase}-attempt-${attempt}.json`,
   )
-  writeFileSync(path, JSON.stringify(payload, null, 2) + '\n', 'utf-8')
+  writeFileAtomically(path, JSON.stringify(payload, null, 2) + '\n')
 }

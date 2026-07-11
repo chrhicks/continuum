@@ -51,10 +51,7 @@ export function parseRecentEntry(entry: string): ParsedRecentEntry {
   return result
 }
 
-function parseRecentHeading(
-  lines: string[],
-  result: ParsedRecentEntry,
-): void {
+function parseRecentHeading(lines: string[], result: ParsedRecentEntry): void {
   const headingLine = lines.find((line) => line.startsWith('## '))
   if (!headingLine) return
   const headingMatch = headingLine.match(

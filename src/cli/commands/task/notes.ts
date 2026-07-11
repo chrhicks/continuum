@@ -1,9 +1,12 @@
 import { Command } from 'commander'
 import continuum from '../../../sdk'
-import { appendAgentMessage } from '../../../memory/now-writer'
+import { join } from 'node:path'
+import { appendMemory } from '../../../memory/application/append'
+import { getWorkspaceContext } from '../../../memory/paths'
 import { readInput, runCommand } from '../../io'
 import { parseNoteKind, parseNoteSource } from './parse'
 import { formatDecision, formatDiscovery } from './render'
+import { Effect } from 'effect'
 
 type TaskNoteAddOptions = {
   kind?: string
@@ -124,12 +127,10 @@ async function flushTaskNotes(taskId: string): Promise<{
   }
 
   for (const note of task.discoveries) {
-    await appendAgentMessage(formatDiscovery(task.id, note), {
-      tags: [task.id],
-    })
+    await appendTaskMemory(formatDiscovery(task.id, note), task.id)
   }
   for (const note of task.decisions) {
-    await appendAgentMessage(formatDecision(task.id, note), { tags: [task.id] })
+    await appendTaskMemory(formatDecision(task.id, note), task.id)
   }
 
   return {
@@ -138,4 +139,23 @@ async function flushTaskNotes(taskId: string): Promise<{
     decisionsFlushed,
     flushed: true,
   }
+}
+
+async function appendTaskMemory(
+  content: string,
+  taskId: string,
+): Promise<void> {
+  const context = getWorkspaceContext()
+  await Effect.runPromise(
+    appendMemory({
+      dbPath: context.continuumDbPath,
+      nowPath: join(context.memoryDir, 'NOW.md'),
+      input: {
+        kind: 'agent',
+        content,
+        source: 'task',
+        metadata: { tags: [taskId], taskIds: [taskId] },
+      },
+    }),
+  )
 }

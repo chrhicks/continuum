@@ -47,8 +47,8 @@ Beyond `bun test`, exercise the actual CLI:
 
 ```sh
 continuum task list --json
-continuum memory status
-continuum memory recall diff --help
+continuum summary --no-tasks
+continuum memory recall status
 ```
 
 These are also run by the GOAL invariant checker.
@@ -61,7 +61,7 @@ CLI → SDK → Task Service → Database
 
 - **Drizzle** for ORM (`bun:sqlite` + `drizzle-orm` at runtime; `better-sqlite3` + `drizzle-kit` are dev-only).
 - **Repository per domain**: `Task` gets `task.repository.ts` and `task.service.ts`. DB models are internal; the SDK interface is public (consumed by both the SDK export and the CLI).
-- **Memory is file-based** (markdown under `.continuum/memory/`); the SQLite DB holds only `tasks` and `memory_checkpoints` (collector sync state), not memory content.
+- **Memory persistence is moving to SQLite**. New memory services use Effect for typed boundaries while existing Markdown behavior remains in place during the incremental cutover.
 
 See the README's Architecture section for the memory tier model (NOW / RECENT / MEMORY) and storage layout.
 
@@ -96,7 +96,7 @@ The full principles live in `GOAL.md` ("Code Standard Principles"); `GOAL-ROADMA
 
 ## Constraints
 
-- No new runtime dependencies.
+- New runtime dependencies require an explicit architectural decision. Effect is approved for the SQLite journal memory redesign; unrelated additions remain out of scope.
 - No behavioral changes to existing CLI outputs, SDK interfaces, or test expectations.
 - Changes are incremental: `bun test` passes after each file is modified, not just at the end.
 - `snake_case` identifiers in `src/task/` are intentionally not renamed (deferred — invasive, high regression risk).

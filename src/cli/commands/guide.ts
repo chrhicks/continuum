@@ -97,22 +97,14 @@ Avoid:
 
 const memoryGuide = `# Continuum Memory Guide
 
-Memory tiers:
-- NOW: current or most recent session log
-- RECENT: consolidated summaries from recent sessions
-- MEMORY: long-term project knowledge
-
-Start or inspect memory:
-- continuum memory init
-- continuum memory status
-- continuum memory list
+SQLite is canonical. NOW.md, RECENT.md, and MEMORY.md are generated projections.
 
 Search before making assumptions:
 - continuum memory search "<query>"
-- continuum memory search "<query>" --tier RECENT
+- continuum memory search "<query>" --tier MEMORY
 - continuum memory search "<query>" --source recall
 
-Record session context:
+Record durable context:
 - continuum memory append agent "short progress note"
 - continuum memory append tool <name> "short tool summary"
 
@@ -127,16 +119,15 @@ Use summary first when joining an existing repo:
 
 const recallGuide = `# Continuum Recall Guide
 
-Recall imports OpenCode session summaries into Continuum memory search.
+Recall manually imports raw OpenCode messages and derived summaries into canonical memory.
 
 Inspect recall state:
-- continuum memory recall search "<query>"
+- continuum memory recall status
 - continuum memory search "<query>" --source recall
 
 Import summaries:
 - continuum memory recall import
 - continuum memory recall import --dry-run
-- continuum memory collect --source opencode --summarize --import
 
 Use recall when:
 - The answer may be in older OpenCode sessions.

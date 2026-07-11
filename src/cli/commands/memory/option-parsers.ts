@@ -1,6 +1,6 @@
-import { type MemorySearchTier } from '../../../memory/search'
-import { type RetrievalSearchSource } from '../../../memory/retrieval/search'
-import { type RecallSearchMode } from '../../../recall/search'
+type MemorySearchTier = 'NOW' | 'MEMORY'
+type RetrievalSearchSource = 'memory' | 'recall' | 'all'
+type RecallSearchMode = 'bm25' | 'semantic' | 'auto'
 import { parseOptionalPositiveInteger, parsePositiveInteger } from '../shared'
 
 const DEFAULT_SYNC_PROCESSED_VERSION = 1
@@ -44,17 +44,13 @@ const parseProcessedVersionValue = createRecallPositiveIntegerParser(
 
 export function parseSearchTier(value: string): MemorySearchTier | 'all' {
   const normalized = value.toUpperCase()
-  if (
-    normalized === 'NOW' ||
-    normalized === 'RECENT' ||
-    normalized === 'MEMORY'
-  ) {
+  if (normalized === 'NOW' || normalized === 'MEMORY') {
     return normalized
   }
   if (normalized === 'ALL') {
     return 'all'
   }
-  throw new Error('Invalid tier. Use: NOW, RECENT, MEMORY, or all.')
+  throw new Error('Invalid tier. Use: NOW, MEMORY, or all.')
 }
 
 export function parseSearchTags(value: string): string[] {

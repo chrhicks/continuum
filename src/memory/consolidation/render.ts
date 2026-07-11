@@ -12,7 +12,7 @@ import { buildLogEntry } from '../consolidate-io'
 import { memoryPath } from '../paths'
 import type { MemoryConfig } from '../config'
 import type { MemorySummary } from '../types'
-import type { PreparedConsolidationInput } from './extract'
+import type { PreparedConsolidationInput } from '../domain/projection-input'
 
 export type RenderedConsolidationArtifacts = {
   memoryFilePath: string

@@ -1,0 +1,50 @@
+import { Context, Effect, Layer } from 'effect'
+import { createClient, type DbHandle } from '../../db/client'
+import { runMigrations } from '../../db/migrate'
+import { DatabaseMigrationError, DatabaseOpenError } from '../domain/errors'
+
+export type MemoryRuntimeConfig = {
+  workspaceRoot: string
+  memoryDir: string
+  dbPath: string
+}
+
+export type MemoryRuntimeService = MemoryRuntimeConfig & { handle: DbHandle }
+
+export class MemoryRuntime extends Context.Tag('MemoryRuntime')<
+  MemoryRuntime,
+  MemoryRuntimeService
+>() {}
+
+export function memoryRuntimeLayer(
+  config: MemoryRuntimeConfig,
+): Layer.Layer<MemoryRuntime, DatabaseOpenError | DatabaseMigrationError> {
+  return Layer.scoped(
+    MemoryRuntime,
+    Effect.acquireRelease(openMemoryDatabase(config), (service) =>
+      Effect.sync(() => service.handle.sqlite.close()),
+    ),
+  )
+}
+
+function openMemoryDatabase(
+  config: MemoryRuntimeConfig,
+): Effect.Effect<
+  MemoryRuntimeService,
+  DatabaseOpenError | DatabaseMigrationError
+> {
+  return Effect.gen(function* () {
+    const handle = yield* Effect.try({
+      try: () => createClient(config.dbPath),
+      catch: (cause) => new DatabaseOpenError({ path: config.dbPath, cause }),
+    })
+    yield* Effect.try({
+      try: () => runMigrations(handle.sqlite),
+      catch: (cause) => {
+        handle.sqlite.close()
+        return new DatabaseMigrationError({ path: config.dbPath, cause })
+      },
+    })
+    return { ...config, handle }
+  })
+}

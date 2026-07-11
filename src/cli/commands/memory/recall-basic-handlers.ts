@@ -1,119 +1,68 @@
-import { importOpencodeRecall } from '../../../memory/recall-import'
-import { searchRetrieval } from '../../../memory/retrieval/search'
-import { buildOpencodeSourceIndex } from '../../../recall/index/opencode-source-index'
-import { formatRecallModeLabel, formatScore } from './output-formatters'
-import { parseRecallLimit, parseRecallMode } from './option-parsers'
-import { writeJsonFile } from './recall-io'
-import type {
-  RecallImportOptions,
-  RecallIndexOptions,
-  RecallSearchOptions,
-} from './recall-subcommands'
+import { importCanonicalOpencodeRecall } from '../../../memory/application/recall-import'
+import { parseRecallLimit } from './option-parsers'
+import type { RecallImportOptions } from './recall-subcommands'
+import type { Command } from 'commander'
+import { Effect } from 'effect'
+import { runMemoryCommand } from '../../io'
+import { MemoryRuntime } from '../../../memory/runtime/memory-runtime'
+import { makeRecallRepository } from '../../../memory/repository/recall-repository'
 
-export async function handleRecallImport(
-  options: RecallImportOptions,
-): Promise<void> {
-  const result = await importOpencodeRecall({
-    summaryDir: options.summaryDir,
-    outDir: options.out,
-    dbPath: options.db,
-    projectId: options.project,
-    sessionId: options.session,
-    dryRun: options.dryRun,
-  })
-
-  if (result.totalSummaries === 0) {
-    console.log(`No opencode recall summaries found in ${result.summaryDir}.`)
-    return
-  }
-
-  const dryRunLabel = result.dryRun ? ' (dry run)' : ''
-  console.log(`Recall import${dryRunLabel}:`)
-  console.log(`- Summary dir: ${result.summaryDir}`)
-  console.log(`- Summaries: ${result.totalSummaries}`)
-  console.log(`- Imported: ${result.imported}`)
-  console.log(`- Skipped (existing): ${result.skippedExisting}`)
-  console.log(`- Skipped (invalid): ${result.skippedInvalid}`)
-  if (result.skippedFiltered > 0) {
-    console.log(`- Skipped (filtered): ${result.skippedFiltered}`)
-  }
-
-  if (result.importedSessions.length > 0) {
-    console.log(`- Sessions: ${result.importedSessions.join(', ')}`)
-  }
-
-  if (result.skipped.length > 0) {
-    console.log('Skipped summaries:')
-    for (const entry of result.skipped) {
-      const label = entry.sessionId ? ` (${entry.sessionId})` : ''
-      console.log(`- ${entry.summaryPath}${label}: ${entry.reason}`)
-    }
-  }
-}
-
-export function handleRecallIndex(options: RecallIndexOptions): void {
-  const index = buildOpencodeSourceIndex({
-    dbPath: options.db,
-    dataRoot: options.dataRoot,
-    indexFile: options.index,
-    projectId: options.project,
-    sessionId: options.session,
-  })
-
-  if (options.verbose) {
-    for (const entry of Object.values(index.sessions)) {
-      console.log(`Indexed ${entry.key} (${entry.message_count} messages)`)
-    }
-  }
-
-  writeJsonFile(index.index_file, index)
-  console.log(`Source index written: ${index.index_file}`)
-  console.log(
-    `Sessions indexed: ${index.stats.session_count} (projects: ${index.stats.project_count})`,
+export async function handleRecallStatus(command: Command): Promise<void> {
+  await runMemoryCommand(
+    command,
+    Effect.gen(function* () {
+      const runtime = yield* MemoryRuntime
+      return runtime.handle.sqlite
+        .query(
+          `SELECT
+       (SELECT COUNT(*) FROM memory_recall_sources) sources,
+       (SELECT COUNT(*) FROM memory_recall_messages) messages,
+       (SELECT COUNT(*) FROM memory_recall_summaries) summaries`,
+        )
+        .get() as { sources: number; messages: number; summaries: number }
+    }),
+    (counts) => {
+      console.log('Canonical recall status:')
+      console.log(`- Sources: ${counts.sources}`)
+      console.log(`- Raw messages: ${counts.messages}`)
+      console.log(`- Derived summaries: ${counts.summaries}`)
+    },
   )
 }
 
-export function handleRecallSearch(
-  query: string,
-  options: RecallSearchOptions,
-): void {
-  const mode = parseRecallMode(options.mode)
-  const limit = parseRecallLimit(options.limit)
-  const result = searchRetrieval({
-    query,
-    source: 'recall',
-    recallMode: mode,
-    recallSummaryDir: options.summaryDir,
-    limit,
-  })
+export async function handleRecallImport(
+  options: RecallImportOptions,
+  command: Command,
+): Promise<void> {
+  await runMemoryCommand(
+    command,
+    Effect.gen(function* () {
+      const runtime = yield* MemoryRuntime
+      return yield* importCanonicalOpencodeRecall({
+        continuumDbPath: runtime.dbPath,
+        dbPath: options.db,
+        repoPath: runtime.workspaceRoot,
+        projectId: options.project,
+        sessionId: options.session,
+        afterDate: options.after ? parseDate(options.after) : undefined,
+        limit: options.limit ? parseRecallLimit(options.limit) : undefined,
+        dryRun: options.dryRun,
+        repository: makeRecallRepository(runtime.handle),
+      })
+    }),
+    (result) => {
+      console.log(`Recall import${result.dryRun ? ' dry run' : ''}:`)
+      console.log(`- Sessions inspected: ${result.totalSessions}`)
+      console.log(`- Imported: ${result.imported}`)
+      console.log(`- Refreshed: ${result.changed}`)
+      console.log(`- Current: ${result.skippedExisting}`)
+    },
+  )
+}
 
-  if (result.recallFilesSearched === 0) {
-    console.log('No opencode recall summaries found.')
-    return
-  }
-
-  const modeLabel = formatRecallModeLabel(result.recallMode ?? 'bm25')
-  const modeOutput = result.recallFallback
-    ? `${modeLabel} (fallback)`
-    : modeLabel
-
-  console.log('Recall search:')
-  console.log(`- Mode: ${modeOutput}`)
-  console.log(`- Files searched: ${result.recallFilesSearched}`)
-  console.log(`- Results: ${result.matches.length}`)
-
-  if (result.matches.length === 0) {
-    console.log(`No matches found for "${query}".`)
-    return
-  }
-
-  for (const match of result.matches) {
-    const score = formatScore(match.score ?? 0)
-    const sessionLabel = match.sessionId ? ` [${match.sessionId}]` : ''
-    const titleLabel = match.title ? ` (${match.title})` : ''
-    const snippetLabel = match.snippet ? ` - ${match.snippet}` : ''
-    console.log(
-      `- [${score}] ${match.filePath}${sessionLabel}${titleLabel}${snippetLabel}`,
-    )
-  }
+function parseDate(value: string): Date {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime()))
+    throw new Error(`Invalid recall date: ${value}`)
+  return date
 }

@@ -1,5 +1,5 @@
 import { Command } from 'commander'
-import { createMemoryCommand, endSessionIfActive } from './cli/commands/memory'
+import { createMemoryCommand } from './cli/commands/memory'
 import { createTaskCommand } from './cli/commands/task'
 import { createSetupCommand } from './cli/commands/setup'
 import { createGuideCommand } from './cli/commands/guide'
@@ -21,7 +21,6 @@ type MainOptions = {
 export async function main(options: MainOptions = {}): Promise<void> {
   const previousExitCode = process.exitCode
   process.exitCode = undefined
-  const removeExitHandlers = installExitHandlers()
   const program = createProgram()
 
   try {
@@ -33,7 +32,6 @@ export async function main(options: MainOptions = {}): Promise<void> {
     }
     throw error
   } finally {
-    removeExitHandlers()
     clearActiveWorkspaceContext()
     if (!options.preserveProcessExitCode) {
       process.exitCode = previousExitCode
@@ -158,34 +156,4 @@ function isMemoryCommand(command: Command): boolean {
     current = current.parent ?? null
   }
   return false
-}
-
-export async function handleSigint(
-  options: { setExitCode?: boolean } = {},
-): Promise<void> {
-  try {
-    const path = await endSessionIfActive({ consolidate: false })
-    if (path) {
-      console.log(`Session ended: ${path}`)
-    }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    console.error(message)
-  } finally {
-    if (options.setExitCode !== false) {
-      process.exitCode = 130
-    }
-  }
-}
-
-function installExitHandlers(): () => void {
-  const sigintHandler = () => {
-    void handleSigint()
-  }
-
-  process.once('SIGINT', sigintHandler)
-
-  return () => {
-    process.removeListener('SIGINT', sigintHandler)
-  }
 }

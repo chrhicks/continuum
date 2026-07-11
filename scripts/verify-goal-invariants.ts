@@ -493,14 +493,6 @@ const run = () => {
     files,
     /\bimport\s+\{[^}]*\bparsePositiveInteger\b[^}]*\}\s+from\s+['"]\.\.\/shared['"]\s*;?/,
   )
-  const resolveRecallPathDefs = collectPatternMatches(
-    files,
-    /\bexport\s+function\s+resolveRecallPath\s*\(/,
-  )
-  const recallResolvePathImports = collectPatternMatches(
-    files,
-    /\bimport\s+\{[^}]*\bresolveRecallPath\b[^}]*\}\s+from\s+['"]\.\.\/resolve-path['"]\s*;?/,
-  )
   const consolidationSentinels: SentinelCheck[] = [
     buildSentinelCheck('formatStepMarker boundary', [
       {
@@ -711,40 +703,13 @@ const run = () => {
         expected: 1,
       },
     ]),
-    buildSentinelCheck('resolveRecallPath shared utility boundary', [
-      {
-        label: 'src/recall/resolve-path.ts resolveRecallPath definition',
-        actual: countMatchesInFile(
-          resolveRecallPathDefs,
-          'src/recall/resolve-path.ts',
-        ),
-        expected: 1,
-      },
-      {
-        label:
-          'src/recall/index/opencode-source-index.ts resolveRecallPath import',
-        actual: countMatchesInFile(
-          recallResolvePathImports,
-          'src/recall/index/opencode-source-index.ts',
-        ),
-        expected: 1,
-      },
-      {
-        label: 'src/recall/sync/opencode-sync.ts resolveRecallPath import',
-        actual: countMatchesInFile(
-          recallResolvePathImports,
-          'src/recall/sync/opencode-sync.ts',
-        ),
-        expected: 1,
-      },
-    ]),
   ]
   const validationStatuses: CommandStatus[] = [
     runCommandStatus('bun', ['run', 'typecheck']),
     runCommandStatus('bun', ['test']),
     runCommandStatus('continuum', ['task', 'list', '--json']),
-    runCommandStatus('continuum', ['memory', 'status']),
-    runCommandStatus('continuum', ['memory', 'recall', 'diff', '--help']),
+    runCommandStatus('continuum', ['summary', '--no-tasks']),
+    runCommandStatus('continuum', ['memory', 'recall', 'status']),
   ]
 
   printHeader('File Length (src <= 300 lines)')

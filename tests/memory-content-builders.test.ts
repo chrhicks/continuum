@@ -1,7 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import {
-  buildClearedNowContent,
-} from '../src/memory/memory-content-builders'
+import { buildClearedNowContent } from '../src/memory/memory-content-builders'
 import {
   extractRecentEntries,
   isClearedNowBody,

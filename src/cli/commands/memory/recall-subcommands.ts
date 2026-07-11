@@ -1,117 +1,45 @@
 import { Command } from 'commander'
 
 export type RecallImportOptions = {
-  summaryDir?: string
-  out?: string
   db?: string
   project?: string
   session?: string
   dryRun?: boolean
-}
-
-export type RecallIndexOptions = {
-  db?: string
-  dataRoot?: string
-  index?: string
-  project?: string
-  session?: string
-  verbose?: boolean
-}
-
-export type RecallDiffOptions = {
-  index?: string
-  dataRoot?: string
-  repo?: string
-  summaryDir?: string
-  summaries?: string
-  limit?: string
-  json?: boolean
-  report?: string | boolean
-  plan?: string | boolean
-  project?: string
-  includeGlobal?: boolean
-}
-
-export type RecallSyncOptions = {
-  plan?: string
-  ledger?: string
-  log?: string
-  dataRoot?: string
-  command?: string
-  cwd?: string
-  dryRun?: boolean
-  failFast?: boolean
-  limit?: string
-  processedVersion?: string
-  verbose?: boolean
-}
-
-export type RecallSearchOptions = {
-  mode?: string
-  summaryDir?: string
+  after?: string
   limit?: string
 }
 
-type RecallSubcommandHandlers = {
-  onImport: (options: RecallImportOptions) => void | Promise<void>
-  onIndex: (options: RecallIndexOptions) => void | Promise<void>
-  onDiff: (options: RecallDiffOptions) => void | Promise<void>
-  onSync: (options: RecallSyncOptions) => void | Promise<void>
-  onSearch: (
-    query: string,
-    options: RecallSearchOptions,
+type Handlers = {
+  onStatus: (command: Command) => void | Promise<void>
+  onImport: (
+    options: RecallImportOptions,
+    command: Command,
   ) => void | Promise<void>
 }
 
 export function registerRecallSubcommands(
-  memoryCommand: Command,
-  handlers: RecallSubcommandHandlers,
+  memory: Command,
+  handlers: Handlers,
 ): void {
-  const recallCommand = new Command('recall').description(
-    'Recall compatibility aliases for import and recall-only search',
+  const recall = new Command('recall').description(
+    'Inspect or manually import OpenCode recall evidence',
   )
-
-  recallCommand.action(() => {
-    recallCommand.outputHelp()
-  })
-
-  recallCommand
+  recall.action(() => recall.outputHelp())
+  recall
+    .command('status')
+    .description('Show canonical recall inventory')
+    .action((_options: unknown, command: Command) => handlers.onStatus(command))
+  recall
     .command('import')
-    .description('Import OpenCode recall summaries into memory')
-    .option(
-      '--summary-dir <dir>',
-      'Directory containing opencode recall summaries',
-    )
-    .option('--out <dir>', 'Alias for --summary-dir')
-    .option('--db <path>', 'OpenCode sqlite database path')
+    .description('Import OpenCode sessions into canonical memory')
+    .option('--db <path>', 'OpenCode SQLite database path')
     .option('--project <id>', 'Filter by OpenCode project id')
     .option('--session <id>', 'Filter by OpenCode session id')
-    .option('--dry-run', 'Preview import without writing files')
-    .action((options: RecallImportOptions) => handlers.onImport(options))
-
-  recallCommand
-    .command('search')
-    .description(
-      'Search recall summaries (compatibility alias for memory search --source recall)',
+    .option('--after <date>', 'Sessions created on or after this date')
+    .option('--limit <n>', 'Maximum sessions to inspect')
+    .option('--dry-run', 'Classify sessions without writes or LLM calls')
+    .action((options: RecallImportOptions, command: Command) =>
+      handlers.onImport(options, command),
     )
-    .argument('<query...>')
-    .option(
-      '--mode <mode>',
-      'Search mode: bm25, semantic (tf-idf), auto',
-      'auto',
-    )
-    .option(
-      '--summary-dir <dir>',
-      'Directory containing opencode recall summaries',
-    )
-    .option('--limit <limit>', 'Maximum results to return', '5')
-    .action((queryParts: string[], options: RecallSearchOptions) => {
-      const query = queryParts.join(' ').trim()
-      if (!query) {
-        throw new Error('Missing search query.')
-      }
-      return handlers.onSearch(query, options)
-    })
-
-  memoryCommand.addCommand(recallCommand)
+  memory.addCommand(recall)
 }

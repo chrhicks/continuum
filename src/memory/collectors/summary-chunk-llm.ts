@@ -1,4 +1,3 @@
-import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { LlmClient } from '../../llm/client'
 import {
@@ -7,6 +6,7 @@ import {
   type RecallSummaryResult,
   validateRecallSummaryInput,
 } from '../opencode/summary-schema'
+import { writeFileAtomically } from '../file-io'
 
 const SUMMARY_CHUNK_PROMPT = `You are summarizing a chunk of an OpenCode session transcript.
 
@@ -50,7 +50,7 @@ export async function summarizeChunk(
         },
       })
       if (cacheDir) {
-        writeFileSync(
+        writeFileAtomically(
           join(cacheDir, `chunk-attempt-${attempt}-${Date.now()}.json`),
           JSON.stringify(
             {
@@ -61,7 +61,6 @@ export async function summarizeChunk(
             null,
             2,
           ),
-          'utf-8',
         )
       }
       if (!response.structuredOutput) {

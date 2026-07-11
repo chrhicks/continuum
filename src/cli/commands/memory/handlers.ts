@@ -1,200 +1,155 @@
-import { Command } from 'commander'
-import { consolidateNow } from '../../../memory/consolidate'
-import { listMemoryEntries } from '../../../memory/list'
-import {
-  appendAgentMessage,
-  appendToolCall,
-  appendUserMessage,
-} from '../../../memory/now-writer'
-import { getStatus } from '../../../memory/status'
-import { handleCollect } from './collect-handler'
+import { join } from 'node:path'
+import { appendMemory } from '../../../memory/application/append'
+import { consolidateMemory } from '../../../memory/application/consolidate'
+import { migrateLegacyMemory } from '../../../memory/application/legacy-migrate'
+import { getWorkspaceContext } from '../../../memory/paths'
 import {
   parseAfterDate,
-  parseHours,
-  parseRecallMode,
   parseSearchLimit,
   parseSearchSource,
   parseSearchTags,
   parseSearchTier,
-  parseTail,
 } from './option-parsers'
-import { formatAgeMinutes, formatBytes } from './output-formatters'
-import {
-  handleLog,
-  handleRepairRecent,
-  handleRecover,
-  handleValidate,
-} from './maintenance-handlers'
 import { registerMemorySubcommands } from './memory-subcommands'
 import { handleSearch } from './search-handler'
+import type { Command } from 'commander'
+import { Effect } from 'effect'
+import { runCommand, runMemoryCommand } from '../../io'
+import { MemoryRuntime } from '../../../memory/runtime/memory-runtime'
+import { makeJournalRepository } from '../../../memory/repository/journal-repository'
+import { makeConsolidationRepository } from '../../../memory/repository/consolidation-repository'
 
-type ConsolidationResult = Awaited<ReturnType<typeof consolidateNow>>
-
-export type EndSessionIfActive = (options: {
-  consolidate: boolean
-}) => Promise<string | null>
-
-export function registerMemoryHandlers(
-  memoryCommand: Command,
-  sessionCommand: Command,
-  endSessionIfActive: EndSessionIfActive,
-): void {
-  registerMemorySubcommands(memoryCommand, sessionCommand, {
-    onSessionAppend: (kind, textParts) =>
-      handleAppend(kind, textParts, endSessionIfActive),
-    onStatus: () => handleStatus(),
-    onList: () => handleList(),
-    onConsolidate: (options) => handleConsolidate(options.dryRun ?? false),
-    onAppend: (kind, textParts) =>
-      handleAppend(kind, textParts, endSessionIfActive),
-    onSearch: (query, options) => {
-      const tier = options.tier ? parseSearchTier(options.tier) : 'all'
-      const source = options.source ? parseSearchSource(options.source) : 'all'
-      const tags = options.tags ? parseSearchTags(options.tags) : []
-      const afterDate = options.after ? parseAfterDate(options.after) : null
-      const mode = parseRecallMode(options.mode)
-      const limit = options.limit ? parseSearchLimit(options.limit) : undefined
-      handleSearch({
-        query,
-        source,
-        tier,
-        tags,
-        afterDate,
-        mode,
-        limit,
-        summaryDir: options.summaryDir,
-      })
-    },
-    onLog: (options) => {
-      const tail = options.tail ? parseTail(options.tail) : undefined
-      handleLog(tail)
-    },
-    onRecover: (options) => {
-      const hours = options.hours ? parseHours(options.hours) : undefined
-      return handleRecover(hours, options.consolidate ?? false)
-    },
-    onRepairRecent: (options) => handleRepairRecent(options.dryRun ?? false),
-    onValidate: () => handleValidate(),
-    onCollect: (options) => handleCollect(options),
+export function registerMemoryHandlers(memory: Command): void {
+  registerMemorySubcommands(memory, {
+    onAppend: handleAppend,
+    onConsolidate: handleConsolidate,
+    onMigrate: handleMigrate,
+    onSearch: (query, options, command) =>
+      handleSearch(
+        {
+          query,
+          tier: options.tier ? parseSearchTier(options.tier) : 'all',
+          source: options.source ? parseSearchSource(options.source) : 'all',
+          tags: options.tags ? parseSearchTags(options.tags) : [],
+          afterDate: options.after ? parseAfterDate(options.after) : undefined,
+          limit: options.limit ? parseSearchLimit(options.limit) : undefined,
+        },
+        command,
+      ),
   })
 }
 
-export function logConsolidationResult(result: ConsolidationResult): void {
-  if (result.dryRun && result.preview) {
-    console.log('Consolidation dry run (no files written):')
-    console.log(
-      `- RECENT: ${result.recentPath} (${result.preview.recentLines} lines)`,
+async function handleMigrate(dryRun: boolean, command: Command): Promise<void> {
+  if (dryRun) {
+    const context = getWorkspaceContext()
+    await runCommand(
+      command,
+      async () =>
+        migrateLegacyMemory({
+          workspaceRoot: context.workspaceRoot,
+          memoryDir: context.memoryDir,
+          dbPath: context.continuumDbPath,
+          dryRun: true,
+        }),
+      renderMigration,
     )
-    console.log(
-      `- MEMORY: ${result.memoryPath} (${result.preview.memoryLines} lines)`,
-    )
-    console.log(
-      `- INDEX: ${result.memoryIndexPath} (${result.preview.memoryIndexLines} lines)`,
-    )
-    console.log(`- LOG: ${result.logPath} (+${result.preview.logLines} lines)`)
-    console.log(`- NOW: ${result.nowPath} (${result.preview.nowLines} lines)`)
     return
   }
-
-  console.log('Consolidation complete:')
-  console.log(`- RECENT: ${result.recentPath}`)
-  console.log(`- MEMORY: ${result.memoryPath}`)
-  console.log(`- INDEX: ${result.memoryIndexPath}`)
-  console.log(`- LOG: ${result.logPath}`)
+  await runMemoryCommand(
+    command,
+    Effect.gen(function* () {
+      const runtime = yield* MemoryRuntime
+      return yield* Effect.try(() =>
+        migrateLegacyMemory({
+          workspaceRoot: runtime.workspaceRoot,
+          memoryDir: runtime.memoryDir,
+          dbPath: runtime.dbPath,
+          dryRun: false,
+          handle: runtime.handle,
+        }),
+      )
+    }),
+    renderMigration,
+  )
 }
 
-function handleStatus(): void {
-  const status = getStatus()
-  console.log('Memory status:')
-  console.log(`- NOW file: ${status.nowPath ?? 'none'}`)
-  console.log(`- NOW lines: ${status.nowLines}`)
-  console.log(`- NOW age (minutes): ${status.nowAgeMinutes ?? 'n/a'}`)
-  console.log(`- NOW size: ${formatBytes(status.nowBytes)}`)
-  console.log(`- RECENT lines: ${status.recentLines}`)
-  console.log(`- Memory size: ${formatBytes(status.memoryBytes)}`)
-  console.log(`- Last consolidation: ${status.lastConsolidation ?? 'n/a'}`)
-}
-
-function handleList(): void {
-  const entries = listMemoryEntries()
-  if (entries.length === 0) {
-    console.log('No memory files found.')
+function renderMigration(result: ReturnType<typeof migrateLegacyMemory>): void {
+  if (result.alreadyCompleted) {
+    console.log(
+      result.dryRun
+        ? 'Legacy migration already completed; dry run made no changes and did not scan generated projections.'
+        : 'Legacy migration already completed; no artifacts were scanned or imported.',
+    )
     return
   }
-
-  console.log('Memory files:')
-  for (const entry of entries) {
-    const ageMinutes = Math.max(
-      0,
-      Math.round((Date.now() - entry.mtimeMs) / 60000),
-    )
-    const ageLabel = formatAgeMinutes(ageMinutes)
-    const currentLabel = entry.isCurrent ? 'current, ' : ''
-    console.log(
-      `- ${entry.kind}: ${entry.fileName} (${currentLabel}${formatBytes(
-        entry.sizeBytes,
-      )}, ${ageLabel} old)`,
-    )
-  }
+  console.log(
+    result.dryRun ? 'Legacy migration dry run:' : 'Legacy migration complete:',
+  )
+  if (!result.items.length) console.log('- No legacy artifacts found.')
+  for (const item of result.items)
+    console.log(`- ${item.result}: ${item.path} (${item.kind}; ${item.detail})`)
 }
 
-async function handleConsolidate(dryRun: boolean): Promise<void> {
-  const result = await consolidateNow({ dryRun })
-  logConsolidationResult(result)
+async function handleConsolidate(
+  dryRun: boolean,
+  command: Command,
+): Promise<void> {
+  await runMemoryCommand(
+    command,
+    Effect.gen(function* () {
+      const runtime = yield* MemoryRuntime
+      return yield* consolidateMemory({
+        dbPath: runtime.dbPath,
+        memoryDir: runtime.memoryDir,
+        dryRun,
+        journal: makeJournalRepository(runtime.handle),
+        consolidations: makeConsolidationRepository(runtime.handle),
+      })
+    }),
+    (result) => {
+      if (result.status === 'no-pending')
+        return console.log('No pending journal entries.')
+      if (result.status === 'preview') {
+        console.log(
+          `Consolidation preview: sequences ${result.firstSequence}-${result.lastSequence} (${result.entryCount} entries)`,
+        )
+        return
+      }
+      if (result.status === 'conflict') {
+        console.warn(
+          `Consolidation conflicted at boundary ${result.error.actualBoundary}; retry the command.`,
+        )
+        return
+      }
+      console.log(
+        `Consolidated sequences ${result.consolidation.firstSequence}-${result.consolidation.lastSequence} (${result.entryCount} entries).`,
+      )
+      if (result.projection.stale)
+        console.warn('Saved to SQLite, but generated Markdown is stale.')
+    },
+  )
 }
 
 async function handleAppend(
   kind: string,
-  textParts: string[],
-  endSessionIfActive: EndSessionIfActive,
+  parts: string[],
+  command: Command,
 ): Promise<void> {
-  const message = textParts.join(' ').trim()
-  if (!message) {
-    throw new Error('Missing message text.')
-  }
-  if (kind === 'user') {
-    const exitCommand = parseExitCommand(message)
-    if (exitCommand) {
-      const path = await endSessionIfActive({
-        consolidate: exitCommand.consolidate,
+  await runMemoryCommand(
+    command,
+    Effect.gen(function* () {
+      const runtime = yield* MemoryRuntime
+      return yield* appendMemory({
+        dbPath: runtime.dbPath,
+        nowPath: join(runtime.memoryDir, 'NOW.md'),
+        input: { kind, content: parts.join(' ').trim() },
+        repository: makeJournalRepository(runtime.handle),
       })
-      if (!path) {
-        throw new Error('No active NOW session found.')
-      }
-      console.log(`Session ended: ${path}`)
-      return
-    }
-    await appendUserMessage(message)
-    console.log('Appended user message to NOW.')
-    return
-  }
-  if (kind === 'agent') {
-    await appendAgentMessage(message)
-    console.log('Appended agent message to NOW.')
-    return
-  }
-  if (kind === 'tool') {
-    const toolName = textParts[0]
-    if (!toolName) {
-      throw new Error(
-        'Missing tool name. Use: memory append tool <name> [summary]',
-      )
-    }
-    const summary = textParts.slice(1).join(' ').trim() || undefined
-    await appendToolCall(toolName, summary)
-    console.log('Appended tool call to NOW.')
-    return
-  }
-  throw new Error(`Unknown append kind: ${kind}`)
-}
-
-function parseExitCommand(message: string): { consolidate: boolean } | null {
-  const trimmed = message.trim()
-  if (trimmed === '/exit') {
-    return { consolidate: false }
-  }
-  if (trimmed === '/exit --consolidate') {
-    return { consolidate: true }
-  }
-  return null
+    }),
+    (result) => {
+      console.log(`Appended ${kind} entry to canonical memory.`)
+      if (result.projection.stale)
+        console.warn('Saved to SQLite, but NOW.md is stale.')
+    },
+  )
 }

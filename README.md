@@ -1,213 +1,156 @@
 # Continuum
 
-> A local CLI and SDK that gives coding agents durable task tracking and project memory — tasks persist to a SQLite database (`.continuum/continuum.db`), memory to markdown files in the workspace.
+Continuum is a local Bun CLI and TypeScript SDK for durable project tasks and agent memory. SQLite at `.continuum/continuum.db` is canonical; Markdown memory files are generated, non-authoritative projections.
+
+## Requirements
+
+- Bun
+- A local filesystem with SQLite support
 
 ## Install
 
-Continuum is a private, local-only package (not on npm). It requires [Bun](https://bun.sh) and a `better-sqlite3`-compatible native toolchain.
-
 ```sh
-bun run setup          # bun install && bun link (puts `continuum` on your PATH)
+bun run setup
 ```
 
-Or manually:
-
-```sh
-bun install
-bun run install:global   # bun link
-```
+This private package is linked locally as `continuum`.
 
 ## Quick Start
 
 ```sh
-continuum init                   # create .continuum/continuum.db (task store)
-continuum memory init            # create .continuum/memory/ (memory dir + config.yml)
-continuum memory session start   # begin a session (opens the NOW log)
-continuum task create --title "Ship X" --type feature --description "..."
-continuum summary                # agent briefing: open tasks + memory excerpts
-continuum guide                  # print the agent workflow guide
+continuum init
+continuum memory append agent "SQLite is canonical memory"
+continuum memory consolidate
+continuum summary
+continuum memory search "canonical memory"
+continuum guide
 ```
+
+No memory session lifecycle is required. An append succeeds without a harness or session ID.
 
 ## CLI
 
-### `continuum init`
+Global options must precede the command:
 
-Initialize the task database in the current directory. Creates `.continuum/continuum.db`. Idempotent — prints "already initialized" if it exists. Does **not** initialize memory (use `continuum memory init`).
+- `--cwd <path>` resolves and operates on another workspace.
+- `--json` emits `{ ok, data, meta }` envelopes.
+- `--quiet` suppresses human output.
 
-### `continuum task`
-
-Task management. Run `continuum task` with no subcommand for help.
-
-- `task list` — list tasks (excludes completed/cancelled by default). Flags: `-s/--status`, `-t/--type`, `--parent`, `--include-deleted`, `--cursor`, `--limit`, `--sort`, `--order`.
-- `task get <id>` (alias: `view`) — view a task. Flags: `--tree`, `--expand <parent,children,blockers,all>`, `--include-deleted`.
-- `task create` — create a task. Flags: `--title`, `--type`, `--status`, `--priority`, `--intent`, `--description`, `--plan`, `--parent`, `--blocked-by`, or `--input <@file|@->` for JSON. `--title` and `--type` required. Auto-inits the DB if needed.
-- `task update <id>` — update a task. Same field flags as `create` (minus required), plus `--patch <@file|@->`.
-- `task complete <id>` — mark complete. Requires `--outcome <text|@file|@->`.
-- `task delete <id>` — soft-delete a task.
-- `task steps` (alias: `step`) — manage steps: `template [--schema]`, `add <id> --steps <json|@file|@->`, `update <id> <stepId> [--title|--status|--position|--summary|--notes|--patch]`, `complete <id> [--step-id|--notes]`, `list <id>`.
-- `task note add <id>` — add a discovery or decision. Requires `--kind <discovery|decision>` and `--content`. Optional `--rationale`, `--impact`, `--source <user|agent|system>`.
-- `task notes flush <id>` — flush a task's discoveries/decisions into the NOW memory log.
-- `task validate <id> --transition <status>` — check whether a status transition is allowed (reports missing fields + open blockers).
-- `task graph <ancestors|descendants|children> <id>` — query task graph relationships.
-- `task templates list` — list available task types (`epic`, `feature`, `bug`, `investigation`, `chore`).
-
-### `continuum memory`
-
-Memory management. Run `continuum memory` for help.
-
-- `memory init` — initialize the memory directory + `config.yml`.
-- `memory session` — `start`, `end [--consolidate]`, `append <kind> <text...>`.
-- `memory append <kind> <text...>` — append a `user`/`agent`/`tool` message to the current session. (`/exit` ends the session; `/exit --consolidate` ends + consolidates.)
-- `memory consolidate [--dry-run]` — consolidate NOW → RECENT + MEMORY files.
-- `memory search <query...>` — search memory. Flags: `--tier <NOW|RECENT|MEMORY|all>`, `--source <memory|recall|all>`, `--tags`, `--after`, `--mode <bm25|semantic|auto>`, `--limit`, `--summary-dir`.
-- `memory collect` — collect source data (OpenCode sessions or tasks) into memory artifacts. Many flags; see `continuum memory collect --help`. Key: `--source <opencode|task>`, `--summarize`/`--no-summarize`, `--import`.
-- `memory list` — list memory files.
-- `memory status` — show NOW/RECENT/MEMORY sizes and last consolidation time.
-- `memory log [--tail <n>]` — view consolidation log.
-- `memory validate` — validate memory file structure/frontmatter/index links.
-- `memory recover [--hours <n>] [--consolidate]` — recover stale NOW sessions.
-- `memory repair recent [--dry-run]` — rebuild `RECENT.md` from MEMORY files.
-- `memory recall` — `import [--summary-dir|--db|--project|--session|--dry-run]` and `search <query> [--mode|--limit|--summary-dir]`. (`recall index`/`diff`/`sync` are no longer supported.)
-
-### Global flags
-
-- `--json` — emit `{ ok, data, meta }` JSON on success / `{ ok: false, error }` on failure (skips human rendering).
-- `--quiet` — suppress human output (no JSON either).
-- `--cwd <path>` — run as if invoked from `<path>` (calls `process.chdir`).
-
-**Project root resolution:** memory commands walk up from the (post-`--cwd`) working directory looking for a `.continuum/` or `.git/` marker; the first match becomes the workspace root. Task and `init` commands operate on `process.cwd()` directly (after any `--cwd` chdir).
-
-## SDK
-
-### Import + initialization
-
-```ts
-import continuum, {
-  isContinuumError,
-  isValidTaskType,
-  TASK_TYPES,
-} from 'continuum-memory-mvp'
-import type { Task, TaskStatus, ContinuumSDK } from 'continuum-memory-mvp'
-```
-
-The SDK is stateless and resolves the working directory via `process.cwd()` on every call. Bootstrap a project's DB with:
-
-```ts
-const status = await continuum.task.init() // { success, created, ... }
-```
+Workspace resolution walks upward from the effective working directory to the nearest `.continuum` or `.git` directory.
 
 ### Tasks
 
-All methods live on `continuum.task`:
+`continuum task` provides persistent task planning and execution:
 
-- `init(): Promise<InitStatus>`
-- `list(options?): Promise<ListTasksResult>`
-- `get(id): Promise<Task | null>`
-- `create(input: CreateTaskInput): Promise<Task>`
-- `update(id, input?: UpdateTaskInput): Promise<Task>`
-- `complete(id, input: { outcome }): Promise<Task>`
-- `delete(id): Promise<void>`
-- `validateTransition(id, nextStatus): Promise<TaskValidationResult>` — throws on `deleted`.
-- `graph(query: 'ancestors'|'descendants'|'children', id): Promise<TaskGraphResult>`
-- `steps.add(taskId, { steps }): Promise<Task>`
-- `steps.update(taskId, stepId, input): Promise<Task>`
-- `steps.complete(taskId, input?): Promise<TaskStepCompleteResult>`
-- `notes.add(taskId, { kind: 'discovery'|'decision', content, ... }): Promise<Task>`
+- `task list`, `task get`, `task create`, `task update`, `task complete`, and `task delete`
+- `task steps add|update|complete|list`
+- `task note add` and `task notes flush`
+- `task validate`, `task graph`, and `task templates list`
+
+Run `continuum guide task` or `continuum task --help` for current options and workflows.
 
 ### Memory
 
-The SDK does not currently expose memory — memory is CLI-only. Use the `continuum memory` commands or import internal modules from `src/memory/` directly.
+The supported memory workflow is:
+
+```text
+append -> consolidate -> summary/search
+                 ^
+                 |
+       explicit recall import
+```
+
+- `memory append <user|agent|tool> <text...>` inserts one immutable journal row and refreshes `NOW.md`.
+- `memory consolidate [--dry-run]` summarizes a stable pending sequence range, retains every source row, and refreshes generated projections.
+- `memory search <query...>` searches raw journal and recall messages plus derived consolidations and recall summaries.
+- `memory recall status` reports canonical recall inventory.
+- `memory recall import [--db <path>] [--project <id>] [--session <id>] [--after <date>] [--limit <n>] [--dry-run]` manually imports OpenCode history.
+- `memory migrate [--dry-run]` explicitly imports legacy Markdown, preserves source files, records each artifact, and records each completed migration run.
+
+Search filters:
+
+- `--tier <NOW|MEMORY|all>` selects pending raw journal evidence or derived history.
+- `--source <memory|recall|all>` selects canonical source families.
+- `--tags <comma-separated>` requires all listed journal tags.
+- `--after <ISO date>` filters by evidence time.
+- `--limit <n>` limits results after filtering and ranking.
+
+### Summary
+
+`continuum summary` queries tasks and canonical SQLite memory directly. It does not read `NOW.md`, `RECENT.md`, or `MEMORY.md` to construct the briefing.
+
+Useful options are `--no-tasks`, `--no-memory`, `--limit <n>`, and `--memory-lines <n>`.
 
 ## Architecture
 
-### Memory tiers
+Commander is a thin argument adapter. Each memory or summary command creates one scoped Effect runtime containing explicit workspace, memory directory, database path, and one configured `bun:sqlite` handle. Application functions return Effects; the CLI boundary runs them and centrally renders success or tagged operational errors.
 
-Memory is a file-based subsystem under `.continuum/memory/`, organized in three tiers:
+SQLite uses:
 
-- **NOW** — the active session append-log. A single current `NOW-<timestamp>-<suffix>.md` file (tracked via `.continuum/memory/.current`), with YAML frontmatter (`session_id`, `tags`, `related_tasks`, `memory_type: NOW`). Rolls over when it exceeds `now_max_lines` (200) or `now_max_hours` (6). Old NOW files are pruned after 3 days.
-- **RECENT** — one rolling `RECENT.md` capped at `recent_session_count` (3) sessions / `recent_max_lines` (500).
-- **MEMORY** — durable long-term memory: one `MEMORY-<YYYY-MM-DD>.md` per day plus a top-level `MEMORY.md` index linking into them. Sections come from `memory_sections` (Architecture Decisions, Technical Discoveries, Development Patterns, Sessions).
+- `busy_timeout = 5000`
+- `foreign_keys = ON`
+- WAL journal mode for concurrent local CLI readers and writers
+- `synchronous = NORMAL`
+- short synchronous write transactions with no LLM or filesystem work inside them
 
-**Consolidation flow:** NOW → (RECENT + `MEMORY-<date>.md` + `MEMORY.md` index) in a single pass, driven by `src/memory/consolidate.ts` + `src/memory/consolidation/`. Optionally uses an LLM to produce narrative summaries (see Configuration).
+Canonical tables include:
 
-### File structure
+- `tasks`
+- `memory_checkpoints`, retained for legacy checkpoint migration
+- immutable `memory_journal_entries`
+- range-based `memory_consolidations`
+- `memory_recall_sources`, versioned raw `memory_recall_messages`, and current `memory_recall_summaries`
+- `memory_legacy_migrations` per-artifact audit records
+- `memory_legacy_migration_runs` completed-run markers
 
-```
-src/
-  cli.ts              # commander entry; wires subcommands + workspace context
-  cli/                # CLI layer (commands/, io.ts)
-  sdk/                # public SDK (index.ts + types/)
-  task/               # task domain (service, repository, steps, notes, validation)
-  memory/             # memory domain (session, now-writer, consolidate, collectors/, retrieval/, state/)
-  recall/             # recall domain (opencode import/sync/search)
-  db/                 # drizzle schema, client, migrations
-  llm/                # LLM client (used by consolidation summarizer)
-  workspace/          # workspace root resolution
-  skills/             # skills scaffolding
-  utils/              # frontmatter helpers
-drizzle/              # generated SQL migrations
-scripts/              # dev scripts (run-tests-for-validate, verify-goal-invariants, debug)
-skills/               # agent skill definitions
-tests/                # test suite (bun test)
-```
+Changed OpenCode sessions retain prior raw message versions indefinitely. Normal queries expose messages matching the source's current fingerprint and its current summary. Tool output is not imported as raw recall evidence.
 
-### Storage
+Generated files under `.continuum/memory/` are compatibility and portability projections:
 
-- **`.continuum/continuum.db`** (SQLite, via `bun:sqlite` + `drizzle-orm`) holds structured data only:
-  - `tasks` — task records (id, title, type, status, priority, intent, description, plan, outcome, steps JSON, discoveries/decisions/blocked_by JSON arrays, parent_id, timestamps). Indexes on status/parent/priority.
-  - `memory_checkpoints` — collector sync state (`source`/`scope`/`cursor`/`fingerprint`/`record_count`) so recall imports are incremental and idempotent.
-- **`.continuum/memory/*.md`** holds all memory **content** (the NOW/RECENT/MEMORY tiers above) — plain markdown with YAML frontmatter, read/written directly from disk.
+- `NOW.md` contains pending journal entries.
+- `RECENT.md`, `MEMORY-YYYY-MM-DD.md`, and `MEMORY.md` render completed consolidations.
 
-Migrations live in `drizzle/` and are applied at runtime by `src/db/migrate.ts`.
+Deleting projections does not delete canonical memory. Normal append and consolidation operations regenerate the relevant output.
 
 ## Configuration
 
-Configuration is scoped to the memory subsystem and lives in `.continuum/memory/config.yml` (created by `continuum memory init`). Defaults can be overridden by editing the file:
+The database path and workspace are resolved explicitly for each CLI runtime. Optional consolidation and recall summarization settings are read from `.continuum/memory/config.yml` when present.
 
-- `now_max_lines` / `now_max_hours` — NOW rollover thresholds.
-- `recent_session_count` / `recent_max_lines` — RECENT sizing.
-- `memory_sections` — section headings in `MEMORY-*.md` files.
-- `consolidation` — optional LLM block (`api_url`, `api_key`, `model`, `max_tokens`, `timeout_ms`, `summary_max_chars`/`lines`, `merge_max_est_tokens`). The YAML template ships this commented out. Env fallbacks for the LLM block: `OPENCODE_ZEN_API_KEY` → `CONSOLIDATION_API_KEY` → `OPENAI_API_KEY`; `SUMMARY_MODEL` → `CONSOLIDATION_MODEL` → `gpt-5.4-mini`.
+LLM environment fallbacks include:
 
-The workspace root is **auto-discovered** (walk up for `.continuum/` or `.git/`), not configured. `XDG_DATA_HOME` relocates the OpenCode DB lookup (`${XDG_DATA_HOME:-~/.local/share}/opencode/opencode.db`).
+- API key: `OPENCODE_ZEN_API_KEY`, then `CONSOLIDATION_API_KEY`, then `OPENAI_API_KEY`
+- Model: `SUMMARY_MODEL`, then `CONSOLIDATION_MODEL`, then the built-in default
+
+`XDG_DATA_HOME` changes automatic OpenCode database discovery from the default `~/.local/share/opencode/opencode.db`.
+
+## SDK
+
+The public SDK currently exposes task operations only:
+
+```ts
+import continuum from 'continuum-memory-mvp'
+
+await continuum.task.init()
+const task = await continuum.task.create({ title: 'Ship', type: 'feature' })
+await continuum.task.complete(task.id, { outcome: 'Shipped' })
+```
+
+Memory remains CLI-only; there is no public memory SDK compatibility contract.
 
 ## Development
 
-### Validate workflow (`bun run validate`)
-
-Runs three stages, chained with `&&`:
-
-1. `bun run typecheck` — `tsc --noEmit`.
-2. `bun run scripts/run-tests-for-validate.ts` — `bun test` with a quirk-tolerant exit-code policy (Bun sometimes exits non-zero on clean runs).
-3. `bun run verify:goal` — the GOAL invariant checker (below).
-
-### GOAL invariant verification
-
-`scripts/verify-goal-invariants.ts` uses the TypeScript compiler API to enforce the structural invariants declared in `GOAL.md` against `src/`:
-
-- No `src/` file exceeds 300 lines.
-- No function/arrow exceeds 80 lines.
-- All exported functions have explicit return-type annotations.
-- Zero `as any` casts in `src/`.
-- No `*-helpers`/`*-utils`/`*-misc` dumping-ground files.
-- Single-source-of-truth sentinels: each of `require_task`, `normalizeLimit`, `SUMMARY_PREFIX`, `formatStepMarker`, `buildSummaryLines`, `patch_collection`, `parsePositiveInteger`, `resolveRecallPath`, and the `createTaskCommand` decomposition defined exactly once and imported where used.
-- Smoke-runs `bun run typecheck`, `bun test`, `continuum task list --json`, `continuum memory status`, and `continuum memory recall diff --help`.
-
-Prints a `## Result` section; sets `process.exitCode = 1` on any failure.
-
-### Tests
-
 ```sh
-bun test        # full suite
+bun run format
 bun run typecheck
+bun test
+bun run validate
+git diff --check
 ```
 
-Tests live in `tests/` (not colocated with source) and use `bun:test`. Common helpers: `withTempMemoryDir`/`withTempCwd` (temp dirs + cwd restoration) and `snapshotConsolidationEnv`/`restoreConsolidationEnv` (so tests don't trigger real LLM consolidation). Imports use relative paths back into `src/`.
+`bun run validate` runs typechecking, the full test suite, and goal-invariant verification. Migrations are additive SQL files under `drizzle/` and are applied by `src/db/migrate.ts`.
 
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, code standards, and the validation workflow.
+See `CONTRIBUTING.md`, `AGENTS.md`, and `PLAN/CHECKLIST.md` for repository workflows and release scope.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT. See `LICENSE`.

@@ -1,9 +1,12 @@
 import { Command } from 'commander'
-import { getWorkspaceContext } from '../../memory/paths'
 import { parseOptionalPositiveInteger } from './shared'
 import { loadTaskSummary, renderTaskSummary } from './summary-tasks'
 import type { TaskSummary } from './summary-tasks'
 import { renderMemorySummary } from './summary-memory'
+import { Effect } from 'effect'
+import { runMemoryCommand } from '../io'
+import { MemoryRuntime } from '../../memory/runtime/memory-runtime'
+import { listMemoryEvidence } from '../../memory/application/query'
 
 type SummaryOptions = {
   limit?: string
@@ -26,7 +29,7 @@ export function createSummaryCommand(): Command {
     )
     .option('--no-tasks', 'Omit task summary')
     .option('--no-memory', 'Omit memory summary')
-    .action(async (options: SummaryOptions) => {
+    .action(async (options: SummaryOptions, command: Command) => {
       const limit = parseOptionalPositiveInteger(
         options.limit,
         DEFAULT_LIMIT,
@@ -37,32 +40,45 @@ export function createSummaryCommand(): Command {
         DEFAULT_MEMORY_LINES,
         'Memory lines must be a positive integer.',
       )
-      console.log(await renderSummary(options, limit, memoryLines))
+      await runMemoryCommand(
+        command,
+        renderSummary(options, limit, memoryLines),
+        ({ output }) => console.log(output),
+      )
     })
 }
 
-async function renderSummary(
+function renderSummary(
   options: SummaryOptions,
   limit: number,
   memoryLines: number,
-): Promise<string> {
-  const context = getWorkspaceContext()
-  const sections = [
-    '# Continuum Summary',
-    '',
-    `Workspace: ${context.workspaceRoot}`,
-  ]
-  const taskSummary =
-    options.tasks === false ? null : await loadTaskSummary(limit)
+): Effect.Effect<{ output: string }, unknown, MemoryRuntime> {
+  return Effect.gen(function* () {
+    const context = yield* MemoryRuntime
+    const sections = [
+      '# Continuum Summary',
+      '',
+      `Workspace: ${context.workspaceRoot}`,
+    ]
+    const taskSummary =
+      options.tasks === false
+        ? null
+        : yield* Effect.tryPromise(() => loadTaskSummary(limit))
 
-  if (taskSummary) {
-    sections.push('', renderTaskSummary(taskSummary, limit))
-  }
-  if (options.memory !== false) {
-    sections.push('', renderMemorySummary(memoryLines))
-  }
-  sections.push('', renderSuggestedCommands(taskSummary))
-  return sections.join('\n')
+    if (taskSummary) {
+      sections.push('', renderTaskSummary(taskSummary, limit))
+    }
+    if (options.memory !== false) {
+      const evidence = yield* listMemoryEvidence(
+        context.dbPath,
+        { limit: memoryLines },
+        context.handle,
+      )
+      sections.push('', renderMemorySummary(evidence, memoryLines))
+    }
+    sections.push('', renderSuggestedCommands(taskSummary))
+    return { output: sections.join('\n') }
+  })
 }
 
 function renderSuggestedCommands(summary: TaskSummary | null): string {

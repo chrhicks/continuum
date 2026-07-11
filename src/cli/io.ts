@@ -1,6 +1,12 @@
 import { readFile } from 'node:fs/promises'
 import type { Command } from 'commander'
 import { isContinuumError } from '../sdk'
+import { Effect, Either } from 'effect'
+import { getWorkspaceContext } from '../memory/paths'
+import {
+  MemoryRuntime,
+  memoryRuntimeLayer,
+} from '../memory/runtime/memory-runtime'
 import { getActiveWorkspaceContext } from '../workspace/context'
 
 export type GlobalCliOptions = {
@@ -132,8 +138,38 @@ export async function runCommand<T>(
       process.exitCode = 1
       return
     }
-    throw error
+    const formatted = formatError(error)
+    console.error(`${formatted.code}: ${formatted.message}`)
+    process.exitCode = 1
   }
+}
+
+export async function runMemoryCommand<T, E>(
+  command: Command,
+  effect: Effect.Effect<T, E, MemoryRuntime>,
+  render: (data: T) => void,
+): Promise<void> {
+  const context = getWorkspaceContext()
+  const program = Effect.scoped(
+    effect.pipe(
+      Effect.provide(
+        memoryRuntimeLayer({
+          workspaceRoot: context.workspaceRoot,
+          memoryDir: context.memoryDir,
+          dbPath: context.continuumDbPath,
+        }),
+      ),
+    ),
+  )
+  await runCommand(
+    command,
+    async () => {
+      const result = await Effect.runPromise(Effect.either(program))
+      if (Either.isLeft(result)) throw result.left
+      return result.right
+    },
+    render,
+  )
 }
 
 function formatError(error: unknown): JsonError['error'] {
@@ -142,6 +178,15 @@ function formatError(error: unknown): JsonError['error'] {
       code: error.code,
       message: error.message,
       suggestions: error.suggestions,
+    }
+  }
+  if (typeof error === 'object' && error !== null && '_tag' in error) {
+    const tagged = error as { _tag: string; cause?: unknown; path?: string }
+    const cause = tagged.cause
+    const detail = cause instanceof Error ? cause.message : String(cause ?? '')
+    return {
+      code: tagged._tag.replace(/([a-z])([A-Z])/g, '$1_$2').toUpperCase(),
+      message: [tagged._tag, tagged.path, detail].filter(Boolean).join(': '),
     }
   }
   const message = error instanceof Error ? error.message : String(error)

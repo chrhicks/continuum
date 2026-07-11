@@ -1,7 +1,4 @@
-import type {
-  LlmResponse,
-  LlmStructuredOutputOptions,
-} from './types'
+import type { LlmResponse, LlmStructuredOutputOptions } from './types'
 
 type ChatCompletionApiResponse = {
   choices?: { message?: { content?: string }; finish_reason?: string }[]

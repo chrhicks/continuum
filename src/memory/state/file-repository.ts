@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import type { MemorySource } from '../types'
 import type { MemoryStateRepository } from './repository'
@@ -7,6 +7,7 @@ import {
   createMemoryCheckpointKey,
 } from './repository'
 import type { MemoryCheckpoint, MemoryCheckpointInput } from './types'
+import { writeFileAtomically } from '../file-io'
 
 type StoredMemoryState = {
   checkpoints: MemoryCheckpoint[]
@@ -68,7 +69,7 @@ function persistRepository(
 ): void {
   mkdirSync(dirname(filePath), { recursive: true })
   const payload: StoredMemoryState = { checkpoints }
-  writeFileSync(filePath, `${JSON.stringify(payload, null, 2)}\n`, 'utf-8')
+  writeFileAtomically(filePath, `${JSON.stringify(payload, null, 2)}\n`)
 }
 
 function normalizeCheckpoint(value: unknown): MemoryCheckpoint | null {

@@ -1,10 +1,8 @@
-import { mkdirSync, existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, existsSync, readFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { join } from 'node:path'
 import { createLlmClient } from '../../llm/client'
-import type {
-  OpencodeSessionBundle,
-} from '../opencode/extract'
+import type { OpencodeSessionBundle } from '../opencode/extract'
 import {
   mergeRecallSummaryItems,
   buildRecallSummaryItem,
@@ -19,6 +17,7 @@ import {
 } from './opencode-artifacts'
 import { summarizeChunk } from './summary-chunk-llm'
 import { mergeSummaryChunkResults } from './summary-merge-llm'
+import { writeFileAtomically } from '../file-io'
 
 export function countSummaryChunks(
   messages: NormalizedOpencodeMessage[],
@@ -74,7 +73,14 @@ export async function summarizeOpencodeSession(
 
 async function collectChunkSummaries(
   client: ReturnType<typeof createLlmClient>,
-  chunks: Array<{ index: number; total: number; blockCount: number; lineCount: number; charCount: number; content: string }>,
+  chunks: Array<{
+    index: number
+    total: number
+    blockCount: number
+    lineCount: number
+    charCount: number
+    content: string
+  }>,
   cacheDir: string | undefined,
 ): Promise<RecallSummaryResult[]> {
   const summaries: RecallSummaryResult[] = []
@@ -97,9 +103,7 @@ async function loadOrSummarizeChunk(
   chunk: { index: number; total: number; content: string },
   cacheDir: string | undefined,
 ): Promise<RecallSummaryResult> {
-  const cachePath = cacheDir
-    ? getChunkCachePath(cacheDir, chunk.content)
-    : null
+  const cachePath = cacheDir ? getChunkCachePath(cacheDir, chunk.content) : null
 
   if (cachePath && existsSync(cachePath)) {
     try {
@@ -115,7 +119,7 @@ async function loadOrSummarizeChunk(
 
   const summary = await summarizeChunk(client, chunk.content, cacheDir)
   if (cachePath) {
-    writeFileSync(cachePath, JSON.stringify(summary, null, 2) + '\n', 'utf-8')
+    writeFileAtomically(cachePath, JSON.stringify(summary, null, 2) + '\n')
   }
   return summary
 }

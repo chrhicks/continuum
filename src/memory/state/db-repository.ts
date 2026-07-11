@@ -1,7 +1,6 @@
-import { Database } from 'bun:sqlite'
-import { existsSync, mkdirSync, rmSync } from 'node:fs'
-import { dirname } from 'node:path'
-import { configureSqlite } from '../../db/sqlite'
+import type { Database } from 'bun:sqlite'
+import { existsSync, rmSync } from 'node:fs'
+import { getDbClientByPath } from '../../db/client'
 import type { MemorySource } from '../types'
 import type { MemoryStateRepository } from './repository'
 import {
@@ -21,23 +20,6 @@ type StoredCheckpointRow = {
   updated_at: string
   metadata: string
 }
-
-const INITIALIZE_SQL = `
-CREATE TABLE IF NOT EXISTS memory_checkpoints (
-  key TEXT PRIMARY KEY,
-  source TEXT NOT NULL,
-  scope TEXT NOT NULL,
-  cursor TEXT,
-  fingerprint TEXT,
-  record_count INTEGER NOT NULL DEFAULT 0,
-  updated_at TEXT NOT NULL,
-  metadata TEXT NOT NULL DEFAULT '{}'
-);
-CREATE INDEX IF NOT EXISTS idx_memory_checkpoints_source ON memory_checkpoints(source);
-CREATE INDEX IF NOT EXISTS idx_memory_checkpoints_source_scope ON memory_checkpoints(source, scope);
-`
-
-const contextCache = new Map<string, DbRepositoryContext>()
 
 type DbRepositoryContext = {
   sqlite: Database
@@ -117,20 +99,9 @@ function getContext(
   dbPath: string,
   legacyFilePath: string | null,
 ): DbRepositoryContext {
-  const existing = contextCache.get(dbPath)
-  if (existing) {
-    return existing
-  }
-
-  mkdirSync(dirname(dbPath), { recursive: true })
-  const sqlite = new Database(dbPath)
-  configureSqlite(sqlite)
-  sqlite.exec(INITIALIZE_SQL)
+  const { sqlite } = getDbClientByPath(dbPath)
   migrateLegacyCheckpointFile(sqlite, legacyFilePath)
-
-  const context = { sqlite }
-  contextCache.set(dbPath, context)
-  return context
+  return { sqlite }
 }
 
 function migrateLegacyCheckpointFile(
