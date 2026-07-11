@@ -6,20 +6,14 @@ import { Effect } from 'effect'
 import { runMemoryCommand } from '../../io'
 import { MemoryRuntime } from '../../../memory/runtime/memory-runtime'
 import { makeRecallRepository } from '../../../memory/repository/recall-repository'
+import { getRecallStatus } from '../../../memory/application/recall-status'
 
 export async function handleRecallStatus(command: Command): Promise<void> {
   await runMemoryCommand(
     command,
     Effect.gen(function* () {
       const runtime = yield* MemoryRuntime
-      return runtime.handle.sqlite
-        .query(
-          `SELECT
-       (SELECT COUNT(*) FROM memory_recall_sources) sources,
-       (SELECT COUNT(*) FROM memory_recall_messages) messages,
-       (SELECT COUNT(*) FROM memory_recall_summaries) summaries`,
-        )
-        .get() as { sources: number; messages: number; summaries: number }
+      return getRecallStatus(runtime.handle)
     }),
     (counts) => {
       console.log('Canonical recall status:')

@@ -78,4 +78,30 @@ describe('memory config', () => {
       }
     })
   })
+
+  test('explicit memory directory does not read config from cwd', () => {
+    withTempCwd(() => {
+      const cwdMemory = join(process.cwd(), '.continuum', 'memory')
+      const targetMemory = mkdtempSync(
+        join(tmpdir(), 'continuum-target-memory-'),
+      )
+      mkdirSync(cwdMemory, { recursive: true })
+      writeFileSync(
+        join(cwdMemory, 'config.yml'),
+        ['consolidation:', '  api_key: wrong-key', '  model: wrong-model'].join(
+          '\n',
+        ),
+        'utf-8',
+      )
+      const originalKey = process.env.OPENCODE_ZEN_API_KEY
+      delete process.env.OPENCODE_ZEN_API_KEY
+      try {
+        expect(getMemoryConfig(targetMemory).consolidation).toBeUndefined()
+      } finally {
+        rmSync(targetMemory, { recursive: true, force: true })
+        if (originalKey !== undefined)
+          process.env.OPENCODE_ZEN_API_KEY = originalKey
+      }
+    })
+  })
 })

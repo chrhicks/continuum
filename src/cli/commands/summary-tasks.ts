@@ -1,5 +1,7 @@
-import continuum, { isContinuumError } from '../../sdk'
+import { isContinuumError } from '../../sdk'
+import { map_task } from '../../sdk/mappers'
 import type { Task, TaskNote } from '../../sdk/types'
+import { list_tasks_for_directory } from '../../task/tasks.service'
 
 export type TaskSummary = {
   initialized: boolean
@@ -12,22 +14,25 @@ export type TaskSummary = {
   nextTask: Task | null
 }
 
-export async function loadTaskSummary(limit: number): Promise<TaskSummary> {
+export async function loadTaskSummary(
+  limit: number,
+  directory: string = process.cwd(),
+): Promise<TaskSummary> {
   try {
     const [result, completedResult] = await Promise.all([
-      continuum.task.list({
+      list_tasks_for_directory(directory, {
         limit: 1000,
         sort: 'priority',
         order: 'asc',
       }),
-      continuum.task.list({
+      list_tasks_for_directory(directory, {
         status: 'completed',
         limit,
         sort: 'updatedAt',
         order: 'desc',
       }),
     ])
-    const active = result.tasks
+    const active = result.tasks.map(map_task)
     const ready = active.filter((task) => task.status === 'ready')
     const open = active.filter((task) => task.status === 'open')
     const blocked = active.filter((task) => task.status === 'blocked')
@@ -37,7 +42,7 @@ export async function loadTaskSummary(limit: number): Promise<TaskSummary> {
       ready,
       open,
       blocked,
-      completed: completedResult.tasks,
+      completed: completedResult.tasks.map(map_task),
       nextTask: ready[0] ?? open[0] ?? blocked[0] ?? null,
     }
   } catch (error) {

@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { parse } from 'yaml'
 import { memoryPath } from './paths'
 
@@ -45,8 +46,10 @@ const DEFAULT_CONFIG: MemoryConfig = {
   memory_sections: [...DEFAULT_SECTIONS, 'Sessions'],
 }
 
-export function getMemoryConfig(): MemoryConfig {
-  const configPath = memoryPath('config.yml')
+export function getMemoryConfig(memoryDir?: string): MemoryConfig {
+  const configPath = memoryDir
+    ? join(memoryDir, 'config.yml')
+    : memoryPath('config.yml')
   if (!existsSync(configPath)) {
     return {
       ...DEFAULT_CONFIG,
