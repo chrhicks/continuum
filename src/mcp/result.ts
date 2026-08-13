@@ -3,7 +3,8 @@ import { Effect } from 'effect'
 
 export function toolResult<T extends Record<string, unknown>>(
   result: T,
-  render: (result: T) => string = (value) => JSON.stringify(value, null, 2),
+  render: (result: T) => string = (value) =>
+    `Structured data returned: ${Object.keys(value).join(', ')}.`,
 ): CallToolResult {
   return {
     content: [{ type: 'text' as const, text: render(result) }],

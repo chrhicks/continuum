@@ -95,6 +95,9 @@ describe('Continuum MCP server', () => {
         matches: Array<{ content: string }>
       }
       expect(searchData.matches[0]?.content).toBe(content)
+      expect(search.content).toEqual([
+        { type: 'text', text: 'Structured data returned: workspace, matches.' },
+      ])
 
       const summary = await client.callTool({
         name: 'continuum_summary',
@@ -103,6 +106,9 @@ describe('Continuum MCP server', () => {
       expect(summary.isError).not.toBe(true)
       const summaryData = summary.structuredContent as { output: string }
       expect(summaryData.output).toContain(content)
+      expect(summary.content).toEqual([
+        { type: 'text', text: 'Structured data returned: workspace, output.' },
+      ])
 
       const consolidation = await client.callTool({
         name: 'continuum_memory_consolidate',
@@ -220,6 +226,12 @@ describe('Continuum MCP server', () => {
         arguments: { workspace, id: task.id, expand: ['children'] },
       })
       expect(fetched.structuredContent).toMatchObject({ children: [] })
+      expect(fetched.content).toEqual([
+        {
+          type: 'text',
+          text: 'Structured data returned: workspace, task, parent, children, blockers.',
+        },
+      ])
       await client.callTool({
         name: 'continuum_task_complete',
         arguments: { workspace, id: task.id, outcome: 'All MCP calls passed.' },

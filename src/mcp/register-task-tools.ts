@@ -55,7 +55,8 @@ function registerTaskReadTools(server: McpServer): void {
   server.registerTool(
     'continuum_task_list',
     {
-      description: 'List project tasks with filtering and cursor pagination.',
+      description:
+        'List project tasks with filtering and cursor pagination; use nextCursor for the next page.',
       inputSchema: {
         workspace: workspaceSchema(),
         options: z
@@ -92,7 +93,8 @@ function registerTaskReadTools(server: McpServer): void {
   server.registerTool(
     'continuum_task_validate',
     {
-      description: 'Validate whether a task is ready for a target status.',
+      description:
+        'Validate readiness for a target status without changing the task; inspect valid, missingFields, and openBlockers before transitioning.',
       inputSchema: {
         workspace: workspaceSchema(),
         id: idSchema(),
@@ -143,7 +145,8 @@ function registerTaskWriteTools(server: McpServer): void {
   server.registerTool(
     'continuum_task_complete',
     {
-      description: 'Complete a task with an outcome summary.',
+      description:
+        'Complete a task with an outcome summary. Validate the completed transition first.',
       inputSchema: {
         workspace: workspaceSchema(),
         id: idSchema(),
@@ -221,7 +224,8 @@ function registerTaskNoteTool(server: McpServer): void {
   server.registerTool(
     'continuum_task_note_add',
     {
-      description: 'Add a discovery or decision note to a task.',
+      description:
+        'Add a discovery or decision note to a task. Use memory append separately for cross-task durable context.',
       inputSchema: {
         workspace: workspaceSchema(),
         id: idSchema(),
@@ -242,7 +246,14 @@ function registerInitTool(server: McpServer): void {
     'continuum_init',
     {
       description: 'Initialize and migrate Continuum in an existing directory.',
-      inputSchema: { workspace: workspaceSchema() },
+      inputSchema: {
+        workspace: z
+          .string()
+          .min(1)
+          .describe(
+            'Absolute repository root to initialize exactly; parent directories are not resolved.',
+          ),
+      },
       annotations: { ...write, idempotentHint: true },
     },
     async (input) => toolResult(await initMcpWorkspace(input)),

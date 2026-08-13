@@ -53,6 +53,14 @@ so multiline Markdown and shell-special characters are passed without shell
 quoting. Configure an MCP client or gateway such as Executor to launch
 `continuum mcp`.
 
+When using Executor, read successful tool data from
+`result.data.structuredContent`. Do not return the raw MCP response when
+batching calls: it contains both a compact text status and the structured data.
+Discover the connection-specific full tool path with `tools.search()` before
+calling it; bare names such as `continuum_summary` are MCP names, not Executor
+paths. Initialize only with the absolute repository root because initialization
+does not search parent directories.
+
 The CLI remains the human, scripting, and recovery interface.
 
 ### Tasks

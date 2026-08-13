@@ -48,7 +48,10 @@ export function registerMemoryTools(server: McpServer): void {
         'Import OpenCode sessions into canonical recall; dryRun performs no writes or LLM calls.',
       inputSchema: {
         workspace: workspaceSchema(),
-        sourceDb: z.string().optional(),
+        sourceDb: z
+          .string()
+          .describe('Absolute path to an OpenCode SQLite database.')
+          .optional(),
         projectId: z.string().optional(),
         sessionId: z.string().optional(),
         after: z.string().optional(),

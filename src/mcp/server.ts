@@ -35,8 +35,7 @@ export function createContinuumMcpServer(): McpServer {
         openWorldHint: false,
       },
     },
-    async (input) =>
-      toolResult(await getSummary(input), (result) => result.output),
+    async (input) => toolResult(await getSummary(input)),
   )
 
   server.registerTool(
@@ -84,10 +83,7 @@ export function createContinuumMcpServer(): McpServer {
         openWorldHint: false,
       },
     },
-    async (input) =>
-      toolResult(await searchMcpMemory(input), (result) =>
-        JSON.stringify(result.matches, null, 2),
-      ),
+    async (input) => toolResult(await searchMcpMemory(input)),
   )
 
   return server

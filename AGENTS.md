@@ -6,9 +6,15 @@ We use Continuum MCP tools (this repo is the source code) to keep track of tasks
 
 At the beginning of a session:
 
-- Call `continuum_summary` for the current briefing.
-- Call `continuum_init` only when the workspace is not initialized.
-- Use `continuum guide` for CLI fallback documentation.
+- Resolve the repository root to an absolute path and use it as `workspace` on
+  every call. Do not initialize from a nested directory.
+- Through Executor, use `tools.search({ namespace: 'continuum', ... })` and
+  call the exact returned path. Bare MCP tool names are not Executor paths.
+- Call `continuum_summary`. If it reports that Continuum is not initialized,
+  call `continuum_init` with that same repository root, then retry summary.
+- Read successful responses from `result.data.structuredContent`; inspect
+  `result.error` when `result.ok` is false.
+- For CLI fallback, use `continuum --cwd <absolute-workspace> guide`.
 
 Project documentation lives in `README.md`, `CONTRIBUTING.md`, and `LICENSE`. The sections below are agent-operational guidance not covered there.
 
