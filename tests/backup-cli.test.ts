@@ -1,8 +1,22 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
+import {
+  createFakeWrangler,
+  FAKE_WRANGLER_TOKEN,
+  fakeWranglerEnvironment,
+  readFakeWranglerInvocation,
+  type FakeWrangler,
+  type FakeWranglerMode,
+} from './fake-wrangler'
 
 const cliPath = join(import.meta.dir, '..', 'bin', 'continuum')
 const roots: string[] = []
@@ -12,16 +26,25 @@ afterEach(() => {
     rmSync(root, { recursive: true, force: true })
 })
 
-describe('backup CLI errors', () => {
-  test('renders missing configuration with a stable JSON code', () => {
+describe('backup CLI boundaries', () => {
+  test('renders missing configuration in JSON and human modes', () => {
     const workspace = createWorkspace()
-    const result = runCli(workspace, ['backup', 'create'])
+    const jsonResult = runCli(workspace, ['backup', 'create'])
 
-    expect(result.status).toBe(1)
-    expect(JSON.parse(result.stdout)).toMatchObject({
+    expect(jsonResult.status).toBe(1)
+    expect(JSON.parse(jsonResult.stdout)).toMatchObject({
       ok: false,
       error: { code: 'BACKUP_CONFIGURATION_ERROR' },
     })
+
+    const humanResult = runCli(workspace, ['backup', 'create'], {
+      json: false,
+    })
+    expect(humanResult.status).toBe(1)
+    expect(humanResult.stdout).toBe('')
+    expect(humanResult.stderr).toContain(
+      'BACKUP_CONFIGURATION_ERROR: R2 backup is not configured.',
+    )
   })
 
   test('renders malformed backup contracts with a stable JSON code', () => {
@@ -41,6 +64,56 @@ describe('backup CLI errors', () => {
       error: { code: 'BACKUP_DECODE_ERROR' },
     })
   })
+
+  test('lists an empty remote through human and JSON output', () => {
+    const workspace = createWorkspace()
+    configureWorkspace(workspace)
+    const fake = createFakeWrangler(dirname(workspace))
+    const args = ['backup', 'list', '--wrangler', fake.executable]
+    const environment = cliEnvironment(fake, 'missing')
+
+    const humanResult = runCli(workspace, args, { json: false, environment })
+    expect(humanResult.status).toBe(0)
+    expect(humanResult.stdout).toBe('No R2 backups found.\n')
+    expect(humanResult.stderr).toBe('')
+
+    const jsonResult = runCli(workspace, args, { environment })
+    expect(jsonResult.status).toBe(0)
+    expect(JSON.parse(jsonResult.stdout)).toMatchObject({ ok: true, data: [] })
+    const invocation = readFakeWranglerInvocation(fake)
+    expect(existsSync(dirname(invocation.filePath))).toBe(false)
+    expect(`${humanResult.stdout}${jsonResult.stdout}`).not.toContain(
+      FAKE_WRANGLER_TOKEN,
+    )
+  })
+
+  test('exposes stable remote error codes without disclosing tokens', () => {
+    const workspace = createWorkspace()
+    configureWorkspace(workspace)
+    const fake = createFakeWrangler(dirname(workspace))
+    const args = ['backup', 'list', '--wrangler', fake.executable]
+    const environment = cliEnvironment(fake, 'auth')
+
+    const jsonResult = runCli(workspace, args, { environment })
+    expect(jsonResult.status).toBe(1)
+    expect(JSON.parse(jsonResult.stdout)).toMatchObject({
+      ok: false,
+      error: {
+        code: 'BACKUP_REMOTE_ERROR',
+        message: expect.stringContaining('Authentication failed'),
+      },
+    })
+
+    const humanResult = runCli(workspace, args, { json: false, environment })
+    expect(humanResult.status).toBe(1)
+    expect(humanResult.stderr).toContain(
+      'BACKUP_REMOTE_ERROR: R2 download failed:',
+    )
+    expect(humanResult.stderr).toContain('Authentication failed')
+    expect(
+      `${jsonResult.stdout}${jsonResult.stderr}${humanResult.stdout}${humanResult.stderr}`,
+    ).not.toContain(FAKE_WRANGLER_TOKEN)
+  })
 })
 
 function createWorkspace(): string {
@@ -51,13 +124,41 @@ function createWorkspace(): string {
   return workspace
 }
 
+type CliOptions = {
+  json?: boolean
+  environment?: NodeJS.ProcessEnv
+}
+
 function runCli(
   workspace: string,
   args: string[],
+  options: CliOptions = {},
 ): ReturnType<typeof spawnSync> {
+  const globalArgs = options.json === false ? [] : ['--json']
   return spawnSync(
-    'bun',
-    ['run', cliPath, '--json', '--cwd', workspace, ...args],
-    { encoding: 'utf8', env: process.env },
+    process.execPath,
+    ['run', cliPath, ...globalArgs, '--cwd', workspace, ...args],
+    { encoding: 'utf8', env: options.environment ?? process.env },
   )
+}
+
+function configureWorkspace(workspace: string): void {
+  const result = runCli(workspace, [
+    'backup',
+    'configure',
+    '--bucket',
+    'continuum-test-backups',
+    '--project-id',
+    '11111111-1111-4111-8111-111111111111',
+    '--writer-id',
+    '22222222-2222-4222-8222-222222222222',
+  ])
+  expect(result.status).toBe(0)
+}
+
+function cliEnvironment(
+  fake: FakeWrangler,
+  mode: FakeWranglerMode,
+): NodeJS.ProcessEnv {
+  return fakeWranglerEnvironment(fake, mode)
 }
