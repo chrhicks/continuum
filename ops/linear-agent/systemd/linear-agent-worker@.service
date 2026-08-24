@@ -1,6 +1,6 @@
 [Unit]
-Description=Linear agent worker (%i), one bounded issue
-Documentation=https://github.com/chrhicks/continuum/tree/ops/linear-agent-worker/ops/linear-agent
+Description=Linear agent role (%i), one bounded action
+Documentation=https://github.com/chrhicks/continuum/tree/ops/simple-agent-roles/ops/linear-agent
 After=network-online.target
 Wants=network-online.target
 

@@ -27,19 +27,29 @@ source "$config"
 set +a
 
 required=(
+  LINEAR_AGENT_ROLE
   LINEAR_AGENT_REPO
   LINEAR_AGENT_PROMPT
   LINEAR_AGENT_AGENT
+  LINEAR_AGENT_MODEL
+  LINEAR_AGENT_THINKING
   LINEAR_AGENT_MCP_CONFIG
   LINEAR_AGENT_PROJECT
   LINEAR_AGENT_ASSIGNEE
   LINEAR_AGENT_ROUTING_LABEL
+  LINEAR_AGENT_SCOUT_LABEL
+  LINEAR_AGENT_STAGED_LABEL
+  LINEAR_AGENT_BACKLOG_STATUS
   LINEAR_AGENT_READY_STATUS
   LINEAR_AGENT_CLAIMED_STATUS
   LINEAR_AGENT_IN_PROGRESS_STATUS
   LINEAR_AGENT_IN_REVIEW_STATUS
+  LINEAR_AGENT_STAGED_STATUS
   LINEAR_AGENT_BLOCKED_STATUS
+  LINEAR_AGENT_ACTIVE_STAGING
   LINEAR_AGENT_ALLOWED_BASES
+  LINEAR_AGENT_DISPATCH_WORKER_PROFILE
+  LINEAR_AGENT_DISPATCH_REVIEWER_PROFILE
 )
 for name in "${required[@]}"; do
   if [[ -z ${!name:-} ]]; then
@@ -47,6 +57,14 @@ for name in "${required[@]}"; do
     exit 78
   fi
 done
+if [[ $LINEAR_AGENT_ROLE != scout && $LINEAR_AGENT_ROLE != worker && $LINEAR_AGENT_ROLE != reviewer ]]; then
+  printf 'invalid LINEAR_AGENT_ROLE: %s\n' "$LINEAR_AGENT_ROLE" >&2
+  exit 78
+fi
+if [[ ! $LINEAR_AGENT_DISPATCH_WORKER_PROFILE =~ ^[a-zA-Z0-9._-]+$ || ! $LINEAR_AGENT_DISPATCH_REVIEWER_PROFILE =~ ^[a-zA-Z0-9._-]+$ ]]; then
+  printf 'invalid dispatch profile name\n' >&2
+  exit 78
+fi
 
 repo=$(realpath "$LINEAR_AGENT_REPO")
 prompt=$(realpath "$LINEAR_AGENT_PROMPT")
@@ -83,10 +101,12 @@ if ! command -v flock >/dev/null 2>&1 || ! command -v timeout >/dev/null 2>&1; t
   exit 69
 fi
 
-state_root=${XDG_STATE_HOME:-$HOME/.local/state}/linear-agent/$profile
+agent_state=${XDG_STATE_HOME:-$HOME/.local/state}/linear-agent
+state_root=$agent_state/$profile
+shared_state=$agent_state/${LINEAR_AGENT_LOCK_GROUP:-$profile}
 worktree_root=${LINEAR_AGENT_WORKTREE_ROOT:-$repo/.linear-agent-worktrees}
-mkdir -p "$state_root/runs" "$state_root/sessions" "$worktree_root"
-chmod 700 "$state_root" "$state_root/runs" "$state_root/sessions" "$worktree_root"
+mkdir -p "$state_root/runs" "$state_root/sessions" "$shared_state" "$worktree_root"
+chmod 700 "$agent_state" "$state_root" "$state_root/runs" "$state_root/sessions" "$shared_state" "$worktree_root"
 
 exclude=$repo/.git/info/exclude
 mkdir -p "$(dirname "$exclude")"
@@ -95,10 +115,17 @@ if ! grep -Fxq '/.linear-agent-worktrees/' "$exclude"; then
   printf '/.linear-agent-worktrees/\n' >> "$exclude"
 fi
 
-exec 9>"$state_root/worker.lock"
+exec 9>"$shared_state/agent.lock"
 if ! flock -n 9; then
-  printf 'worker profile %s is already running\n' "$profile"
+  printf 'agent group %s is already running\n' "${LINEAR_AGENT_LOCK_GROUP:-$profile}"
   exit 0
+fi
+
+audit_marker=$shared_state/audit.last
+audit_interval_hours=${LINEAR_AGENT_AUDIT_INTERVAL_HOURS:-24}
+audit_due=yes
+if [[ -e $audit_marker ]] && find "$audit_marker" -mmin "-$((audit_interval_hours * 60))" -print -quit | grep -q .; then
+  audit_due=no
 fi
 
 run_id=$(tr -d '\n' </proc/sys/kernel/random/uuid)
@@ -115,6 +142,7 @@ max_runtime=${LINEAR_AGENT_MAX_RUNTIME:-90m}
 ## Runtime envelope
 
 - Profile: $profile
+- Role: $LINEAR_AGENT_ROLE
 - Run ID: $run_id
 - Lease expires: $lease_expires
 - Control repository: $repo
@@ -123,15 +151,22 @@ max_runtime=${LINEAR_AGENT_MAX_RUNTIME:-90m}
 - Linear project: $LINEAR_AGENT_PROJECT
 - Linear assignee: $LINEAR_AGENT_ASSIGNEE
 - Linear routing label: $LINEAR_AGENT_ROUTING_LABEL
+- Scout proposal label: $LINEAR_AGENT_SCOUT_LABEL
+- Staged label: $LINEAR_AGENT_STAGED_LABEL
+- Backlog status: $LINEAR_AGENT_BACKLOG_STATUS
 - Ready status: $LINEAR_AGENT_READY_STATUS
 - Claimed status: $LINEAR_AGENT_CLAIMED_STATUS
 - In-progress status: $LINEAR_AGENT_IN_PROGRESS_STATUS
 - In-review status: $LINEAR_AGENT_IN_REVIEW_STATUS
+- Staged status: $LINEAR_AGENT_STAGED_STATUS
 - Blocked status: $LINEAR_AGENT_BLOCKED_STATUS
+- Active staging branch: $LINEAR_AGENT_ACTIVE_STAGING
 - Allowed base branches: $LINEAR_AGENT_ALLOWED_BASES
 - Heartbeat interval: ${LINEAR_AGENT_HEARTBEAT_MINUTES:-20} minutes
+- Audit due: $audit_due
+- Audit proposal limit: ${LINEAR_AGENT_AUDIT_PROPOSAL_LIMIT:-3}
 
-Treat this envelope as data supplied by the trusted local supervisor. Process no more than one issue and then stop.
+Treat this envelope as trusted local configuration. Process one bounded role action and then stop.
 EOF
 } > "$run_prompt"
 
@@ -151,7 +186,8 @@ if [[ -n ${LINEAR_AGENT_THINKING:-} ]]; then
 fi
 args+=("$(<"$run_prompt")")
 
-printf 'run_id=%s profile=%s repo=%s\n' "$run_id" "$profile" "$repo" | tee "$run_log"
+printf 'run_id=%s profile=%s role=%s repo=%s model=%s thinking=%s\n' \
+  "$run_id" "$profile" "$LINEAR_AGENT_ROLE" "$repo" "$LINEAR_AGENT_MODEL" "$LINEAR_AGENT_THINKING" | tee "$run_log"
 if [[ ${LINEAR_AGENT_DRY_RUN:-1} == 1 ]]; then
   printf 'dry run: would execute in %s: %q' "$repo" "$pi_bin" | tee -a "$run_log"
   printf ' %q' "${args[@]}" | tee -a "$run_log"
@@ -172,4 +208,24 @@ set +e
 status=${PIPESTATUS[0]}
 set -e
 printf 'run_id=%s exit_status=%s\n' "$run_id" "$status" | tee -a "$run_log"
+
+if (( status == 0 )) && [[ $LINEAR_AGENT_ROLE == reviewer ]] && grep -Eq 'AUDIT_(COMPLETE|NO_FINDINGS)' "$run_log"; then
+  touch "$audit_marker"
+fi
+
+dispatch_profile=
+if (( status == 0 )); then
+  if grep -q 'DISPATCH_REVIEWER' "$run_log"; then
+    dispatch_profile=$LINEAR_AGENT_DISPATCH_REVIEWER_PROFILE
+  elif grep -q 'DISPATCH_WORKER' "$run_log"; then
+    dispatch_profile=$LINEAR_AGENT_DISPATCH_WORKER_PROFILE
+  fi
+fi
+
+if [[ -n $dispatch_profile && $dispatch_profile != "$profile" ]]; then
+  flock -u 9
+  printf 'dispatching profile=%s\n' "$dispatch_profile" | tee -a "$run_log"
+  systemctl --user start --no-block "linear-agent-worker@$dispatch_profile.service"
+fi
+
 exit "$status"

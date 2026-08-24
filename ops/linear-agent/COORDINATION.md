@@ -1,63 +1,38 @@
 # Coordination contract
 
-## Authority
+## Roles
 
-| Field | Authority |
+| Role | Responsibility |
 | --- | --- |
-| Assignment, priority, dependencies, coordination status | Linear |
-| Execution plan, discoveries, decisions, local handoff | Continuum |
-| Source branch, CI, review, and merge | GitHub |
+| Scout | Select and prepare one useful issue, or route ready/review work |
+| Worker | Implement one ready issue and open a PR to staging |
+| Reviewer | Review one PR, merge passing work to staging, or run one bounded audit |
+| Human | Promote staging to `master` |
 
-Cross-links are mandatory. A Linear issue names the Continuum task, branch, and PR. The Continuum task records the Linear identifier and URL.
+Linear owns queue state and dependencies. Continuum holds implementation plans, discoveries, and outcomes. GitHub holds branches, checks, reviews, and merges.
 
 ## Linear workflow
 
-The pilot uses the team's stock statuses:
-
 ```text
 Backlog
-  -> Todo             human marks ready
-  -> In Progress      worker claim and implementation
-  -> In Review        validated PR exists
-  -> Done             human merge/review authority
+  -> Todo             Scout has prepared an actionable issue
+  -> In Progress      Worker claimed it
+  -> In Review        validated staging PR exists
+  -> In Review + integration:staged
+                       Reviewer merged it to staging
+  -> Done             human promoted staging to master
 
-Blocked -> Backlog + needs-human label
+Review changes -> Todo
+Blocked -> Backlog + needs-human
 ```
 
-The `agent:effect` label routes eligible issues to this worker. Only a human moves work from Backlog to Todo. A scout creates backlog proposals and cannot apply the routing label or move them to Todo.
+`agent:effect` routes implementation work. `scout-proposal` marks audit proposals that still need Scout preparation. `integration:staged` records work merged into the active staging branch.
 
-Recommended labels:
+## Issue contract
 
-```text
-agent:effect
-repo:<name>
-risk:data-safety
-risk:migration
-risk:backup
-pilot
-scout-proposal
-needs-human
-```
+Before moving an issue to Todo, the Scout ensures it contains:
 
-## Claim and lease
-
-The worker processes one issue per run.
-
-1. It selects a Todo issue carrying `agent:effect`.
-2. It moves the issue to In Progress and comments with run ID, host, base branch, and lease expiration.
-3. It re-reads the issue before touching source.
-4. It stops if assignment, status, or lease no longer matches.
-5. It sends a heartbeat at least every 20 minutes while active.
-
-A later run may recover an expired lease carrying the same routing label and assignee. It must inspect the existing branch, worktree, Continuum task, comments, and PR before continuing. It must not recover another agent's live lease.
-
-The Linear transition is not a database compare-and-swap. The re-read and one-worker lock reduce races but do not eliminate them across machines. Run one worker profile per assignee until Linear offers stronger claim semantics.
-
-## Eligibility
-
-An implementation issue must include:
-
-- repository and exact allowed base branch;
+- repository and exact active staging branch;
 - intent and observable impact;
 - evidence or reproduction;
 - bounded scope and explicit exclusions;
@@ -66,56 +41,59 @@ An implementation issue must include:
 - safety and rollback notes;
 - completed dependencies.
 
-Missing fields block the issue. The worker comments with the missing contract rather than guessing.
+The Scout may apply `agent:effect` and move a complete issue to Todo. It prepares at most one issue per run.
 
-## Work isolation
+## Worker claim
 
-The timer runs from a dedicated clean control checkout, never a human development checkout. Issue source changes occur in nested ignored Git worktrees:
+1. Select one routed Todo issue.
+2. Move it to In Progress and write a lease comment.
+3. Re-read before touching source.
+4. Resume an existing issue branch and PR when review requested changes.
+5. Stop on a competing live lease.
+
+The three role profiles share a local lock. Linear claims remain comment-and-re-read coordination rather than an atomic lease.
+
+## Worktrees and staging
+
+The clean control checkout hosts ignored nested worktrees:
 
 ```text
 continuum-control/
-  .git/
   .linear-agent-worktrees/
-    CON-123-short-slug/
+    CHI-123-short-slug/
 ```
 
-Continuum commands use the stable control checkout as their workspace. This avoids creating a separate execution ledger for every disposable worktree. Source edits and tests use the issue worktree.
+Worker branches start from the active staging branch. PRs target staging. The Worker never merges its own PR.
 
-The wrapper refuses to run when the control checkout is dirty. Existing issue worktrees remain until review or explicit cleanup.
+The Reviewer may merge a passing PR only when its base is the exact configured staging branch. It may not merge to `master`. A human promotes the accumulated staging branch.
 
-## Safety
+## Review
 
-The worker may:
+The Reviewer combines:
 
-- read assigned Linear issues;
-- update issue status and comments under this contract;
-- create Continuum tasks and notes;
-- create worktrees and issue branches;
-- edit and validate code in the issue worktree;
-- commit, push a new branch, and open a PR.
+- acceptance criteria and scope verification;
+- correctness and regression review;
+- tests and validation evidence;
+- complexity, duplication, dead code, and unnecessary abstraction;
+- Effect review when relevant;
+- migration and data-safety review when relevant.
 
-The worker may not:
+Blocking findings return the issue to Todo with evidence. Optional findings may become deduplicated Backlog proposals.
 
-- merge;
+## Audits
+
+When no PR is waiting and the configured interval has elapsed, the Reviewer may inspect one bounded area. It creates at most three Backlog proposals, applies `scout-proposal`, and does not route or implement them.
+
+## Retained limits
+
+Agents may not:
+
 - force-push or rewrite shared history;
 - deploy;
+- change credentials or billing;
 - delete or alter production data;
-- mutate cloud infrastructure or credentials;
-- change billing;
-- execute its own scout proposals;
-- broaden scope to unrelated cleanup.
+- mutate cloud infrastructure;
+- merge to `master`;
+- broaden one run into unrelated cleanup.
 
-Any issue requiring these operations moves to Blocked with the exact approval needed.
-
-## Completion
-
-In Review requires:
-
-- acceptance criteria satisfied;
-- required validation passed;
-- final diff inspected;
-- commit and pushed branch available;
-- PR open against the requested base;
-- Linear comment naming tests, PR, Continuum task, and remaining risks.
-
-Only a human or separate review policy marks Done after merge.
+Failed worktrees and branches remain available for recovery.

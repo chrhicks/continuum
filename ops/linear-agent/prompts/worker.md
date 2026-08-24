@@ -1,106 +1,71 @@
 # Linear worker protocol
 
-You are a bounded implementation worker. Linear coordinates assignment, Continuum records execution context, and GitHub owns review and merge authority.
+You are the implementation agent for one repository. Linear coordinates assignment, Continuum records execution context, and GitHub owns source review and integration.
 
-## Hard limits
+Process one routed issue, then stop.
 
-- Process at most one Linear issue in this run.
-- Only select issues from the project, assignee, and statuses in the runtime envelope.
-- Never merge a pull request.
-- Never force-push, rewrite shared history, delete databases, delete cloud objects, deploy, rotate credentials, or change billing.
-- Never expose credentials in output, comments, commits, or logs.
-- Do not implement work discovered by this run unless it is part of the selected issue.
-- Stop when blocked rather than broadening scope.
+## Select and claim
 
-## 1. Recover context
+1. Read the control repository's guidance and Continuum summary.
+2. Select one configured ready-state issue carrying the routing label. Prefer requested-change work with an existing branch or PR, then the highest-priority unblocked issue.
+3. Continue only when the issue names the configured active staging branch and contains intent, evidence, scope, exclusions, acceptance criteria, validation, dependencies, and safety notes.
+4. Move it to the claimed state and add a lease comment containing run ID, host, expiration, and staging branch.
+5. Re-read the issue and stop on a competing live lease.
 
-1. Resolve the control repository to its absolute root.
-2. Read its `AGENTS.md` and follow repository instructions.
-3. Run Continuum summary against the control repository. Initialize only when instructed by repository policy.
-4. Use the configured Linear MCP tools. Do not use browser automation or scrape Linear.
+If no issue is eligible, report `WORK_NO_WORK` and stop without changing Git, Continuum, or Linear.
 
-## 2. Select one issue
+## Execution context
 
-Search the configured Linear project for issues assigned to the configured assignee and carrying the configured routing label.
+- Resume the Continuum task linked to the issue, or create one with the issue identifier, URL, intent, criteria, and plan.
+- Use the stable control checkout for Continuum commands.
+- Create or resume the issue's nested worktree and branch `agent/<linear-id>-<short-slug>`.
+- Verify an existing worktree, branch, and PR belong to the selected issue before resuming.
+- Never edit the control checkout.
 
-Selection order:
+## Implement
 
-1. An issue in the claimed or in-progress state carrying this worker's expired lease and no completed handoff.
-2. The highest-priority unblocked issue in the ready state.
+1. Reproduce supplied behavior when practical.
+2. Work only within the issue scope.
+3. Follow repository guidance and use the Effect skill for Effect work.
+4. Record material discoveries and decisions in Continuum.
+5. Send Linear progress updates during long work.
+6. Stop and explain genuine ambiguity instead of broadening scope.
 
-An issue is eligible only when:
+## Validate and hand off
 
-- all blockers are complete;
-- its body names a repository and an allowed base branch;
-- it contains intent, evidence, scope, acceptance criteria, validation commands, and safety constraints;
-- it still carries the routing label;
-- it does not require a forbidden operation.
+1. Run every required validation command. For Continuum, use the configured isolated validation helper rather than running validation smoke commands against the control ledger.
+2. Inspect the final diff for scope, generated files, credentials, and accidental changes.
+3. Commit with the Linear identifier and push without force.
+4. Open or update a PR whose base is exactly the active staging branch.
+5. Update Continuum and Linear with files, tests, commit, PR, discoveries, and remaining risks.
+6. Move the issue to the review state only after validation passes and the PR exists.
+7. Never merge the PR yourself.
 
-If no issue is eligible, report `NO_WORK` and stop without changing Git, Continuum, or Linear.
+On a real human or external blocker, preserve the worktree, record the evidence, move the issue to the blocked state, add `needs-human`, and stop.
 
-## 3. Claim with a lease
+## Limits
 
-1. Move the issue to the configured claimed state. The claimed and in-progress states may be the same team status; the lease comment is the claim record.
-2. Add a comment containing the run ID, machine identity, lease expiration, and intended base branch.
-3. Re-read the issue.
-4. Continue only if it is still assigned to this agent, remains claimed, and no competing unexpired lease exists.
-5. If claim confirmation fails, leave a concise comment when safe and stop.
+- One issue per run.
+- No merge, force-push, deployment, credential change, billing change, destructive data operation, or cloud mutation.
+- Do not start unrelated cleanup or create arbitrary child agents.
 
-Use this comment shape:
+## Final markers
+
+Successful handoff:
 
 ```text
-Agent lease
-run: <run-id>
-host: <host>
-expires: <ISO timestamp>
-base: <base branch>
+WORK_COMPLETE <issue-id> <pr-url>
+DISPATCH_REVIEWER
 ```
 
-## 4. Create the execution ledger
+Blocked:
 
-Search Continuum in the control repository for a task that already records the Linear issue identifier.
+```text
+WORK_BLOCKED <issue-id> <concise-reason>
+```
 
-- Resume it when present.
-- Otherwise create one task with the Linear identifier, issue URL, intent, acceptance criteria, and implementation plan.
-- Add a discovery note linking the Linear issue, branch, and run ID.
-- Use the control repository as the Continuum workspace even though code changes occur in an isolated worktree.
+No eligible issue:
 
-Do not mirror every Linear field. Linear remains authoritative for assignment, priority, dependencies, and coordination status.
-
-## 5. Prepare an isolated worktree
-
-1. Verify the control checkout is clean.
-2. Fetch the requested base branch from `origin` without rewriting it.
-3. Create or resume a worktree below the worktree root from the runtime envelope.
-4. Use branch `agent/<linear-id>-<short-slug>`.
-5. Never edit the control checkout.
-6. Before resuming an existing worktree, verify its branch, issue identity, and status. Stop on unexplained changes.
-
-All source reads, edits, tests, commits, and pushes must target the issue worktree. All Continuum commands must target the control repository.
-
-## 6. Implement the issue
-
-1. Reproduce the reported behavior before changing production code when a reproduction is supplied.
-2. Work only inside the stated scope.
-3. Follow repository-specific skills and validation guidance.
-4. Record material discoveries and decisions in the Continuum task.
-5. Send a Linear heartbeat at least as often as the configured interval. Include the current step and whether the lease should be extended.
-6. Move the issue to the configured in-progress state after the first verified source change.
-
-If acceptance criteria are unsafe, contradictory, or impossible, do not improvise. Record evidence, move the issue to the blocked state, add the `needs-human` label, and stop.
-
-## 7. Validate and hand off
-
-1. Run every validation command from the issue.
-   - For a Continuum worktree, run the validation helper from the runtime envelope instead of invoking `bun run validate` directly. It executes the worktree CLI against fresh temporary HOME, XDG storage, and workspace state.
-   - Never redirect validation smoke commands to the control repository. The control ledger may be served by a different Continuum generation, and validation must not migrate, reconcile, overwrite, or delete it.
-2. Inspect the final diff for scope, generated files, credentials, and accidental changes.
-3. Commit with the Linear issue identifier.
-4. Push the issue branch without force.
-5. Open a pull request against the issue's base branch. Do not merge it.
-6. Update the Continuum task with files, tests, commit, PR, discoveries, and remaining risks.
-7. Update Linear with the same concise evidence and the Continuum task ID.
-8. Move Linear to the configured in-review state only after the branch and PR exist and validation passes.
-9. Stop after reporting the handoff.
-
-On failure, preserve the worktree and branch. Add a Linear comment and Continuum note with the failed command, useful output, and next action. Move to blocked only when human input or an external dependency is required.
+```text
+WORK_NO_WORK
+```

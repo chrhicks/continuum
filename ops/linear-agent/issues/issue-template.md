@@ -3,7 +3,7 @@
 ## Assignment contract
 
 - Repository: `<owner/repository>`
-- Base branch: `<exact allowed branch>`
+- Base branch: `<active staging branch>`
 - Agent: `effect`
 - Coordination project: `<Linear project>`
 
@@ -23,7 +23,7 @@
 ## Out of scope
 
 - <Explicit exclusion>
-- No deployment, merge, force-push, credential change, destructive data operation, or cloud mutation unless separately approved.
+- No deployment, merge to `master`, force-push, credential change, destructive data operation, or cloud mutation unless separately approved.
 
 ## Acceptance criteria
 

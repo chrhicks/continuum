@@ -1,17 +1,23 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-profile=continuum
+profile=continuum-worker
+role=worker
 enable=0
 for arg in "$@"; do
   case "$arg" in
     --enable) enable=1 ;;
     --profile=*) profile=${arg#*=} ;;
-    *) printf 'usage: %s [--profile=NAME] [--enable]\n' "$0" >&2; exit 64 ;;
+    --role=*) role=${arg#*=} ;;
+    *) printf 'usage: %s [--profile=NAME] [--role=scout|worker|reviewer] [--enable]\n' "$0" >&2; exit 64 ;;
   esac
 done
 if [[ ! $profile =~ ^[a-zA-Z0-9._-]+$ ]]; then
   printf 'invalid profile: %s\n' "$profile" >&2
+  exit 64
+fi
+if [[ $role != scout && $role != worker && $role != reviewer ]]; then
+  printf 'invalid role: %s\n' "$role" >&2
   exit 64
 fi
 
@@ -25,18 +31,25 @@ config=$config_home/linear-agent/$profile.env
 install -Dm755 "$root/bin/run-once" "$libexec_home/linear-agent/run-once"
 install -Dm644 "$root/prompts/worker.md" "$data_home/linear-agent/worker.md"
 install -Dm644 "$root/prompts/scout.md" "$data_home/linear-agent/scout.md"
+install -Dm644 "$root/prompts/reviewer.md" "$data_home/linear-agent/reviewer.md"
 install -Dm644 "$root/systemd/linear-agent-worker@.service" "$unit_home/linear-agent-worker@.service"
 install -Dm644 "$root/systemd/linear-agent-worker@.timer" "$unit_home/linear-agent-worker@.timer"
 
+case "$role" in
+  scout) config_template=$root/config/scout.env.example ;;
+  worker) config_template=$root/config/continuum.env.example ;;
+  reviewer) config_template=$root/config/reviewer.env.example ;;
+esac
+
 if [[ ! -e $config ]]; then
-  install -Dm600 "$root/config/continuum.env.example" "$config"
-  printf 'created disabled-by-default config: %s\n' "$config"
+  install -Dm600 "$config_template" "$config"
+  printf 'created disabled-by-default %s config: %s\n' "$role" "$config"
 else
   printf 'preserved existing config: %s\n' "$config"
 fi
 
 systemctl --user daemon-reload
-printf 'installed linear-agent worker for profile %s\n' "$profile"
+printf 'installed linear-agent %s for profile %s\n' "$role" "$profile"
 printf 'first run: systemctl --user start linear-agent-worker@%s.service\n' "$profile"
 printf 'logs: journalctl --user -u linear-agent-worker@%s.service\n' "$profile"
 
