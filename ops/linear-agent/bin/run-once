@@ -97,6 +97,11 @@ if [[ ! -f $mcp_config ]]; then
   printf 'Pi MCP config does not exist: %s\n' "$mcp_config" >&2
   exit 78
 fi
+mcp_extension=${LINEAR_AGENT_MCP_EXTENSION:-$HOME/.pi/agent/npm/node_modules/pi-mcp-adapter/index.ts}
+if [[ ! -f $mcp_extension ]]; then
+  printf 'Pi MCP extension does not exist: %s\n' "$mcp_extension" >&2
+  exit 78
+fi
 if ! command -v flock >/dev/null 2>&1 || ! command -v timeout >/dev/null 2>&1; then
   printf 'worker requires flock and timeout\n' >&2
   exit 69
@@ -177,6 +182,8 @@ args=(
   --mode text
   --name "$LINEAR_AGENT_AGENT:$profile:$run_id"
   --session-dir "$state_root/sessions"
+  --no-extensions
+  --extension "$mcp_extension"
   --mcp-config "$mcp_config"
   --approve
 )

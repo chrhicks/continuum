@@ -17,7 +17,7 @@ Linear coordinates the queue, Continuum records execution context, and GitHub ho
 
 Only the Scout needs a recurring timer. It reports `DISPATCH_WORKER` or `DISPATCH_REVIEWER` when another role should run. The wrapper releases the shared lock and starts that profile through systemd.
 
-All profiles share one lock group, so only one role runs at a time. Every run handles one issue, review, planning action, or bounded audit and then exits.
+All profiles share one lock group, so only one role runs at a time. Every run handles one issue, review, planning action, or bounded audit and then exits. Runs disable ambient Pi extensions and explicitly load only `pi-mcp-adapter`, so globally installed subagent tools cannot create project artifacts or child runs.
 
 The control checkout remains clean. Source work occurs in ignored nested worktrees. `bin/validate-continuum-worktree` validates Continuum changes with temporary HOME, XDG, and workspace state rather than touching the durable control ledger.
 

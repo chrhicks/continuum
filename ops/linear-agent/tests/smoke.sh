@@ -42,9 +42,10 @@ touch "$tmp/run/repo/README"
 git -C "$tmp/run/repo" add README
 git -C "$tmp/run/repo" commit -qm init
 git -C "$tmp/run/repo" remote add origin https://example.invalid/repo.git
-cat > "$tmp/run/bin/pi" <<'EOF'
+cat > "$tmp/run/bin/pi" <<EOF
 #!/bin/sh
-printf 'SCOUT_READY CHI-TEST\nDISPATCH_WORKER\n'
+printf '%s\\n' "\$@" > "$tmp/run/pi-args.log"
+printf 'SCOUT_READY CHI-TEST\\nDISPATCH_WORKER\\n'
 exit 0
 EOF
 cat > "$tmp/run/bin/systemctl" <<EOF
@@ -55,12 +56,14 @@ EOF
 chmod +x "$tmp/run/bin/pi" "$tmp/run/bin/systemctl"
 printf '# Test prompt\n' > "$tmp/run/prompt.md"
 printf '{"mcpServers":{}}\n' > "$tmp/run/config/mcp/mcp.json"
+touch "$tmp/run/mcp-extension.ts"
 cat > "$tmp/run/config/linear-agent/test.env" <<EOF
 LINEAR_AGENT_ROLE=scout
 LINEAR_AGENT_REPO=$tmp/run/repo
 LINEAR_AGENT_PROMPT=$tmp/run/prompt.md
 LINEAR_AGENT_PI_BIN=$tmp/run/bin/pi
 LINEAR_AGENT_MCP_CONFIG=$tmp/run/config/mcp/mcp.json
+LINEAR_AGENT_MCP_EXTENSION=$tmp/run/mcp-extension.ts
 LINEAR_AGENT_AGENT=scout
 LINEAR_AGENT_MODEL=openai-codex/gpt-5.6-luna
 LINEAR_AGENT_THINKING=medium
@@ -100,6 +103,9 @@ XDG_STATE_HOME="$tmp/run/state" \
 PATH="$tmp/run/bin:$PATH" \
   "$root/bin/run-once" test > "$tmp/live-run.log"
 grep -q 'dispatching profile=test-worker' "$tmp/live-run.log"
+grep -Fxq -- '--no-extensions' "$tmp/run/pi-args.log"
+grep -Fxq -- '--extension' "$tmp/run/pi-args.log"
+grep -Fxq -- "$tmp/run/mcp-extension.ts" "$tmp/run/pi-args.log"
 grep -q -- '--user start --no-block linear-agent-worker@test-worker.service' "$tmp/run/systemctl.log"
 sed -i 's/LINEAR_AGENT_DRY_RUN=0/LINEAR_AGENT_DRY_RUN=1/' "$tmp/run/config/linear-agent/test.env"
 
