@@ -72,6 +72,16 @@ export class ProjectionPublicationError extends Schema.TaggedError<ProjectionPub
   { path: Schema.String, cause: Schema.Defect() },
 ) {}
 
+export class MemoryConfigFileError extends Schema.TaggedError<MemoryConfigFileError>()(
+  'MemoryConfigFileError',
+  {
+    code: Schema.Literal('MEMORY_CONFIG_FILE_ERROR'),
+    path: Schema.String,
+    message: Schema.String,
+    cause: Schema.Defect(),
+  },
+) {}
+
 export function databaseBusyError(
   operation: string,
   cause: unknown,

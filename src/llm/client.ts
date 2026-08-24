@@ -1,3 +1,4 @@
+import { Redacted } from 'effect'
 import type {
   LlmCallOptions,
   LlmConfig,
@@ -64,7 +65,7 @@ async function callOnce<T = unknown>(
     response = await fetch(request.url, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${config.apiKey}`,
+        Authorization: `Bearer ${Redacted.value(config.apiKey)}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(request.body),

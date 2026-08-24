@@ -186,6 +186,16 @@ function formatError(error: unknown): JsonError['error'] {
   if (isCanonicalStorageError(error)) {
     return { code: error.code, message: error.message }
   }
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    typeof error.code === 'string' &&
+    'message' in error &&
+    typeof error.message === 'string'
+  ) {
+    return { code: error.code, message: error.message }
+  }
   if (typeof error === 'object' && error !== null && '_tag' in error) {
     const tagged = error as { _tag: string; cause?: unknown; path?: string }
     const cause = tagged.cause

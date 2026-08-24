@@ -2,6 +2,7 @@ import { describe, expect, test, mock } from 'bun:test'
 import { createLlmClient } from '../src/llm/client'
 import { extractJsonObject, parseJsonResponse } from '../src/llm/json'
 import type { LlmConfig } from '../src/llm/types'
+import { Redacted } from 'effect'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -9,7 +10,7 @@ import type { LlmConfig } from '../src/llm/types'
 
 const BASE_CONFIG: LlmConfig = {
   apiUrl: 'https://example.com/v1/chat/completions',
-  apiKey: 'test-key',
+  apiKey: Redacted.make('test-key'),
   model: 'test-model',
   maxTokens: 1000,
   timeoutMs: 5000,
@@ -17,7 +18,7 @@ const BASE_CONFIG: LlmConfig = {
 
 const ZEN_CHAT_CONFIG: LlmConfig = {
   apiUrl: 'https://opencode.ai/zen/v1/chat/completions',
-  apiKey: 'test-key',
+  apiKey: Redacted.make('test-key'),
   model: 'gpt-5.4-mini',
   maxTokens: 1000,
   timeoutMs: 5000,

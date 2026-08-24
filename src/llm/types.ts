@@ -1,3 +1,5 @@
+import type { Redacted } from 'effect'
+
 export type LlmRole = 'system' | 'user' | 'assistant'
 
 export type LlmMessage = {
@@ -25,7 +27,7 @@ export type LlmStructuredOutputOptions<T = unknown> = {
 export type LlmConfig = {
   /** Full provider URL, e.g. https://opencode.ai/zen/v1/chat/completions */
   apiUrl: string
-  apiKey: string
+  apiKey: Redacted.Redacted<string>
   model: string
   /** Default max output tokens per call */
   maxTokens: number

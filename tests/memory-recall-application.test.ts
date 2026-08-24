@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { Effect, Result } from 'effect'
+import { Effect, Redacted, Result } from 'effect'
 import type { Database } from 'bun:sqlite'
 import { getDbClientByPath } from '../src/db/client'
 import { importCanonicalOpencodeRecall } from '../src/memory/application/recall-import'
@@ -12,7 +12,7 @@ import type { RecallSummaryResult } from '../src/memory/opencode/summary-schema'
 
 const config = {
   apiUrl: 'test',
-  apiKey: 'test',
+  apiKey: Redacted.make('test'),
   model: 'test',
   maxTokens: 1,
   timeoutMs: 1,

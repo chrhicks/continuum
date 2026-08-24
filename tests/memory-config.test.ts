@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { ConfigProvider, Effect } from 'effect'
+import { ConfigProvider, Effect, Redacted } from 'effect'
 import { loadMemoryConfig, type MemoryConfig } from '../src/memory/config'
 
 function withTempCwd(run: () => void): void {
@@ -34,7 +34,10 @@ describe('memory config', () => {
   test('auto-enables consolidation from an Effect ConfigProvider', () => {
     withTempCwd(() => {
       const config = readConfig({ OPENCODE_ZEN_API_KEY: 'test-key' })
-      expect(config.consolidation?.api_key).toBe('test-key')
+      const apiKey = config.consolidation?.api_key
+      if (!apiKey) throw new Error('missing consolidation key')
+      expect(Redacted.value(apiKey)).toBe('test-key')
+      expect(JSON.stringify(config)).not.toContain('test-key')
       expect(config.consolidation?.api_url).toBe(
         'https://opencode.ai/zen/v1/responses',
       )
@@ -61,9 +64,27 @@ describe('memory config', () => {
         { OPENCODE_ZEN_API_KEY: 'environment-key' },
         memoryDir,
       )
-      expect(config.consolidation?.api_key).toBe('file-key')
+      const apiKey = config.consolidation?.api_key
+      if (!apiKey) throw new Error('missing consolidation key')
+      expect(Redacted.value(apiKey)).toBe('file-key')
+      expect(JSON.stringify(config)).not.toContain('file-key')
       expect(config.consolidation?.model).toBe('file-model')
       expect(config.consolidation?.timeout_ms).toBe(1234)
+    })
+  })
+
+  test('reports malformed YAML instead of treating it as absent', () => {
+    withTempCwd(() => {
+      const memoryDir = join(process.cwd(), '.continuum', 'memory')
+      mkdirSync(memoryDir, { recursive: true })
+      writeFileSync(
+        join(memoryDir, 'config.yml'),
+        'consolidation: [unterminated',
+      )
+
+      expect(() => readConfig({}, memoryDir)).toThrow(
+        'Memory configuration is unreadable or malformed',
+      )
     })
   })
 
