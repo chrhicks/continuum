@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+profile=continuum
+enable=0
+for arg in "$@"; do
+  case "$arg" in
+    --enable) enable=1 ;;
+    --profile=*) profile=${arg#*=} ;;
+    *) printf 'usage: %s [--profile=NAME] [--enable]\n' "$0" >&2; exit 64 ;;
+  esac
+done
+if [[ ! $profile =~ ^[a-zA-Z0-9._-]+$ ]]; then
+  printf 'invalid profile: %s\n' "$profile" >&2
+  exit 64
+fi
+
+root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+config_home=${XDG_CONFIG_HOME:-$HOME/.config}
+data_home=${XDG_DATA_HOME:-$HOME/.local/share}
+libexec_home=$HOME/.local/libexec
+unit_home=$config_home/systemd/user
+config=$config_home/linear-agent/$profile.env
+
+install -Dm755 "$root/bin/run-once" "$libexec_home/linear-agent/run-once"
+install -Dm644 "$root/prompts/worker.md" "$data_home/linear-agent/worker.md"
+install -Dm644 "$root/prompts/scout.md" "$data_home/linear-agent/scout.md"
+install -Dm644 "$root/systemd/linear-agent-worker@.service" "$unit_home/linear-agent-worker@.service"
+install -Dm644 "$root/systemd/linear-agent-worker@.timer" "$unit_home/linear-agent-worker@.timer"
+
+if [[ ! -e $config ]]; then
+  install -Dm600 "$root/config/continuum.env.example" "$config"
+  printf 'created disabled-by-default config: %s\n' "$config"
+else
+  printf 'preserved existing config: %s\n' "$config"
+fi
+
+systemctl --user daemon-reload
+printf 'installed linear-agent worker for profile %s\n' "$profile"
+printf 'first run: systemctl --user start linear-agent-worker@%s.service\n' "$profile"
+printf 'logs: journalctl --user -u linear-agent-worker@%s.service\n' "$profile"
+
+if (( enable )); then
+  systemctl --user enable --now "linear-agent-worker@$profile.timer"
+  printf 'enabled timer; config still controls LINEAR_AGENT_DRY_RUN\n'
+else
+  printf 'timer not enabled; pass --enable only after a successful dry run\n'
+fi
