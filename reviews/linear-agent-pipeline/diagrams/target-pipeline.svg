@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" role="img" aria-labelledby="title desc">
+  <title id="title">Recommended agent pipeline</title>
+  <desc id="desc">A deterministic supervisor owns Linear, Continuum, Git, and credentials while a sandboxed coding model receives one frozen issue and only edits one worktree.</desc>
+  <defs><marker id="a" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#94a3b8"/></marker><style>.bg{fill:#07111f}.title{fill:#f8fafc;font:700 28px sans-serif}.sub{fill:#94a3b8;font:15px sans-serif}.box{rx:14;stroke-width:2}.h{fill:#f8fafc;font:700 17px sans-serif}.t{fill:#cbd5e1;font:14px sans-serif}.g{fill:#0f3d37;stroke:#2dd4bf}.b{fill:#17366e;stroke:#60a5fa}.p{fill:#422174;stroke:#a78bfa}.line{stroke:#94a3b8;stroke-width:3;fill:none;marker-end:url(#a)}.dash{stroke-dasharray:8 7}</style></defs>
+  <rect class="bg" width="1280" height="720"/>
+  <text class="title" x="50" y="55">Target pipeline: deterministic control, sandboxed cognition</text>
+  <text class="sub" x="50" y="83">The model never receives coordination credentials and is never started for an empty queue.</text>
+
+  <rect class="box b" x="55" y="150" width="200" height="120"/><text class="h" x="80" y="184">Linear</text><text class="t" x="80" y="213">Todo + route label</text><text class="t" x="80" y="237">structured issue fields</text>
+  <path class="line" d="M255 210 H330"/>
+
+  <rect class="box g" x="330" y="120" width="275" height="180"/><text class="h" x="355" y="155">Deterministic supervisor</text><text class="t" x="355" y="185">cheap query and schema check</text><text class="t" x="355" y="209">claim + durable local lease</text><text class="t" x="355" y="233">create worktree and run record</text><text class="t" x="355" y="257">owns coordination credentials</text>
+  <path class="line" d="M605 210 H680"/>
+
+  <rect class="box p" x="680" y="120" width="250" height="180"/><text class="h" x="705" y="155">Sandboxed Pi worker</text><text class="t" x="705" y="185">one frozen issue envelope</text><text class="t" x="705" y="209">one writable worktree</text><text class="t" x="705" y="233">pinned model and budget</text><text class="t" x="705" y="257">no Linear, gh, SSH, cloud</text>
+  <path class="line" d="M805 300 V390"/>
+
+  <rect class="box p" x="680" y="390" width="250" height="130"/><text class="h" x="705" y="425">Structured result</text><text class="t" x="705" y="454">changed files, tests, risks</text><text class="t" x="705" y="478">candidate commit metadata</text>
+  <path class="line" d="M680 455 H605"/>
+
+  <rect class="box g" x="330" y="375" width="275" height="175"/><text class="h" x="355" y="410">Independent verifier</text><text class="t" x="355" y="439">checks diff and validation</text><text class="t" x="355" y="463">commits/pushes/opens PR</text><text class="t" x="355" y="487">updates Continuum + Linear</text><text class="t" x="355" y="511">distinct blocked/error status</text>
+
+  <path class="line" d="M330 465 H255"/>
+  <rect class="box b" x="55" y="390" width="200" height="150"/><text class="h" x="80" y="425">GitHub + Continuum</text><text class="t" x="80" y="454">PR and CI watcher</text><text class="t" x="80" y="478">single ledger runtime</text><text class="t" x="80" y="502">human merge authority</text>
+
+  <path class="line dash" d="M467 300 V375"/>
+  <text class="sub" x="50" y="625">Timer or webhook wakes only the supervisor. NO_WORK exits before any model request.</text>
+  <text class="sub" x="50" y="655">One dispatcher host first; add compare-and-swap leasing before multi-machine execution.</text>
+</svg>
