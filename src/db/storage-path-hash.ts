@@ -14,6 +14,8 @@ import { readMigrationReceipt } from './storage-receipt'
 import {
   publishDatabaseSnapshot,
   readDatabaseSnapshot,
+  type DatabaseSnapshot,
+  type StorageFingerprint,
 } from './storage-snapshot'
 
 export function upgradePathHashStorage(
@@ -29,7 +31,7 @@ export function upgradePathHashStorage(
     sourceFingerprint: source.fingerprint,
   }
   const lineages: StorageLineage[] = [pathHashLineage]
-  const priorLegacy = priorLegacyLineage(workspaceRoot, oldPaths)
+  const priorLegacy = priorLegacyLineage(workspaceRoot, oldPaths, source)
   if (priorLegacy) lineages.push(priorLegacy)
 
   if (existsSync(paths.dbPath)) {
@@ -65,6 +67,7 @@ function assertExistingDestination(
 function priorLegacyLineage(
   workspaceRoot: string,
   oldPaths: StoragePaths,
+  oldCanonical: DatabaseSnapshot,
 ): StorageLineage | null {
   if (!existsSync(oldPaths.receiptPath) || !existsSync(oldPaths.sourcePath)) {
     return null
@@ -73,6 +76,8 @@ function priorLegacyLineage(
   const validOldIdentity =
     receipt.version === 1 &&
     receipt.projectId === pathHashProjectStorageId(workspaceRoot) &&
+    receipt.sourcePath === oldPaths.sourcePath &&
+    receipt.destinationPath === oldPaths.dbPath &&
     receipt.method === 'sqlite-serialize-snapshot'
   if (!validOldIdentity) {
     throw migrationFailure(
@@ -80,11 +85,19 @@ function priorLegacyLineage(
     )
   }
   const source = readDatabaseSnapshot(oldPaths.sourcePath)
-  if (
-    source.fingerprint.digest !== receipt.sourceFingerprint.digest ||
-    source.fingerprint.byteLength !== receipt.sourceFingerprint.byteLength
-  ) {
+  if (!fingerprintMatches(source, receipt.sourceFingerprint)) return null
+  if (!fingerprintMatches(oldCanonical, receipt.destinationFingerprint)) {
     return null
   }
   return legacyLineage(workspaceRoot, oldPaths.sourcePath, source)
+}
+
+function fingerprintMatches(
+  snapshot: DatabaseSnapshot,
+  expected: StorageFingerprint,
+): boolean {
+  return (
+    snapshot.fingerprint.digest === expected.digest &&
+    snapshot.fingerprint.byteLength === expected.byteLength
+  )
 }

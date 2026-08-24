@@ -272,26 +272,7 @@ describe('XDG canonical database migration', () => {
     insertMemory(old, 'canonical-newer', 'newer canonical write')
     old.close()
     const oldDestination = readDatabaseSnapshot(oldCanonical)
-    writeFileSync(
-      join(dirname(oldCanonical), 'legacy-migration-receipt.json'),
-      `${JSON.stringify(
-        {
-          version: 1,
-          projectId: createHash('sha256')
-            .update(fixture.workspace)
-            .digest('hex'),
-          workspacePath: fixture.workspace,
-          sourcePath: fixture.legacyDb,
-          destinationPath: oldCanonical,
-          sourceFingerprint: source.fingerprint,
-          destinationFingerprint: oldDestination.fingerprint,
-          migratedAt: new Date().toISOString(),
-          method: 'sqlite-serialize-snapshot',
-        },
-        null,
-        2,
-      )}\n`,
-    )
+    writePathHashReceipt(fixture, oldCanonical, source, oldDestination)
 
     const summary = cli(fixture, ['summary'])
     expect(summary.status).toBe(0)
@@ -311,6 +292,39 @@ describe('XDG canonical database migration', () => {
       ),
     ) as { version: number }
     expect(stableReceipt.version).toBe(2)
+  })
+
+  test('rejects a replaced path-hash canonical despite its legacy receipt', async () => {
+    const fixture = await legacyFixture()
+    const legacy = new Database(fixture.legacyDb)
+    insertMemory(legacy, 'legacy-receipt', 'legacy receipt proof')
+    legacy.close()
+    const source = readDatabaseSnapshot(fixture.legacyDb)
+
+    const oldCanonical = pathHashCanonicalDbPath(
+      fixture.workspace,
+      fixture.dataHome,
+    )
+    publishDatabaseSnapshot(oldCanonical, source)
+    const migrated = readDatabaseSnapshot(oldCanonical)
+    writePathHashReceipt(fixture, oldCanonical, source, migrated)
+
+    const preserved = `${oldCanonical}.preserved`
+    renameSync(oldCanonical, preserved)
+    await migrateDb(oldCanonical)
+    const unrelated = new Database(oldCanonical)
+    insertMemory(unrelated, 'unrelated-only', 'unrelated path-hash canonical')
+    unrelated.close()
+
+    const summary = cli(fixture, ['summary'])
+    expect(summary.status).not.toBe(0)
+    expect(summary.stderr).toContain('divergent')
+    expect(summary.stderr).not.toContain('may be removed')
+    expect(memoryContents(oldCanonical)).toContain(
+      'unrelated path-hash canonical',
+    )
+    expect(memoryContents(preserved)).toContain('legacy receipt proof')
+    expect(memoryContents(fixture.legacyDb)).toContain('legacy receipt proof')
   })
 
   test('keeps canonical task and memory data visible after workspace rename', async () => {
@@ -351,6 +365,32 @@ type Fixture = {
 function pathHashCanonicalDbPath(workspace: string, dataHome: string): string {
   const id = createHash('sha256').update(workspace).digest('hex')
   return join(dataHome, 'continuum', 'projects', id, 'continuum.db')
+}
+
+function writePathHashReceipt(
+  fixture: Fixture,
+  oldCanonical: string,
+  source: ReturnType<typeof readDatabaseSnapshot>,
+  destination: ReturnType<typeof readDatabaseSnapshot>,
+): void {
+  writeFileSync(
+    join(dirname(oldCanonical), 'legacy-migration-receipt.json'),
+    `${JSON.stringify(
+      {
+        version: 1,
+        projectId: createHash('sha256').update(fixture.workspace).digest('hex'),
+        workspacePath: fixture.workspace,
+        sourcePath: fixture.legacyDb,
+        destinationPath: oldCanonical,
+        sourceFingerprint: source.fingerprint,
+        destinationFingerprint: destination.fingerprint,
+        migratedAt: new Date().toISOString(),
+        method: 'sqlite-serialize-snapshot',
+      },
+      null,
+      2,
+    )}\n`,
+  )
 }
 
 async function legacyFixture(): Promise<Fixture> {
