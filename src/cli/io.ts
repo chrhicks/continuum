@@ -8,6 +8,8 @@ import {
   memoryRuntimeLayer,
 } from '../memory/runtime/memory-runtime'
 import { getActiveWorkspaceContext } from '../workspace/context'
+import { prepareCanonicalDatabase } from '../db/storage'
+import { isCanonicalStorageError } from '../db/storage-errors'
 
 export type GlobalCliOptions = {
   json: boolean
@@ -164,6 +166,7 @@ export async function runMemoryCommand<T, E>(
   await runCommand(
     command,
     async () => {
+      prepareCanonicalDatabase(context.workspaceRoot)
       const result = await Effect.runPromise(Effect.either(program))
       if (Either.isLeft(result)) throw result.left
       return result.right
@@ -179,6 +182,9 @@ function formatError(error: unknown): JsonError['error'] {
       message: error.message,
       suggestions: error.suggestions,
     }
+  }
+  if (isCanonicalStorageError(error)) {
+    return { code: error.code, message: error.message }
   }
   if (typeof error === 'object' && error !== null && '_tag' in error) {
     const tagged = error as { _tag: string; cause?: unknown; path?: string }

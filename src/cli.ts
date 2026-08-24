@@ -12,6 +12,7 @@ import {
   clearActiveWorkspaceContext,
 } from './workspace/context'
 import { resolveWorkspaceContext } from './workspace/resolve'
+import { canonicalDbFilePath } from './db/paths'
 
 const PREVIOUS_WORKSPACE_CONTEXT = Symbol('previous-workspace-context')
 
@@ -83,11 +84,15 @@ function addInitCommand(program: Command): void {
         ({ status }) => {
           if (!status.created) {
             console.log('Continuum is already initialized in this directory.')
-            console.log(`Database: ${process.cwd()}/.continuum/continuum.db`)
+            console.log(
+              `Database: ${canonicalDbFilePath(resolveWorkspaceContext().workspaceRoot)}`,
+            )
             return
           }
-          console.log('Initialized continuum in current directory.')
-          console.log(`Database: ${process.cwd()}/.continuum/continuum.db`)
+          console.log('Initialized continuum for current workspace.')
+          console.log(
+            `Database: ${canonicalDbFilePath(resolveWorkspaceContext().workspaceRoot)}`,
+          )
           console.log('')
           console.log('Next steps:')
           console.log('  continuum task list              List tasks')

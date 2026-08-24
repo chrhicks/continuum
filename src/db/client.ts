@@ -3,7 +3,8 @@ import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { drizzle } from 'drizzle-orm/bun-sqlite'
 import * as schema from './schema'
-import { dbFilePath } from './paths'
+import { canonicalDbFilePath } from './paths'
+import { prepareCanonicalDatabase } from './storage'
 import { runMigrations } from './migrate'
 import { configureSqlite } from './sqlite'
 
@@ -45,6 +46,7 @@ export async function getDbClient(
   directory: string,
   options: { migrate?: boolean } = {},
 ): Promise<DbHandle> {
-  const dbPath = dbFilePath(directory)
+  await prepareCanonicalDatabase(directory)
+  const dbPath = canonicalDbFilePath(directory)
   return getDbClientByPath(dbPath, options)
 }

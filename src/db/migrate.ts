@@ -12,7 +12,7 @@ export function runMigrations(sqlite: Database): void {
   applyMigrations(sqlite)
 }
 
-export async function migrateDb(dbPath: string): Promise<void> {
+export function migrateDbSync(dbPath: string): void {
   const sqlite = new Database(dbPath)
   configureSqlite(sqlite)
   try {
@@ -20,6 +20,10 @@ export async function migrateDb(dbPath: string): Promise<void> {
   } finally {
     sqlite.close()
   }
+}
+
+export async function migrateDb(dbPath: string): Promise<void> {
+  migrateDbSync(dbPath)
 }
 
 function applyMigrations(sqlite: Database): void {

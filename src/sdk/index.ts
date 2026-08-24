@@ -1,4 +1,5 @@
 import { init_project, init_status } from '../task/util'
+import { resolveWorkspaceRoot } from '../workspace/resolve'
 import {
   complete_task_for_directory,
   create_task_for_directory,
@@ -44,19 +45,16 @@ import type {
 } from './types'
 
 function get_directory(): string {
-  return process.cwd()
+  return resolveWorkspaceRoot()
 }
 
 const continuum: ContinuumSDK = {
   task: {
     init: async (): Promise<SdkInitStatus> => {
-      const directory = process.cwd()
+      const directory = get_directory()
       const initial = await init_status({ directory })
-      let created = false
-      if (!initial.dbFileExists) {
-        await init_project({ directory })
-        created = true
-      }
+      const created = !initial.dbFileExists
+      await init_project({ directory })
       const finalStatus = await init_status({ directory })
       return {
         success: true,

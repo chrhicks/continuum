@@ -1,6 +1,7 @@
 import { existsSync, statSync } from 'node:fs'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { homedir } from 'node:os'
+import { canonicalDbFilePath } from '../db/paths'
 
 export type WorkspaceContext = {
   invocationCwd: string
@@ -21,7 +22,6 @@ export type WorkspaceResolveOptions = {
 const CONTINUUM_DIR_NAME = '.continuum'
 const MEMORY_DIR_NAME = 'memory'
 const RECALL_DIR_PARTS = ['recall', 'opencode'] as const
-const CONTINUUM_DB_FILE = 'continuum.db'
 
 export function resolveWorkspaceContext(
   options: WorkspaceResolveOptions = {},
@@ -43,7 +43,7 @@ export function resolveWorkspaceContext(
     continuumDir,
     memoryDir,
     recallDir,
-    continuumDbPath: join(continuumDir, CONTINUUM_DB_FILE),
+    continuumDbPath: canonicalDbFilePath(workspaceRoot),
     opencodeDbPath: resolveDefaultOpencodeDbPath(),
   }
 }

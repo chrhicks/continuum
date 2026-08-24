@@ -4,6 +4,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawn, spawnSync } from 'node:child_process'
+import { canonicalDbFilePath } from '../src/db/paths'
 
 const roots: string[] = []
 
@@ -35,7 +36,7 @@ describe('multi-process memory append', () => {
     )
     expect(results.every((result) => result.code === 0)).toBe(true)
 
-    const sqlite = new Database(join(root, '.continuum', 'continuum.db'))
+    const sqlite = new Database(canonicalDbFilePath(root))
     const rows = sqlite
       .query(
         'SELECT sequence, content FROM memory_journal_entries ORDER BY sequence',
@@ -78,7 +79,7 @@ describe('multi-process memory append', () => {
     ])
     expect(results.every((result) => result.code === 0)).toBe(true)
 
-    const sqlite = new Database(join(root, '.continuum', 'continuum.db'))
+    const sqlite = new Database(canonicalDbFilePath(root))
     const boundary = (
       sqlite
         .query(

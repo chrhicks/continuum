@@ -7,6 +7,7 @@ import {
   type MemoryEvidence,
 } from '../memory/application/query'
 import { getDbClientByPath } from '../db/client'
+import { prepareCanonicalDatabase } from '../db/storage'
 import { renderMemorySummary } from '../cli/commands/summary-memory'
 import {
   loadTaskSummary,
@@ -106,6 +107,7 @@ export function resolveMcpWorkspace(workspace: string): McpWorkspace {
     throw new Error(`workspace directory does not exist: ${workspace}`)
   }
   const resolved = resolveWorkspaceContext({ startDir: workspace })
+  prepareCanonicalDatabase(resolved.workspaceRoot)
   if (!existsSync(resolved.continuumDbPath)) {
     throw new Error(
       `Continuum is not initialized in workspace: ${resolved.workspaceRoot}`,
