@@ -14,12 +14,21 @@ const CanonicalRecallSummary = Schema.Struct({
   blockers: Schema.Array(Schema.String),
   open_questions: Schema.Array(Schema.String),
   next_steps: Schema.Array(Schema.String),
-  confidence: Schema.Literal('low', 'medium', 'high'),
+  confidence: Schema.Literals(['low', 'medium', 'high']),
 })
-const RecallSummarySchema = Schema.Union(
+const RecallSummarySchema = Schema.Union([
   MemorySummarySchema,
   CanonicalRecallSummary,
-)
+])
+
+type StoredRecallEvidence = {
+  type: 'recall-message' | 'recall-summary'
+  id: string
+  content: string
+  created_at: string | null
+  session_id: string
+  current: number
+}
 
 export function appendRecallEvidence(
   sqlite: Database,
@@ -36,16 +45,16 @@ export function appendRecallEvidence(
               r.source_fingerprint = s.fingerprint
        FROM memory_recall_summaries r JOIN memory_recall_sources s ON s.id=r.source_id`,
     )
-    .all() as Array<Record<string, string | null>>
+    .all() as StoredRecallEvidence[]
   for (const row of rows) {
     const current = Boolean(row.current)
     if (!includeHistory && !current) continue
     const derived = row.type === 'recall-summary'
     evidence.push({
-      type: row.type as MemoryEvidence['type'],
+      type: row.type,
       provenance: derived ? 'derived' : 'raw',
-      id: row.id!,
-      content: derived ? flattenRecallSummary(row.content!) : row.content!,
+      id: row.id,
+      content: derived ? flattenRecallSummary(row.content) : row.content,
       createdAt: row.created_at,
       source: `opencode session ${row.session_id}${current ? '' : ' (historical)'}`,
       tags: [],

@@ -3,7 +3,7 @@ import { Database } from 'bun:sqlite'
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { Effect, Either } from 'effect'
+import { Deferred, Effect, Result } from 'effect'
 import { createClient, getDbClientByPath } from '../src/db/client'
 import { appendMemory } from '../src/memory/application/append'
 import { consolidateMemory } from '../src/memory/application/consolidate'
@@ -108,8 +108,8 @@ describe('memory consolidate application', () => {
     await append(paths, 'first')
     const firstHandle = createClient(paths.dbPath)
     const secondHandle = createClient(paths.dbPath)
-    const firstStarted = Promise.withResolvers<void>()
-    const releaseFirst = Promise.withResolvers<void>()
+    const firstStarted = Effect.runSync(Deferred.make<void>())
+    const releaseFirst = Effect.runSync(Deferred.make<void>())
     try {
       const first = Effect.runPromise(
         consolidateMemory({
@@ -117,13 +117,13 @@ describe('memory consolidate application', () => {
           journal: makeJournalRepository(firstHandle),
           consolidations: makeConsolidationRepository(firstHandle),
           summarize: async () => {
-            firstStarted.resolve()
-            await releaseFirst.promise
+            await Effect.runPromise(Deferred.succeed(firstStarted, undefined))
+            await Effect.runPromise(Deferred.await(releaseFirst))
             return summary('stale overlap')
           },
         }),
       )
-      await firstStarted.promise
+      await Effect.runPromise(Deferred.await(firstStarted))
       await append(paths, 'second')
       const second = await Effect.runPromise(
         consolidateMemory({
@@ -134,7 +134,7 @@ describe('memory consolidate application', () => {
         }),
       )
       expect(second.status).toBe('completed')
-      releaseFirst.resolve()
+      await Effect.runPromise(Deferred.succeed(releaseFirst, undefined))
       const conflicted = await first
       expect(conflicted.status).toBe('conflict')
       if (conflicted.status !== 'conflict') return
@@ -151,7 +151,7 @@ describe('memory consolidate application', () => {
     await append(paths, 'immutable')
     const before = journalRows(paths.dbPath)
     const failure = await Effect.runPromise(
-      Effect.either(
+      Effect.result(
         consolidateMemory({
           ...paths,
           summarize: async () => {
@@ -160,9 +160,9 @@ describe('memory consolidate application', () => {
         }),
       ),
     )
-    expect(
-      Either.isLeft(failure) && (failure.left as { _tag?: string })._tag,
-    ).toBe('ConsolidationSummarizationError')
+    expect(Result.isFailure(failure) && taggedErrorName(failure.failure)).toBe(
+      'ConsolidationSummarizationError',
+    )
     expect(journalRows(paths.dbPath)).toEqual(before)
     expect(count(paths.dbPath, 'memory_consolidations')).toBe(0)
   })
@@ -227,6 +227,12 @@ describe('memory consolidate application', () => {
     expect(count(paths.dbPath, 'memory_consolidations')).toBe(1)
   })
 })
+
+function taggedErrorName(error: unknown): string | undefined {
+  return typeof error === 'object' && error !== null && '_tag' in error
+    ? String(error._tag)
+    : undefined
+}
 
 function count(dbPath: string, table: string): number {
   const db = new Database(dbPath)

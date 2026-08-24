@@ -7,6 +7,7 @@ import {
   DecodeError,
   databaseBusyError,
 } from '../domain/errors'
+import { JournalMetadata } from '../domain/journal-entry'
 import { MemorySummarySchema } from '../domain/memory-summary'
 import type { MemorySummary } from '../types'
 import { appendRecallEvidence } from './query-recall'
@@ -28,6 +29,14 @@ export type MemoryQueryOptions = {
   tags?: string[]
   afterDate?: Date
   limit?: number
+}
+
+type StoredJournalEvidence = {
+  id: string
+  content: string
+  created_at: string
+  source: string | null
+  metadata: string
 }
 
 export function listMemoryEvidence(
@@ -58,7 +67,7 @@ export function listMemoryEvidence(
             `SELECT id, content, created_at, source, metadata
          FROM memory_journal_entries WHERE sequence > ? ORDER BY sequence DESC`,
           )
-          .all(boundary) as Array<Record<string, string | null>>
+          .all(boundary) as StoredJournalEvidence[]
         for (const row of rows) {
           const metadata = decodeJson(
             JournalMetadata,
@@ -68,8 +77,8 @@ export function listMemoryEvidence(
           evidence.push({
             type: 'journal',
             provenance: 'raw',
-            id: row.id!,
-            content: row.content!,
+            id: row.id,
+            content: row.content,
             createdAt: row.created_at,
             source: row.source ?? 'journal',
             tags: [...(metadata.tags ?? [])],
@@ -195,14 +204,11 @@ function listMemoryEvidenceIncludingRecallHistory(
   )
 }
 
-const JournalMetadata = Schema.Struct({
-  tags: Schema.optional(Schema.Array(Schema.String)),
-})
-function decodeJson<A, I>(
-  schema: Schema.Schema<A, I>,
+function decodeJson<S extends Schema.ConstraintDecoder<unknown>>(
+  schema: S,
   value: string,
   name: string,
-): A {
+): S['Type'] {
   try {
     return Schema.decodeUnknownSync(schema)(JSON.parse(value))
   } catch (cause) {

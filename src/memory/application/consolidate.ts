@@ -1,7 +1,7 @@
-import { Effect, Either } from 'effect'
+import { Effect, Result } from 'effect'
 import { getDbClientByPath } from '../../db/client'
 import type { MemoryConfig } from '../config'
-import { getMemoryConfig } from '../config'
+import { loadMemoryConfig } from '../config'
 import type { JournalEntry } from '../domain/journal-entry'
 import {
   ConsolidationConflictError,
@@ -71,13 +71,18 @@ export function consolidateMemory(
     const entries = yield* journal.listPending(boundary, snapshot)
     if (entries.length === 0)
       return { status: 'no-pending', dryRun: options.dryRun ?? false } as const
-    const config = options.config ?? getMemoryConfig()
+    const first = entries[0]
+    const last = entries.at(-1)
+    if (!first || !last)
+      return { status: 'no-pending', dryRun: options.dryRun ?? false } as const
+    const config =
+      options.config ?? (yield* loadMemoryConfig(options.memoryDir))
     const summary = yield* Effect.tryPromise({
       try: () => (options.summarize ?? defaultSummarizer(config))(entries),
       catch: (cause) => new ConsolidationSummarizationError({ cause }),
     })
-    const firstSequence = entries[0]!.sequence
-    const lastSequence = entries.at(-1)!.sequence
+    const firstSequence = first.sequence
+    const lastSequence = last.sequence
     if (options.dryRun)
       return {
         status: 'preview',
@@ -87,7 +92,7 @@ export function consolidateMemory(
         entryCount: entries.length,
         summary,
       } as const
-    const completion = yield* Effect.either(
+    const completion = yield* Effect.result(
       consolidations.complete({
         expectedBoundary: boundary,
         firstSequence,
@@ -96,17 +101,17 @@ export function consolidateMemory(
         model: config.consolidation?.model,
       }),
     )
-    if (Either.isLeft(completion)) {
-      if (completion.left instanceof ConsolidationConflictError)
+    if (Result.isFailure(completion)) {
+      if (completion.failure instanceof ConsolidationConflictError)
         return {
           status: 'conflict',
           dryRun: false,
-          error: completion.left,
+          error: completion.failure,
         } as const
-      return yield* Effect.fail(completion.left)
+      return yield* Effect.fail(completion.failure)
     }
-    const consolidation = completion.right
-    const projection = yield* Effect.either(
+    const consolidation = completion.success
+    const projection = yield* Effect.result(
       regenerateProjections({
         journal,
         consolidations,
@@ -121,9 +126,9 @@ export function consolidateMemory(
       consolidation,
       entryCount: entries.length,
       projection:
-        projection._tag === 'Right'
+        projection._tag === 'Success'
           ? ({ stale: false } as const)
-          : ({ stale: true, error: projection.left } as const),
+          : ({ stale: true, error: projection.failure } as const),
     } as const
   })
 }

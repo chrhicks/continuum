@@ -29,7 +29,7 @@
     "@modelcontextprotocol/sdk": "1.29.0",
     "commander": "^14.0.3",
     "drizzle-orm": "^0.44.4",
-    "effect": "^3.21.4",
+    "effect": "4.0.0-beta.107",
     "yaml": "^2.8.1",
     "zod": "^3.25.0"
   },

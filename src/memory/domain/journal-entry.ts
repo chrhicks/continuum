@@ -1,30 +1,36 @@
 import { Schema } from 'effect'
 
+const PositiveInt = Schema.Int.check(Schema.isGreaterThan(0))
+
 export const JournalMetadata = Schema.Struct({
-  tags: Schema.optional(Schema.Array(Schema.String)),
-  taskIds: Schema.optional(Schema.Array(Schema.String)),
-  filePaths: Schema.optional(Schema.Array(Schema.String)),
-  toolNames: Schema.optional(Schema.Array(Schema.String)),
-  operationId: Schema.optional(Schema.String),
+  tags: Schema.optionalKey(Schema.Array(Schema.String)),
+  taskIds: Schema.optionalKey(Schema.Array(Schema.String)),
+  filePaths: Schema.optionalKey(Schema.Array(Schema.String)),
+  toolNames: Schema.optionalKey(Schema.Array(Schema.String)),
+  operationId: Schema.optionalKey(Schema.String),
 })
-export type JournalMetadata = typeof JournalMetadata.Type
+export interface JournalMetadata extends Schema.Schema.Type<
+  typeof JournalMetadata
+> {}
 
 export const JournalAppendInput = Schema.Struct({
-  id: Schema.optional(Schema.String.pipe(Schema.minLength(1))),
-  kind: Schema.String.pipe(Schema.minLength(1)),
-  content: Schema.String.pipe(Schema.minLength(1)),
-  source: Schema.optional(Schema.String.pipe(Schema.minLength(1))),
-  sourceProjectId: Schema.optional(Schema.String.pipe(Schema.minLength(1))),
-  sourceSessionId: Schema.optional(Schema.String.pipe(Schema.minLength(1))),
-  idempotencyKey: Schema.optional(Schema.String.pipe(Schema.minLength(1))),
-  metadata: Schema.optional(JournalMetadata),
-  payloadVersion: Schema.optional(Schema.Int.pipe(Schema.positive())),
-  createdAt: Schema.optional(Schema.String.pipe(Schema.minLength(1))),
+  id: Schema.optionalKey(Schema.NonEmptyString),
+  kind: Schema.NonEmptyString,
+  content: Schema.NonEmptyString,
+  source: Schema.optionalKey(Schema.NonEmptyString),
+  sourceProjectId: Schema.optionalKey(Schema.NonEmptyString),
+  sourceSessionId: Schema.optionalKey(Schema.NonEmptyString),
+  idempotencyKey: Schema.optionalKey(Schema.NonEmptyString),
+  metadata: Schema.optionalKey(JournalMetadata),
+  payloadVersion: Schema.optionalKey(PositiveInt),
+  createdAt: Schema.optionalKey(Schema.NonEmptyString),
 })
-export type JournalAppendInput = typeof JournalAppendInput.Type
+export interface JournalAppendInput extends Schema.Schema.Type<
+  typeof JournalAppendInput
+> {}
 
 export const JournalEntry = Schema.Struct({
-  sequence: Schema.Int.pipe(Schema.positive()),
+  sequence: PositiveInt,
   id: Schema.String,
   kind: Schema.String,
   content: Schema.String,
@@ -33,7 +39,7 @@ export const JournalEntry = Schema.Struct({
   sourceSessionId: Schema.NullOr(Schema.String),
   idempotencyKey: Schema.NullOr(Schema.String),
   metadata: JournalMetadata,
-  payloadVersion: Schema.Int.pipe(Schema.positive()),
+  payloadVersion: PositiveInt,
   createdAt: Schema.String,
 })
-export type JournalEntry = typeof JournalEntry.Type
+export interface JournalEntry extends Schema.Schema.Type<typeof JournalEntry> {}

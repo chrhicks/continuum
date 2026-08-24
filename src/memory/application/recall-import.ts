@@ -18,9 +18,11 @@ import {
   type RecallRepositoryService,
 } from '../repository/recall-repository'
 import { RecallSourceError, RecallSummaryError } from '../domain/errors'
+import { loadMemoryConfig, loadSummaryEnvironment } from '../config'
 
 export type CanonicalRecallImportOptions = {
   continuumDbPath?: string
+  memoryDir?: string
   dbPath?: string
   repoPath?: string
   projectId?: string
@@ -55,11 +57,21 @@ export function importCanonicalOpencodeRecall(
   return Effect.gen(function* () {
     const workspace =
       options.repoPath && options.continuumDbPath ? null : getWorkspaceContext()
+    const repoPath = options.repoPath ?? workspace?.workspaceRoot
+    const continuumDbPath =
+      options.continuumDbPath ?? workspace?.continuumDbPath
+    if (!repoPath || !continuumDbPath) {
+      return yield* Effect.fail(
+        new RecallSourceError({
+          cause: new Error('Unable to resolve recall workspace paths'),
+        }),
+      )
+    }
     const extraction = yield* Effect.try({
       try: () =>
         (options.extract ?? extractOpencodeSessions)({
           dbPath: options.dbPath,
-          repoPath: options.repoPath ?? workspace!.workspaceRoot,
+          repoPath,
           projectId: options.projectId,
           sessionId: options.sessionId,
           afterDate: options.afterDate,
@@ -68,11 +80,14 @@ export function importCanonicalOpencodeRecall(
       catch: (cause) => new RecallSourceError({ cause }),
     })
     const repository =
-      options.repository ??
-      recallRepositoryForPath(
-        options.continuumDbPath ?? workspace!.continuumDbPath,
+      options.repository ?? recallRepositoryForPath(continuumDbPath)
+    const config =
+      options.summaryConfig ??
+      resolveSummaryConfig(
+        {},
+        yield* loadMemoryConfig(options.memoryDir ?? workspace?.memoryDir),
+        yield* loadSummaryEnvironment(),
       )
-    const config = options.summaryConfig ?? resolveSummaryConfig({})
     const sessions = applySessionFilters(
       extraction.sessions,
       options.afterDate,
@@ -117,6 +132,12 @@ function isAfter(session: OpencodeSessionBundle, afterDate?: Date): boolean {
   )
 }
 
+function isRecallMessage(
+  message: NormalizedOpencodeMessage,
+): message is NormalizedOpencodeMessage & { role: 'user' | 'assistant' } {
+  return message.role === 'user' || message.role === 'assistant'
+}
+
 function importSession(
   session: OpencodeSessionBundle,
   projectId: string,
@@ -127,7 +148,7 @@ function importSession(
 ): Effect.Effect<void, unknown> {
   return Effect.gen(function* () {
     const messages = normalizeSessionMessages(session.messageBlocks).filter(
-      (message) => message.role === 'user' || message.role === 'assistant',
+      isRecallMessage,
     )
     const fingerprint = fingerprintSession(session, projectId, messages)
     const existing = yield* repository.findSource(
@@ -181,7 +202,7 @@ function importSession(
         sourceId,
         sourceFingerprint: fingerprint,
         ordinal,
-        role: message.role as 'user' | 'assistant',
+        role: message.role,
         content: message.text,
         createdAt: message.createdAt,
       })),

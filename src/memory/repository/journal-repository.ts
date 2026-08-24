@@ -1,11 +1,9 @@
-import { Context, Effect, Layer, Schema } from 'effect'
+import { Effect, Schema } from 'effect'
 import type { DbHandle } from '../../db/client'
-import { getDbClientByPath } from '../../db/client'
 import {
   DecodeError,
   DatabaseBusyError,
   JournalAppendError,
-  JournalIdempotencyError,
   databaseBusyError,
 } from '../domain/errors'
 import {
@@ -14,11 +12,7 @@ import {
   JournalMetadata,
 } from '../domain/journal-entry'
 
-type JournalError =
-  | DecodeError
-  | DatabaseBusyError
-  | JournalAppendError
-  | JournalIdempotencyError
+type JournalError = DecodeError | DatabaseBusyError | JournalAppendError
 type StoredJournalRow = {
   sequence: number
   id: string
@@ -43,11 +37,6 @@ export interface JournalRepositoryService {
   readonly maxSequence: () => Effect.Effect<number | null, JournalError>
 }
 
-export class JournalRepository extends Context.Tag('JournalRepository')<
-  JournalRepository,
-  JournalRepositoryService
->() {}
-
 const SELECT_COLUMNS = `sequence, id, kind, content, source, source_project_id,
   source_session_id, idempotency_key, metadata, payload_version, created_at`
 
@@ -55,10 +44,21 @@ export function makeJournalRepository(
   handle: DbHandle,
 ): JournalRepositoryService {
   return {
-    append: (input) => appendEntry(handle, input),
-    listPending: (after = 0, through) => listPending(handle, after, through),
-    latestBoundary: () => latestBoundary(handle),
-    maxSequence: () => maxSequence(handle),
+    append: Effect.fn('JournalRepository.append')(function* (input) {
+      return yield* appendEntry(handle, input)
+    }),
+    listPending: Effect.fn('JournalRepository.listPending')(function* (
+      after = 0,
+      through?: number,
+    ) {
+      return yield* listPending(handle, after, through)
+    }),
+    latestBoundary: Effect.fn('JournalRepository.latestBoundary')(function* () {
+      return yield* latestBoundary(handle)
+    }),
+    maxSequence: Effect.fn('JournalRepository.maxSequence')(function* () {
+      return yield* maxSequence(handle)
+    }),
   }
 }
 
@@ -76,14 +76,6 @@ function maxSequence(
       databaseBusyError('read maximum journal sequence', cause) ??
       new JournalAppendError({ cause }),
   })
-}
-
-export function journalRepositoryLayer(
-  dbPath: string,
-): Layer.Layer<JournalRepository> {
-  return Layer.sync(JournalRepository, () =>
-    makeJournalRepository(getDbClientByPath(dbPath)),
-  )
 }
 
 function appendEntry(
@@ -203,7 +195,7 @@ function latestBoundary(
 function decodeAppend(
   input: unknown,
 ): Effect.Effect<JournalAppendInput, DecodeError> {
-  return Schema.decodeUnknown(JournalAppendInput)(input).pipe(
+  return Schema.decodeUnknownEffect(JournalAppendInput)(input).pipe(
     Effect.mapError(
       (cause) => new DecodeError({ schema: 'JournalAppendInput', cause }),
     ),
@@ -215,7 +207,7 @@ function decodeRow(
 ): Effect.Effect<JournalEntry, DecodeError> {
   return Effect.gen(function* () {
     const metadata = yield* parseMetadata(row.metadata)
-    return yield* Schema.decodeUnknown(JournalEntry)({
+    return yield* Schema.decodeUnknownEffect(JournalEntry)({
       sequence: row.sequence,
       id: row.id,
       kind: row.kind,
@@ -243,7 +235,7 @@ function parseMetadata(
     catch: (cause) => new DecodeError({ schema: 'JournalMetadata', cause }),
   }).pipe(
     Effect.flatMap((metadata) =>
-      Schema.decodeUnknown(JournalMetadata)(metadata).pipe(
+      Schema.decodeUnknownEffect(JournalMetadata)(metadata).pipe(
         Effect.mapError(
           (cause) => new DecodeError({ schema: 'JournalMetadata', cause }),
         ),

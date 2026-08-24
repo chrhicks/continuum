@@ -121,7 +121,7 @@ Useful options are `--no-tasks`, `--no-memory`, `--limit <n>`, and `--memory-lin
 
 ## Architecture
 
-Commander is a thin argument adapter. Each memory or summary command creates one scoped Effect runtime containing explicit workspace, memory directory, database path, and one configured `bun:sqlite` handle. Application functions return Effects; the CLI boundary runs them and centrally renders success or tagged operational errors.
+Commander is a thin argument adapter. Each memory or summary command creates one scoped Effect runtime containing explicit workspace, memory directory, database path, and one configured `bun:sqlite` handle. Application functions return Effects; the CLI boundary runs them and centrally renders success or schema-backed tagged operational errors. The exact tested runtime is `effect@4.0.0-beta.107`; it is pinned because beta APIs are not semver-stable. Runtime credentials and model settings are decoded through Effect `Config`, with deterministic `ConfigProvider` overrides in tests.
 
 The canonical path is `${XDG_DATA_HOME:-~/.local/share}/continuum/projects/<project-id>/continuum.db`. The project ID is the SHA-256 hash of the normalized absolute workspace path, which is deterministic and avoids unsafe path text in filenames. It preserves local project isolation, but it is intentionally machine/path-local; future cross-machine linking needs an explicit portable project identity rather than assuming hashes match.
 

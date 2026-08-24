@@ -12,5 +12,5 @@ export const MemorySummarySchema = Schema.Struct({
   nextSteps: Schema.Array(Schema.String),
   tasks: Schema.Array(Schema.String),
   files: Schema.Array(Schema.String),
-  confidence: Schema.NullOr(Schema.Literal('low', 'medium', 'high')),
+  confidence: Schema.NullOr(Schema.Literals(['low', 'medium', 'high'])),
 })

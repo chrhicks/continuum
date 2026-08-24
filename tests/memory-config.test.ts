@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test'
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs'
-import { join } from 'node:path'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-
-import { getMemoryConfig } from '../src/memory/config'
+import { join } from 'node:path'
+import { ConfigProvider, Effect } from 'effect'
+import { loadMemoryConfig, type MemoryConfig } from '../src/memory/config'
 
 function withTempCwd(run: () => void): void {
   const root = mkdtempSync(join(tmpdir(), 'continuum-memory-config-'))
@@ -17,40 +17,33 @@ function withTempCwd(run: () => void): void {
   }
 }
 
-describe('memory config', () => {
-  test('auto-enables consolidation when env credentials exist', () => {
-    withTempCwd(() => {
-      const originalKey = process.env.OPENCODE_ZEN_API_KEY
-      const originalModel = process.env.SUMMARY_MODEL
-      process.env.OPENCODE_ZEN_API_KEY = 'test-key'
-      delete process.env.SUMMARY_MODEL
+function readConfig(
+  environment: Record<string, unknown>,
+  memoryDir?: string,
+): MemoryConfig {
+  return Effect.runSync(
+    loadMemoryConfig(memoryDir).pipe(
+      Effect.provide(
+        ConfigProvider.layer(ConfigProvider.fromUnknown(environment)),
+      ),
+    ),
+  )
+}
 
-      try {
-        const config = getMemoryConfig()
-        expect(config.consolidation?.api_key).toBe('test-key')
-        expect(config.consolidation?.api_url).toBe(
-          'https://opencode.ai/zen/v1/responses',
-        )
-        expect(config.consolidation?.model).toBe('gpt-5.4-mini')
-      } finally {
-        if (originalKey === undefined) {
-          delete process.env.OPENCODE_ZEN_API_KEY
-        } else {
-          process.env.OPENCODE_ZEN_API_KEY = originalKey
-        }
-        if (originalModel === undefined) {
-          delete process.env.SUMMARY_MODEL
-        } else {
-          process.env.SUMMARY_MODEL = originalModel
-        }
-      }
+describe('memory config', () => {
+  test('auto-enables consolidation from an Effect ConfigProvider', () => {
+    withTempCwd(() => {
+      const config = readConfig({ OPENCODE_ZEN_API_KEY: 'test-key' })
+      expect(config.consolidation?.api_key).toBe('test-key')
+      expect(config.consolidation?.api_url).toBe(
+        'https://opencode.ai/zen/v1/responses',
+      )
+      expect(config.consolidation?.model).toBe('gpt-5.4-mini')
     })
   })
 
-  test('config file values override env-derived consolidation defaults', () => {
+  test('config file values override runtime Config values', () => {
     withTempCwd(() => {
-      const originalKey = process.env.OPENCODE_ZEN_API_KEY
-      process.env.OPENCODE_ZEN_API_KEY = 'env-key'
       const memoryDir = join(process.cwd(), '.continuum', 'memory')
       mkdirSync(memoryDir, { recursive: true })
       writeFileSync(
@@ -61,21 +54,16 @@ describe('memory config', () => {
           '  model: file-model',
           '  timeout_ms: 1234',
         ].join('\n'),
-        'utf-8',
+        'utf8',
       )
 
-      try {
-        const config = getMemoryConfig()
-        expect(config.consolidation?.api_key).toBe('file-key')
-        expect(config.consolidation?.model).toBe('file-model')
-        expect(config.consolidation?.timeout_ms).toBe(1234)
-      } finally {
-        if (originalKey === undefined) {
-          delete process.env.OPENCODE_ZEN_API_KEY
-        } else {
-          process.env.OPENCODE_ZEN_API_KEY = originalKey
-        }
-      }
+      const config = readConfig(
+        { OPENCODE_ZEN_API_KEY: 'environment-key' },
+        memoryDir,
+      )
+      expect(config.consolidation?.api_key).toBe('file-key')
+      expect(config.consolidation?.model).toBe('file-model')
+      expect(config.consolidation?.timeout_ms).toBe(1234)
     })
   })
 
@@ -91,16 +79,12 @@ describe('memory config', () => {
         ['consolidation:', '  api_key: wrong-key', '  model: wrong-model'].join(
           '\n',
         ),
-        'utf-8',
+        'utf8',
       )
-      const originalKey = process.env.OPENCODE_ZEN_API_KEY
-      delete process.env.OPENCODE_ZEN_API_KEY
       try {
-        expect(getMemoryConfig(targetMemory).consolidation).toBeUndefined()
+        expect(readConfig({}, targetMemory).consolidation).toBeUndefined()
       } finally {
         rmSync(targetMemory, { recursive: true, force: true })
-        if (originalKey !== undefined)
-          process.env.OPENCODE_ZEN_API_KEY = originalKey
       }
     })
   })

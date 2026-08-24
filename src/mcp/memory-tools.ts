@@ -3,7 +3,6 @@ import { getDbClientByPath } from '../db/client'
 import { consolidateMemory } from '../memory/application/consolidate'
 import { importCanonicalOpencodeRecall } from '../memory/application/recall-import'
 import { getRecallStatus } from '../memory/application/recall-status'
-import { getMemoryConfig } from '../memory/config'
 import { makeConsolidationRepository } from '../memory/repository/consolidation-repository'
 import { makeJournalRepository } from '../memory/repository/journal-repository'
 import { makeRecallRepository } from '../memory/repository/recall-repository'
@@ -21,7 +20,6 @@ export async function consolidateMcpMemory(input: {
       dbPath: context.dbPath,
       memoryDir: context.memoryDir,
       dryRun: input.dryRun,
-      config: getMemoryConfig(context.memoryDir),
       journal: makeJournalRepository(handle),
       consolidations: makeConsolidationRepository(handle),
     }),
@@ -82,6 +80,7 @@ export async function importMcpRecall(input: {
   const result = await runMcpEffect(
     importCanonicalOpencodeRecall({
       continuumDbPath: context.dbPath,
+      memoryDir: context.memoryDir,
       dbPath: input.sourceDb,
       repoPath: context.workspaceRoot,
       projectId: input.projectId,

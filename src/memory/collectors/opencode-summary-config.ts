@@ -1,4 +1,4 @@
-import { getMemoryConfig } from '../config'
+import type { MemoryConfig, SummaryEnvironment } from '../config'
 import type { ResolvedSummaryConfig } from './opencode-artifacts'
 
 const DEFAULT_SUMMARY_API_URL = 'https://opencode.ai/zen/v1/responses'
@@ -22,21 +22,23 @@ export type OpencodeSummaryOptionInput = {
 
 export function resolveSummaryConfig(
   options: OpencodeSummaryOptionInput,
+  memory: MemoryConfig,
+  environment: SummaryEnvironment,
 ): ResolvedSummaryConfig | null {
   if (options.summarize === false) {
     return null
   }
-  const memoryConfig = getMemoryConfig().consolidation
+  const memoryConfig = memory.consolidation
   const apiKey =
     options.summaryApiKey ??
-    process.env.OPENCODE_ZEN_API_KEY ??
-    process.env.SUMMARY_API_KEY ??
-    process.env.OPENAI_API_KEY ??
+    environment.zenApiKey ??
+    environment.summaryApiKey ??
+    environment.openaiApiKey ??
     memoryConfig?.api_key ??
     null
   const model =
     options.summaryModel ??
-    process.env.SUMMARY_MODEL ??
+    environment.summaryModel ??
     memoryConfig?.model ??
     null
 
@@ -52,7 +54,7 @@ export function resolveSummaryConfig(
   return {
     apiUrl:
       options.summaryApiUrl ??
-      process.env.SUMMARY_API_URL ??
+      environment.summaryApiUrl ??
       memoryConfig?.api_url ??
       DEFAULT_SUMMARY_API_URL,
     apiKey,

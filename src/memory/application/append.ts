@@ -47,7 +47,7 @@ export function appendMemory(
     makeJournalRepository(getDbClientByPath(options.dbPath))
   return Effect.gen(function* () {
     const entry = yield* repository.append(options.input)
-    const projection = yield* Effect.either(
+    const projection = yield* Effect.result(
       withProjectionPublicationLock(
         dirname(options.nowPath),
         Effect.gen(function* () {
@@ -68,9 +68,9 @@ export function appendMemory(
     return {
       entry,
       projection:
-        projection._tag === 'Right'
+        projection._tag === 'Success'
           ? ({ stale: false } as const)
-          : ({ stale: true, error: projection.left } as const),
+          : ({ stale: true, error: projection.failure } as const),
     }
   })
 }

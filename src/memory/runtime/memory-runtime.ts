@@ -11,15 +11,15 @@ export type MemoryRuntimeConfig = {
 
 export type MemoryRuntimeService = MemoryRuntimeConfig & { handle: DbHandle }
 
-export class MemoryRuntime extends Context.Tag('MemoryRuntime')<
+export class MemoryRuntime extends Context.Service<
   MemoryRuntime,
   MemoryRuntimeService
->() {}
+>()('continuum/MemoryRuntime') {}
 
 export function memoryRuntimeLayer(
   config: MemoryRuntimeConfig,
 ): Layer.Layer<MemoryRuntime, DatabaseOpenError | DatabaseMigrationError> {
-  return Layer.scoped(
+  return Layer.effect(
     MemoryRuntime,
     Effect.acquireRelease(openMemoryDatabase(config), (service) =>
       Effect.sync(() => service.handle.sqlite.close()),
@@ -27,24 +27,19 @@ export function memoryRuntimeLayer(
   )
 }
 
-function openMemoryDatabase(
+const openMemoryDatabase = Effect.fn('MemoryRuntime.open')(function* (
   config: MemoryRuntimeConfig,
-): Effect.Effect<
-  MemoryRuntimeService,
-  DatabaseOpenError | DatabaseMigrationError
-> {
-  return Effect.gen(function* () {
-    const handle = yield* Effect.try({
-      try: () => createClient(config.dbPath),
-      catch: (cause) => new DatabaseOpenError({ path: config.dbPath, cause }),
-    })
-    yield* Effect.try({
-      try: () => runMigrations(handle.sqlite),
-      catch: (cause) => {
-        handle.sqlite.close()
-        return new DatabaseMigrationError({ path: config.dbPath, cause })
-      },
-    })
-    return { ...config, handle }
+) {
+  const handle = yield* Effect.try({
+    try: () => createClient(config.dbPath),
+    catch: (cause) => new DatabaseOpenError({ path: config.dbPath, cause }),
   })
-}
+  yield* Effect.try({
+    try: () => runMigrations(handle.sqlite),
+    catch: (cause) => {
+      handle.sqlite.close()
+      return new DatabaseMigrationError({ path: config.dbPath, cause })
+    },
+  })
+  return MemoryRuntime.of({ ...config, handle })
+})

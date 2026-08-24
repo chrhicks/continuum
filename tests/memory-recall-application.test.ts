@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { Effect, Either } from 'effect'
+import { Effect, Result } from 'effect'
 import type { Database } from 'bun:sqlite'
 import { getDbClientByPath } from '../src/db/client'
 import { importCanonicalOpencodeRecall } from '../src/memory/application/recall-import'
@@ -117,6 +117,12 @@ async function withRepository(
   }
 }
 
+function taggedErrorName(error: unknown): string | undefined {
+  return typeof error === 'object' && error !== null && '_tag' in error
+    ? String(error._tag)
+    : undefined
+}
+
 describe('canonical recall application', () => {
   test('unchanged reimport skips summarization and retains provenance', async () =>
     withRepository(async (repository) => {
@@ -196,7 +202,7 @@ describe('canonical recall application', () => {
         }),
       )
       const failure = await Effect.runPromise(
-        Effect.either(
+        Effect.result(
           importCanonicalOpencodeRecall({
             repository,
             summaryConfig: config,
@@ -208,7 +214,7 @@ describe('canonical recall application', () => {
         ),
       )
       expect(
-        Either.isLeft(failure) && (failure.left as { _tag?: string })._tag,
+        Result.isFailure(failure) && taggedErrorName(failure.failure),
       ).toBe('RecallSummaryError')
       const content = (await Effect.runPromise(repository.searchRows()))
         .map((row) => row.content)

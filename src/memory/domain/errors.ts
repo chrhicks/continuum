@@ -1,78 +1,76 @@
-import { Data } from 'effect'
+import { Schema } from 'effect'
 
-export class DatabaseOpenError extends Data.TaggedError('DatabaseOpenError')<{
-  readonly path: string
-  readonly cause: unknown
-}> {}
+export class DatabaseOpenError extends Schema.TaggedError<DatabaseOpenError>()(
+  'DatabaseOpenError',
+  { path: Schema.String, cause: Schema.Defect() },
+) {}
 
-export class DatabaseMigrationError extends Data.TaggedError(
+export class DatabaseMigrationError extends Schema.TaggedError<DatabaseMigrationError>()(
   'DatabaseMigrationError',
-)<{ readonly path: string; readonly cause: unknown }> {}
+  { path: Schema.String, cause: Schema.Defect() },
+) {}
 
-export class DatabaseQueryError extends Data.TaggedError('DatabaseQueryError')<{
-  readonly operation: string
-  readonly cause: unknown
-}> {}
+export class DatabaseQueryError extends Schema.TaggedError<DatabaseQueryError>()(
+  'DatabaseQueryError',
+  { operation: Schema.String, cause: Schema.Defect() },
+) {}
 
-export class DatabaseBusyError extends Data.TaggedError('DatabaseBusyError')<{
-  readonly operation: string
-  readonly cause: unknown
-}> {}
+export class DatabaseBusyError extends Schema.TaggedError<DatabaseBusyError>()(
+  'DatabaseBusyError',
+  { operation: Schema.String, cause: Schema.Defect() },
+) {}
 
-export class DecodeError extends Data.TaggedError('DecodeError')<{
-  readonly schema: string
-  readonly field?: string
-  readonly cause: unknown
-}> {}
+export class DecodeError extends Schema.TaggedError<DecodeError>()(
+  'DecodeError',
+  {
+    schema: Schema.String,
+    field: Schema.optionalKey(Schema.String),
+    cause: Schema.Defect(),
+  },
+) {}
 
-export class JournalAppendError extends Data.TaggedError('JournalAppendError')<{
-  readonly cause: unknown
-}> {}
+export class JournalAppendError extends Schema.TaggedError<JournalAppendError>()(
+  'JournalAppendError',
+  { cause: Schema.Defect() },
+) {}
 
-export class JournalIdempotencyError extends Data.TaggedError(
-  'JournalIdempotencyError',
-)<{ readonly key: string }> {}
-
-export class ConsolidationSnapshotError extends Data.TaggedError(
-  'ConsolidationSnapshotError',
-)<{ readonly cause: unknown }> {}
-
-export class ConsolidationSummarizationError extends Data.TaggedError(
+export class ConsolidationSummarizationError extends Schema.TaggedError<ConsolidationSummarizationError>()(
   'ConsolidationSummarizationError',
-)<{ readonly cause: unknown }> {}
+  { cause: Schema.Defect() },
+) {}
 
-export class ConsolidationPersistenceError extends Data.TaggedError(
+export class ConsolidationPersistenceError extends Schema.TaggedError<ConsolidationPersistenceError>()(
   'ConsolidationPersistenceError',
-)<{ readonly cause: unknown }> {}
+  { cause: Schema.Defect() },
+) {}
 
-export class ConsolidationConflictError extends Data.TaggedError(
+export class ConsolidationConflictError extends Schema.TaggedError<ConsolidationConflictError>()(
   'ConsolidationConflictError',
-)<{
-  readonly expectedBoundary: number
-  readonly actualBoundary: number
-}> {}
+  {
+    expectedBoundary: Schema.Number,
+    actualBoundary: Schema.Number,
+  },
+) {}
 
-export class RecallSourceError extends Data.TaggedError('RecallSourceError')<{
-  readonly cause: unknown
-}> {}
+export class RecallSourceError extends Schema.TaggedError<RecallSourceError>()(
+  'RecallSourceError',
+  { cause: Schema.Defect() },
+) {}
 
-export class RecallFingerprintError extends Data.TaggedError(
-  'RecallFingerprintError',
-)<{ readonly cause: unknown }> {}
-
-export class RecallIngestionError extends Data.TaggedError(
+export class RecallIngestionError extends Schema.TaggedError<RecallIngestionError>()(
   'RecallIngestionError',
-)<{
-  readonly cause: unknown
-}> {}
+  { cause: Schema.Defect() },
+) {}
 
-export class RecallSummaryError extends Data.TaggedError('RecallSummaryError')<{
-  readonly cause: unknown
-}> {}
+export class RecallSummaryError extends Schema.TaggedError<RecallSummaryError>()(
+  'RecallSummaryError',
+  { cause: Schema.Defect() },
+) {}
 
-export class ProjectionPublicationError extends Data.TaggedError(
+export class ProjectionPublicationError extends Schema.TaggedError<ProjectionPublicationError>()(
   'ProjectionPublicationError',
-)<{ readonly path: string; readonly cause: unknown }> {}
+  { path: Schema.String, cause: Schema.Defect() },
+) {}
 
 export function databaseBusyError(
   operation: string,

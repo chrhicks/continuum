@@ -1,6 +1,5 @@
-import { Context, Effect, Layer, Schema } from 'effect'
+import { Effect, Schema } from 'effect'
 import type { DbHandle } from '../../db/client'
-import { getDbClientByPath } from '../../db/client'
 import {
   ConsolidationConflictError,
   ConsolidationPersistenceError,
@@ -42,25 +41,19 @@ export interface ConsolidationRepositoryService {
   >
 }
 
-export class ConsolidationRepository extends Context.Tag(
-  'ConsolidationRepository',
-)<ConsolidationRepository, ConsolidationRepositoryService>() {}
-
 export function makeConsolidationRepository(
   handle: DbHandle,
 ): ConsolidationRepositoryService {
   return {
-    complete: (input) => complete(handle, input),
-    listCompleted: () => listCompleted(handle),
+    complete: Effect.fn('ConsolidationRepository.complete')(function* (input) {
+      return yield* complete(handle, input)
+    }),
+    listCompleted: Effect.fn('ConsolidationRepository.listCompleted')(
+      function* () {
+        return yield* listCompleted(handle)
+      },
+    ),
   }
-}
-
-export function consolidationRepositoryLayer(
-  dbPath: string,
-): Layer.Layer<ConsolidationRepository> {
-  return Layer.sync(ConsolidationRepository, () =>
-    makeConsolidationRepository(getDbClientByPath(dbPath)),
-  )
 }
 
 function complete(
@@ -107,7 +100,13 @@ function complete(
             now,
             now,
           )
-        return selectRange(handle, input.firstSequence, input.lastSequence)!
+        const inserted = selectRange(
+          handle,
+          input.firstSequence,
+          input.lastSequence,
+        )
+        if (!inserted) throw new Error('Inserted consolidation was not found')
+        return inserted
       })
       return decodeRow(transaction.immediate())
     },

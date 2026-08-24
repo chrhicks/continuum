@@ -7,7 +7,7 @@ import {
   listMemoryEvidence,
   searchMemoryEvidence,
 } from '../src/memory/application/query'
-import { Effect, Either } from 'effect'
+import { Effect, Result } from 'effect'
 
 const roots: string[] = []
 afterEach(() => {
@@ -124,9 +124,9 @@ describe('canonical memory query', () => {
       .run()
 
     const result = await Effect.runPromise(
-      Effect.either(listMemoryEvidence(dbPath)),
+      Effect.result(listMemoryEvidence(dbPath)),
     )
-    expect(Either.isLeft(result) && result.left._tag).toBe('DecodeError')
+    expect(Result.isFailure(result) && result.failure._tag).toBe('DecodeError')
   })
 })
 

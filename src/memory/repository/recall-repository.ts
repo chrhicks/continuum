@@ -1,4 +1,4 @@
-import { Context, Effect } from 'effect'
+import { Effect } from 'effect'
 import type { DbHandle } from '../../db/client'
 import { getDbClientByPath } from '../../db/client'
 import {
@@ -45,18 +45,21 @@ export interface RecallRepositoryService {
   >
 }
 
-export class RecallRepository extends Context.Tag('RecallRepository')<
-  RecallRepository,
-  RecallRepositoryService
->() {}
-
 export function makeRecallRepository(
   handle: DbHandle,
 ): RecallRepositoryService {
   return {
-    findSource: (harness, sessionId) => findSource(handle, harness, sessionId),
-    replace: (replacement) => replaceRecall(handle, replacement),
-    searchRows: () => searchRows(handle),
+    findSource: Effect.fn('RecallRepository.findSource')(
+      function* (harness, sessionId) {
+        return yield* findSource(handle, harness, sessionId)
+      },
+    ),
+    replace: Effect.fn('RecallRepository.replace')(function* (replacement) {
+      return yield* replaceRecall(handle, replacement)
+    }),
+    searchRows: Effect.fn('RecallRepository.searchRows')(function* () {
+      return yield* searchRows(handle)
+    }),
   }
 }
 

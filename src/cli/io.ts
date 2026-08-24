@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import type { Command } from 'commander'
 import { isContinuumError } from '../sdk'
-import { Effect, Either } from 'effect'
+import { Effect, Result } from 'effect'
 import { getWorkspaceContext } from '../memory/paths'
 import {
   MemoryRuntime,
@@ -167,9 +167,9 @@ export async function runMemoryCommand<T, E>(
     command,
     async () => {
       prepareCanonicalDatabase(context.workspaceRoot)
-      const result = await Effect.runPromise(Effect.either(program))
-      if (Either.isLeft(result)) throw result.left
-      return result.right
+      const result = await Effect.runPromise(Effect.result(program))
+      if (Result.isFailure(result)) throw result.failure
+      return result.success
     },
     render,
   )

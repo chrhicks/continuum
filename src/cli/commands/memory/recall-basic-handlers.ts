@@ -34,6 +34,7 @@ export async function handleRecallImport(
       const runtime = yield* MemoryRuntime
       return yield* importCanonicalOpencodeRecall({
         continuumDbPath: runtime.dbPath,
+        memoryDir: runtime.memoryDir,
         dbPath: options.db,
         repoPath: runtime.workspaceRoot,
         projectId: options.project,
