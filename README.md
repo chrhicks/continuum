@@ -87,12 +87,13 @@ Run `continuum guide task` or `continuum task --help` for current options and wo
 
 ```sh
 continuum backup configure --bucket <dedicated-private-bucket>
+continuum backup status
 continuum backup create
 continuum backup list
 continuum backup restore [--generation <id>] [--output <new-path>]
 ```
 
-Continuum passes object operations to Wrangler and never reads or stores its credentials. Snapshots are WAL-aware SQLite logical snapshots with verified checksums and immutable manifests. Restore publishes a separate recovery database and never overwrites divergent local state. This is a strict single-writer backup protocol, not live or bidirectional synchronization. See `docs/R2-BACKUP-DESIGN.md` for identity linking, credentials, retention, recovery drills, and limitations.
+Continuum passes object operations to Wrangler and never reads or stores its credentials. `backup status` explicitly reads remote metadata and compares it with a verified local snapshot; task and memory commands never contact R2. Snapshots are WAL-aware SQLite logical snapshots with verified checksums and immutable manifests. Restore publishes a separate recovery database and never overwrites divergent local state. This is a strict single-writer backup protocol, not live or bidirectional synchronization. See `docs/R2-BACKUP-DESIGN.md` for status semantics, optional user-systemd scheduling, identity linking, credentials, retention, recovery drills, and limitations.
 
 ### Memory
 

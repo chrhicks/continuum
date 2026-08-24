@@ -4,6 +4,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Effect, Layer } from 'effect'
+import { TestClock } from 'effect/testing'
 import { configureBackup, readBackupConfig } from '../src/backup/config'
 import {
   databaseObjectKey,
@@ -19,6 +20,10 @@ import {
   type BackupObjectStoreService,
 } from '../src/backup/object-store'
 import { createBackup, listBackups, restoreBackup } from '../src/backup/service'
+import {
+  BACKUP_FRESHNESS_THRESHOLD_SECONDS,
+  getBackupStatus,
+} from '../src/backup/status'
 import { prepareCanonicalDatabase } from '../src/db/storage'
 
 const PROJECT_ID = '11111111-1111-4111-8111-111111111111'
@@ -213,6 +218,81 @@ describe('R2 backup service', () => {
       ),
     ).rejects.toMatchObject({ code: 'BACKUP_CONFIGURATION_ERROR' })
   })
+
+  test('classifies backup status with an injected deterministic clock', async () => {
+    const fixture = await createFixture()
+    const start = Date.parse('2026-01-01T00:00:00.000Z')
+    const program = Effect.gen(function* () {
+      yield* TestClock.setTime(start)
+      const missing = yield* getBackupStatus(fixture.workspace)
+      const missingRemoteKeys = fixture.store.keys()
+      yield* createBackup(fixture.workspace)
+      const backupRemoteKeys = fixture.store.keys()
+      const fresh = yield* getBackupStatus(fixture.workspace)
+      yield* TestClock.setTime(
+        start + BACKUP_FRESHNESS_THRESHOLD_SECONDS * 1_000,
+      )
+      const threshold = yield* getBackupStatus(fixture.workspace)
+      yield* TestClock.setTime(
+        start + BACKUP_FRESHNESS_THRESHOLD_SECONDS * 1_000 + 1,
+      )
+      const stale = yield* getBackupStatus(fixture.workspace)
+      yield* TestClock.setTime(start - 1)
+      const clockSkew = yield* getBackupStatus(fixture.workspace)
+      yield* Effect.sync(() => {
+        const sqlite = new Database(fixture.dbPath)
+        insertTask(sqlite, 'tkt-divergent', 'newer local state')
+        sqlite.close()
+      })
+      yield* TestClock.setTime(start + 1_000)
+      const divergent = yield* getBackupStatus(fixture.workspace)
+      fixture.store.failNextGet(
+        new Error('remote failed with fixture-token-never-print'),
+      )
+      const remoteError = yield* getBackupStatus(fixture.workspace)
+      return {
+        missing,
+        fresh,
+        threshold,
+        stale,
+        clockSkew,
+        divergent,
+        remoteError,
+        missingRemoteKeys,
+        backupRemoteKeys,
+        finalRemoteKeys: fixture.store.keys(),
+      }
+    }).pipe(
+      Effect.provide(fixture.store.layer),
+      Effect.provide(TestClock.layer()),
+    )
+
+    const states = await Effect.runPromise(program)
+    expect(states.missing.state).toBe('missing')
+    expect(states.fresh).toMatchObject({
+      state: 'fresh',
+      checkedAt: '2026-01-01T00:00:00.000Z',
+      staleAfterSeconds: 86_400,
+      remote: { ageSeconds: 0 },
+    })
+    expect(states.threshold).toMatchObject({
+      state: 'fresh',
+      remote: { ageSeconds: 86_400 },
+    })
+    expect(states.stale.state).toBe('stale')
+    expect(states.clockSkew.state).toBe('stale')
+    expect(states.divergent.state).toBe('divergent')
+    expect(states.remoteError).toMatchObject({
+      state: 'remote-error',
+      remote: null,
+      errorCode: 'BACKUP_REMOTE_ERROR',
+    })
+    expect(JSON.stringify(states.remoteError)).not.toContain(
+      'fixture-token-never-print',
+    )
+    expect(states.missingRemoteKeys).toEqual([])
+    expect(states.finalRemoteKeys).toEqual(states.backupRemoteKeys)
+  })
 })
 
 type Fixture = {
@@ -245,13 +325,32 @@ async function createFixture(): Promise<Fixture> {
 class MemoryObjectStore {
   readonly #objects = new Map<string, Uint8Array>()
   #failure: ((key: string) => boolean) | null = null
+  #getFailure: unknown | null = null
   #headReads = 0
   #replaceRead: { count: number; head: BackupHead } | null = null
   readonly layer: Layer.Layer<BackupObjectStore>
 
   constructor() {
     const service: BackupObjectStoreService = {
-      get: (key) => Effect.sync(() => this.get(key)),
+      get: (key) =>
+        Effect.try({
+          try: () => {
+            if (this.#getFailure !== null) {
+              const failure = this.#getFailure
+              this.#getFailure = null
+              throw failure
+            }
+            return this.get(key)
+          },
+          catch: (cause) =>
+            new BackupRemoteError({
+              code: 'BACKUP_REMOTE_ERROR',
+              operation: 'test download',
+              key,
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause,
+            }),
+        }),
       put: (key, content, contentType) =>
         Effect.try({
           try: () => this.set(key, content, contentType),
@@ -294,6 +393,10 @@ class MemoryObjectStore {
 
   failNextPut(predicate: (key: string) => boolean): void {
     this.#failure = predicate
+  }
+
+  failNextGet(cause: unknown): void {
+    this.#getFailure = cause
   }
 
   replaceOnHeadRead(countFromNow: number, head: BackupHead): void {

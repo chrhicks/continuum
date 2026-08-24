@@ -40,24 +40,103 @@ A generation manifest records format version, project and writer IDs, generation
 
 Generation object keys are never intentionally overwritten. Because Wrangler's object command has no conditional-create option, Continuum first checks for an existing object, accepts only byte-identical retry content, uploads, and downloads to verify. Random generation IDs make an accidental collision negligible; a non-identical collision is fatal.
 
+## Backup status and local availability
+
+`continuum backup status` verifies a logical snapshot of the local canonical database, then explicitly reads the remote head and manifest. Its stable `state` values are:
+
+- `missing`: no remote head exists;
+- `fresh`: local and remote SHA-256 digests match and the head age is from zero through 86,400 seconds (24 hours), inclusive;
+- `stale`: the digests match but the head is older than 24 hours, or its timestamp is in the future because of clock skew;
+- `divergent`: the verified local and manifest digests differ; and
+- `remote-error`: remote metadata could not be read or verified. Output includes only a stable error code, not provider diagnostics that could contain credentials.
+
+The 24-hour threshold is fixed for deterministic automation and appears as `staleAfterSeconds` in JSON output. Status only reads remote metadata: it does not repair conflicts, publish a head, upload a generation, or download database bytes.
+
+R2 is an optional recovery boundary, not a runtime dependency. Task, memory, summary, and local database commands do not contact R2 and remain usable during an R2, Wrangler, authentication, or network outage. Only explicit `backup status`, `create`, `list`, and `restore` operations can report remote failures.
+
 ## Setup and credential boundary
 
-Use a dedicated private R2 bucket. The chicks-arch acceptance bucket is `continuum-snapshots-chicks-arch`; `astro-console-artifacts` is unrelated and must not be used.
+Use a dedicated private R2 bucket that is not shared with unrelated applications.
 
 Wrangler receives authentication only through its child environment. Continuum never opens, parses, logs, or stores the token:
 
 ```sh
-wrangler r2 bucket create <dedicated-bucket>
-continuum backup configure --bucket <dedicated-bucket>
+wrangler r2 bucket create <dedicated-private-bucket>
+continuum backup configure --bucket <dedicated-private-bucket>
 
 CLOUDFLARE_API_TOKEN="$(cat "$HOME/.config/continuum/secrets/cloudflare-api-token")" \
-  continuum backup create --wrangler /home/chicks/.local/bin/wrangler
+  continuum backup create --wrangler /absolute/path/to/wrangler
 
 CLOUDFLARE_API_TOKEN="$(cat "$HOME/.config/continuum/secrets/cloudflare-api-token")" \
-  continuum backup list --wrangler /home/chicks/.local/bin/wrangler
+  continuum backup status --wrangler /absolute/path/to/wrangler
 ```
 
-The shell substitution must remain child-scoped and command tracing must be disabled. Never place the token in arguments, the repository, backup configuration, manifests, logs, or generated memory. For other installations, use a private token source with mode `0600` and the minimum R2 permissions needed by Wrangler.
+The shell substitution must remain child-scoped and command tracing must be disabled. Never place the token in arguments, the repository, backup configuration, manifests, logs, or generated memory. Use a private token source with mode `0600` and the minimum R2 permissions needed by Wrangler.
+
+## Optional user-systemd timer
+
+Scheduling is opt-in. Ordinary Continuum and backup commands never create, enable, or start a timer. To schedule one daily backup, first replace every `/absolute/path/to/...` placeholder below. Install the environment file with mode `0600`; do not commit it:
+
+```sh
+install -d -m 700 "$HOME/.config/continuum"
+install -m 600 /dev/null "$HOME/.config/continuum/backup.env"
+printf '%s\n' \
+  'CLOUDFLARE_API_TOKEN=replace-with-a-minimum-scope-token' \
+  'CONTINUUM_WRANGLER=/absolute/path/to/wrangler' \
+  > "$HOME/.config/continuum/backup.env"
+chmod 600 "$HOME/.config/continuum/backup.env"
+```
+
+Create the service and timer. Repeating these writes and the `systemctl` commands is idempotent:
+
+```sh
+install -d -m 700 "$HOME/.config/systemd/user"
+cat > "$HOME/.config/systemd/user/continuum-backup.service" <<'UNIT'
+[Unit]
+Description=Create a verified immutable Continuum backup
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=%h/.config/continuum/backup.env
+ExecStart="/absolute/path/to/continuum" --cwd "/absolute/path/to/workspace" backup create
+UNIT
+
+cat > "$HOME/.config/systemd/user/continuum-backup.timer" <<'UNIT'
+[Unit]
+Description=Create a daily Continuum backup
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+RandomizedDelaySec=30m
+Unit=continuum-backup.service
+
+[Install]
+WantedBy=timers.target
+UNIT
+
+chmod 600 "$HOME/.config/systemd/user/continuum-backup.service" \
+  "$HOME/.config/systemd/user/continuum-backup.timer"
+systemctl --user daemon-reload
+systemctl --user enable --now continuum-backup.timer
+systemctl --user status continuum-backup.timer
+```
+
+`enable --now` is the only enabling step and must be run explicitly. A failed service remains visible through `systemctl --user status continuum-backup.service` and `journalctl --user-unit continuum-backup.service`; Continuum does not hide or retry it.
+
+Uninstall without deleting backup data or project configuration:
+
+```sh
+systemctl --user disable --now continuum-backup.timer
+rm -f "$HOME/.config/systemd/user/continuum-backup.timer" \
+  "$HOME/.config/systemd/user/continuum-backup.service"
+systemctl --user daemon-reload
+systemctl --user reset-failed continuum-backup.service
+```
+
+Delete `$HOME/.config/continuum/backup.env` separately only when its credential is no longer needed. For a dry installation check, set `HOME` to a temporary directory, create the two files twice, compare their checksums, and remove them without running `systemctl`; this cannot enable a real user service.
 
 ## Restore drill
 
@@ -66,7 +145,7 @@ Restore defaults to a generation-specific file below the canonical XDG project d
 ```sh
 CLOUDFLARE_API_TOKEN="$(cat "$HOME/.config/continuum/secrets/cloudflare-api-token")" \
   continuum backup restore --generation <generation> \
-  --wrangler /home/chicks/.local/bin/wrangler
+  --wrangler /absolute/path/to/wrangler
 ```
 
 Use `--output <new-path>` for an isolated drill. The output must be absent or byte-identical. Inspect the recovered database before promotion. Continuum intentionally has no in-place replacement flag: promoting recovery state requires stopping all Continuum processes, preserving the current canonical database as another verified recovery point, and making an explicit operator decision. This prevents a remote snapshot from silently overwriting newer or divergent local state.
