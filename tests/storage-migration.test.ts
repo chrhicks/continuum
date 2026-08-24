@@ -268,11 +268,12 @@ describe('XDG canonical database migration', () => {
       fixture.dataHome,
     )
     publishDatabaseSnapshot(oldCanonical, source)
+    const migrated = readDatabaseSnapshot(oldCanonical)
+    writePathHashReceipt(fixture, oldCanonical, source, migrated)
+
     const old = new Database(oldCanonical)
     insertMemory(old, 'canonical-newer', 'newer canonical write')
     old.close()
-    const oldDestination = readDatabaseSnapshot(oldCanonical)
-    writePathHashReceipt(fixture, oldCanonical, source, oldDestination)
 
     const summary = cli(fixture, ['summary'])
     expect(summary.status).toBe(0)

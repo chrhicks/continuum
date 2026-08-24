@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { pathHashProjectStorageId, projectStorageId } from './paths'
+import { containsSnapshotRows } from './storage-content'
 import { migrationConflict, migrationFailure } from './storage-errors'
 import {
   hasEmbeddedLineage,
@@ -86,7 +87,10 @@ function priorLegacyLineage(
   }
   const source = readDatabaseSnapshot(oldPaths.sourcePath)
   if (!fingerprintMatches(source, receipt.sourceFingerprint)) return null
-  if (!fingerprintMatches(oldCanonical, receipt.destinationFingerprint)) {
+  if (
+    !fingerprintMatches(oldCanonical, receipt.destinationFingerprint) &&
+    !containsSnapshotRows(oldCanonical, source, dirname(oldPaths.dbPath))
+  ) {
     return null
   }
   return legacyLineage(workspaceRoot, oldPaths.sourcePath, source)
