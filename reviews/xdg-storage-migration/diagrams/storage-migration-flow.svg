@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1120" viewBox="0 0 1600 1120" role="img" aria-labelledby="title desc">
+  <title id="title">Canonical storage migration decision tree</title>
+  <desc id="desc">Every material branch in prepareCanonicalDatabase, with unsafe replacement and crash windows highlighted.</desc>
+  <defs><marker id="a" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0 0L0 6L9 3z" fill="#64748b"/></marker><style>.bg{fill:#0f172a}.t{fill:#f8fafc;font:700 30px system-ui}.s{fill:#cbd5e1;font:14px system-ui}.l{fill:#f8fafc;font:700 16px system-ui}.b{rx:12;stroke-width:2}.q{fill:#1e3a8a;stroke:#60a5fa}.ok{fill:#065f46;stroke:#34d399}.err{fill:#7f1d1d;stroke:#f87171}.risk{fill:#9a3412;stroke:#fb923c}.edge{stroke:#64748b;stroke-width:2.5;fill:none;marker-end:url(#a)}.yn{fill:#94a3b8;font:13px system-ui}.note{fill:#111827;stroke:#f59e0b;stroke-width:2;rx:10}</style></defs>
+  <rect class="bg" width="1600" height="1120"/><text class="t" x="55" y="55">Storage migration: complete branch map</text><text class="s" x="55" y="84">Orange and red boxes are review findings, not expected happy-path states.</text>
+  <rect class="b q" x="610" y="115" width="380" height="75"/><text class="l" x="800" y="148" text-anchor="middle">prepareCanonicalDatabase(workspace, options)</text><text class="s" x="800" y="171" text-anchor="middle">derive path hash, source, destination, receipt</text>
+  <rect class="b q" x="650" y="240" width="300" height="70"/><text class="l" x="800" y="270" text-anchor="middle">Legacy source exists?</text><text class="s" x="800" y="292" text-anchor="middle">snapshot also runs integrity_check</text>
+  <path class="edge" d="M800 190V240"/>
+
+  <rect class="b q" x="155" y="365" width="300" height="70"/><text class="l" x="305" y="395" text-anchor="middle">initialize and destination absent?</text>
+  <path class="edge" d="M650 275H520Q480 275 480 320V400H455"/><text class="yn" x="540" y="268">no</text>
+  <rect class="b ok" x="80" y="505" width="280" height="85"/><text class="l" x="220" y="538" text-anchor="middle">Create fresh canonical DB</text><text class="s" x="220" y="562" text-anchor="middle">run additive migrations</text>
+  <rect class="b ok" x="390" y="505" width="280" height="85"/><text class="l" x="530" y="538" text-anchor="middle">Return current state</text><text class="s" x="530" y="562" text-anchor="middle">destination may still be absent</text>
+  <path class="edge" d="M260 435L220 505"/><text class="yn" x="220" y="470">yes</text><path class="edge" d="M350 435L500 505"/><text class="yn" x="415" y="470">no</text>
+
+  <rect class="b q" x="710" y="365" width="260" height="70"/><text class="l" x="840" y="395" text-anchor="middle">Receipt exists?</text>
+  <path class="edge" d="M950 275H1030Q1070 275 1070 320V400H970"/><text class="yn" x="1008" y="268">yes</text>
+  <rect class="b risk" x="660" y="505" width="360" height="120"/><text class="l" x="840" y="538" text-anchor="middle">Verify receipt and source only</text><text class="s" x="840" y="564" text-anchor="middle">identity + source digest + destination exists</text><text class="s" x="840" y="587" text-anchor="middle">destinationFingerprint is never checked</text><text class="s" x="840" y="610" text-anchor="middle">then print safe-to-delete warning</text>
+  <path class="edge" d="M810 435L820 505"/><text class="yn" x="780" y="470">yes</text>
+
+  <rect class="b q" x="1110" y="365" width="300" height="70"/><text class="l" x="1260" y="395" text-anchor="middle">Destination already exists?</text>
+  <path class="edge" d="M900 435Q960 465 1110 400"/><text class="yn" x="1000" y="420">no receipt</text>
+  <rect class="b q" x="1080" y="505" width="360" height="90"/><text class="l" x="1260" y="537" text-anchor="middle">Source digest equals destination?</text><text class="s" x="1260" y="562" text-anchor="middle">adopt equivalent destination or conflict</text>
+  <path class="edge" d="M1260 435V505"/><text class="yn" x="1270" y="470">yes</text>
+  <rect class="b err" x="1270" y="680" width="270" height="85"/><text class="l" x="1405" y="713" text-anchor="middle">Conflict</text><text class="s" x="1405" y="739" text-anchor="middle">no overwrite, manual repair</text>
+  <rect class="b ok" x="1010" y="680" width="230" height="85"/><text class="l" x="1125" y="713" text-anchor="middle">Record receipt</text><text class="s" x="1125" y="739" text-anchor="middle">warn removable</text>
+  <path class="edge" d="M1200 595L1140 680"/><text class="yn" x="1150" y="640">equal</text><path class="edge" d="M1320 595L1390 680"/><text class="yn" x="1370" y="640">different</text>
+
+  <rect class="b q" x="655" y="700" width="310" height="70"/><text class="l" x="810" y="730" text-anchor="middle">initialize requested?</text>
+  <path class="edge" d="M1110 400Q980 440 920 700"/><text class="yn" x="940" y="590">destination absent</text>
+  <rect class="b err" x="500" y="840" width="280" height="90"/><text class="l" x="640" y="875" text-anchor="middle">Fail: run continuum init</text><text class="s" x="640" y="901" text-anchor="middle">normal commands do not migrate legacy DB</text>
+  <rect class="b risk" x="840" y="830" width="500" height="130"/><text class="l" x="1090" y="862" text-anchor="middle">Publish snapshot, migrate destination, then receipt</text><text class="s" x="1090" y="888" text-anchor="middle">source rechecked before receipt publication</text><text class="s" x="1090" y="912" text-anchor="middle">crash after migration and before receipt creates divergence</text><text class="s" x="1090" y="936" text-anchor="middle">restart cannot adopt it automatically</text>
+  <path class="edge" d="M760 770L660 840"/><text class="yn" x="690" y="810">no</text><path class="edge" d="M860 770L990 830"/><text class="yn" x="920" y="810">yes</text>
+
+  <rect class="note" x="80" y="1000" width="1460" height="75"/><text class="l" x="110" y="1032">Required invariant</text><text class="s" x="110" y="1057">A warning is safe only when the live canonical database carries an embedded marker proving that this exact source fingerprint entered its lineage. A sidecar alone cannot prove that.</text>
+</svg>

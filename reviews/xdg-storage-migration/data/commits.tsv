@@ -1,0 +1,6 @@
+56d0a64633fb68051f86dc719769abcf44bc94be	feat(storage): migrate canonical databases to XDG
+76b7492a9ecdc28bd52ef96e16437566a3327a4b	docs(storage): describe XDG layout and R2 follow-on
+ec54cbfdb74b51e6e85f5ff9de8c51af2ea94a55	feat(backup): add verified R2 snapshots and restore
+4f25257f9c64d1d99405f6183b973960d1460f05	refactor(effect): migrate memory workflows to v4 beta
+c06784a784b427b2365473b96325fc655b7f4da5	refactor: remove compatibility and assertion slop
+30090c3e66ee9581c027f4706858902f3beb7e37	test: isolate child process XDG storage

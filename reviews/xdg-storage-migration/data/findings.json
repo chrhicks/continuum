@@ -1,0 +1,121 @@
+[
+  {
+    "id": "F-001",
+    "severity": "P0",
+    "title": "A valid replacement canonical database still produces the safe-to-delete warning",
+    "evidence": [
+      "src/db/storage.ts:84-104",
+      "src/db/storage-receipt.ts:77-101",
+      "data/adversarial-cases.json case=canonical-replacement"
+    ],
+    "impact": "The warning can tell a user to delete the only database that still contains the migrated records.",
+    "smallestFix": "Store a migration lineage marker containing the source fingerprint inside the canonical database and require that marker before warning. Treat the sidecar as advisory, not proof."
+  },
+  {
+    "id": "F-002",
+    "severity": "P1",
+    "title": "Renaming or moving a workspace silently selects a new empty database",
+    "evidence": [
+      "src/db/paths.ts:30-42",
+      "src/workspace/resolve.ts:25-48",
+      "data/adversarial-cases.json case=workspace-move"
+    ],
+    "impact": "Tasks and memories appear to disappear after a normal directory move while the old database remains stranded under its previous path hash.",
+    "smallestFix": "Create a stable workspace UUID in project metadata and key XDG storage by that UUID. Add one-time adoption from the current path-hash directory."
+  },
+  {
+    "id": "F-003",
+    "severity": "P1",
+    "title": "Backups become unrestorable after an application version bump",
+    "evidence": [
+      "src/backup/database-metadata.ts:57-66",
+      "src/backup/service.ts:243-254",
+      "data/adversarial-cases.json case=cross-version-restore"
+    ],
+    "impact": "A backup created by one Continuum release is rejected by the next release even when its SQLite schema and checksum are valid.",
+    "smallestFix": "Make createdByVersion informational. Validate migration metadata and schema compatibility, then migrate a staged restored copy forward before publication."
+  },
+  {
+    "id": "F-004",
+    "severity": "P1",
+    "title": "A crash after destination migration but before receipt publication leaves an unrecoverable conflict",
+    "evidence": [
+      "src/db/storage.ts:128-144",
+      "src/db/storage.ts:158-172",
+      "data/adversarial-cases.json case=crash-after-destination-migrations-before-receipt"
+    ],
+    "impact": "The safe migration path can strand a valid migrated destination and force manual reconciliation after process or power loss.",
+    "smallestFix": "Migrate and mark a staged database first, fsync file and parent directory, atomically publish it, and make restart adoption inspect the embedded marker."
+  },
+  {
+    "id": "F-005",
+    "severity": "P1",
+    "title": "The new storage and backup subsystems bypass the Effect architecture",
+    "evidence": [
+      "src/backup/contracts.ts",
+      "src/backup/service.ts",
+      "src/backup/object-store.ts",
+      "src/db/storage-errors.ts",
+      "data/metrics.json changedFunctionInventory and areas"
+    ],
+    "impact": "The branch now has schema-backed typed Effect failures for memory and a separate throw-based, synchronous architecture for its newest I/O-heavy features. Error rendering collapses backup failures to UNKNOWN_ERROR.",
+    "smallestFix": "Parse backup contracts with Effect Schema, model expected storage/R2 failures as tagged errors, wrap Wrangler in an adapter service, and expose named Effect operations while keeping pure key and manifest functions ordinary."
+  },
+  {
+    "id": "F-006",
+    "severity": "P2",
+    "title": "Effect Config adoption unwraps secrets early and silently swallows file errors",
+    "evidence": [
+      "src/memory/config.ts:79-102",
+      "src/memory/config.ts:178-185"
+    ],
+    "impact": "Redacted credentials become plain strings before the HTTP boundary, and malformed or unreadable config files become defaults without a typed diagnostic.",
+    "smallestFix": "Keep API keys Redacted through MemoryConfig and unwrap only in the LLM adapter. Decode YAML through a named Effect with a typed configuration error; default only when the file is absent."
+  },
+  {
+    "id": "F-007",
+    "severity": "P2",
+    "title": "The real Wrangler adapter and backup CLI have thin automated coverage",
+    "evidence": [
+      "data/coverage-summary.txt",
+      "src/backup/object-store.ts coverage 35.11% lines",
+      "src/cli/commands/backup.ts coverage 41.67% lines"
+    ],
+    "impact": "The in-memory protocol tests are strong, but command arguments, missing-object classification, environment handling, and CLI rendering rely mostly on one manual acceptance run.",
+    "smallestFix": "Test the adapter against a fake executable that records argv and returns representative Wrangler failures. Add credential-free CLI tests for configure, create, list, restore, and JSON errors."
+  },
+  {
+    "id": "F-008",
+    "severity": "P2",
+    "title": "Manual boundary parsing and unused exports add avoidable surface",
+    "evidence": [
+      "src/backup/contracts.ts:75-266",
+      "src/db/storage-receipt.ts:69-73",
+      "data/anti-slop-branch-counts.txt",
+      "Knip: backupConfigPath, BACKUP_FORMAT_VERSION, BACKUP_OBJECT_PREFIX, projectPrefix, generationPrefix"
+    ],
+    "impact": "The branch adds 24 net anti-slop diagnostics, mostly unknown dictionaries and runtime type checks, plus five exports with no production consumer.",
+    "smallestFix": "Use Effect Schema for remote/config/receipt boundaries and keep path helpers/constants private unless another module owns a real use."
+  },
+  {
+    "id": "F-009",
+    "severity": "P2",
+    "title": "Committed design docs contain machine-specific operational names",
+    "evidence": [
+      "docs/R2-BACKUP-DESIGN.md:45"
+    ],
+    "impact": "Library documentation now names a personal host bucket and an unrelated bucket, which does not help other installations and couples docs to one acceptance run.",
+    "smallestFix": "Use placeholders in product documentation and keep the concrete acceptance bucket in an ignored local run record."
+  },
+  {
+    "id": "F-010",
+    "severity": "P2",
+    "title": "Cloud support is manual backup, not automatic synchronization",
+    "evidence": [
+      "src/cli/commands/backup.ts",
+      "docs/R2-BACKUP-DESIGN.md:1-3 and 86-88"
+    ],
+    "impact": "The branch delivers a sound recovery primitive but no timer, write hook, freshness status, or multi-machine sync. Users can easily assume backup is current when it is not.",
+    "smallestFix": "Keep the one-writer protocol, but add explicit backup status/freshness and an optional systemd timer setup. Continue to defer bidirectional merge semantics."
+  }
+]

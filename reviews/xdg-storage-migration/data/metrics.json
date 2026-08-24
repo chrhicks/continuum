@@ -1,0 +1,100 @@
+{
+  "comparison": {
+    "base": "e693a59",
+    "head": "30090c3",
+    "commits": 6,
+    "filesChanged": 64,
+    "additions": 2808,
+    "deletions": 588
+  },
+  "tests": {
+    "master": 97,
+    "branch": 105,
+    "failures": 0
+  },
+  "coverage": {
+    "master": {
+      "functions": 60.66,
+      "lines": 65.1
+    },
+    "branch": {
+      "functions": 60.75,
+      "lines": 65.14
+    }
+  },
+  "antiSlop": {
+    "master": 298,
+    "branch": 322,
+    "delta": 24,
+    "deltaByRule": {
+      "no-unsafe-dictionary-type": 15,
+      "no-unknown-parameters": 4,
+      "no-runtime-typeof": 4,
+      "no-service-constructor-imports": 1
+    }
+  },
+  "duplication": {
+    "master": {
+      "clones": 10,
+      "lines": 73,
+      "percent": 0.4833
+    },
+    "branch": {
+      "clones": 10,
+      "lines": 73,
+      "percent": 0.4379
+    }
+  },
+  "dependencyCycles": {
+    "master": 1,
+    "branch": 1,
+    "cycle": "memory/application/query.ts -> memory/application/query-recall.ts"
+  },
+  "effect": {
+    "master": "^3.21.4",
+    "branch": "4.0.0-beta.107",
+    "currentBeta": "4.0.0-beta.107",
+    "currentRc": "4.0.0-rc.111",
+    "installedSizeMiB": 48
+  },
+  "changedFunctionInventory": {
+    "functions": 252,
+    "exported": 101,
+    "syntacticDecisionCount": 503,
+    "explicitThrows": 99,
+    "catches": 19,
+    "loops": 23
+  },
+  "areas": {
+    "backup": {
+      "files": 5,
+      "additions": 884,
+      "deletions": 0
+    },
+    "docs-config": {
+      "files": 6,
+      "additions": 142,
+      "deletions": 11
+    },
+    "effect-memory": {
+      "files": 17,
+      "additions": 367,
+      "deletions": 424
+    },
+    "integration": {
+      "files": 18,
+      "additions": 222,
+      "deletions": 50
+    },
+    "storage": {
+      "files": 5,
+      "additions": 561,
+      "deletions": 2
+    },
+    "tests": {
+      "files": 13,
+      "additions": 632,
+      "deletions": 101
+    }
+  }
+}

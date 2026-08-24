@@ -1,0 +1,6217 @@
+[
+  {
+    "file": "src/backup/config.ts",
+    "line": 30,
+    "function": "configureBackup",
+    "kind": "if",
+    "condition": "existsSync(path)",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/backup/config.ts",
+    "line": 39,
+    "function": "configureBackup",
+    "kind": "short-circuit",
+    "condition": "input.projectId ?? randomUUID()",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/backup/config.ts",
+    "line": 40,
+    "function": "configureBackup",
+    "kind": "short-circuit",
+    "condition": "input.writerId ?? randomUUID()",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/backup/config.ts",
+    "line": 41,
+    "function": "configureBackup",
+    "kind": "short-circuit",
+    "condition": "input.now ?? new Date()",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/backup/config.ts",
+    "line": 50,
+    "function": "readBackupConfig",
+    "kind": "if",
+    "condition": "!existsSync(path)",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/backup/config.ts",
+    "line": 70,
+    "function": "validateBucket",
+    "kind": "if",
+    "condition": "!/^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/.test(bucket)",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/backup/config.ts",
+    "line": 79,
+    "function": "assertCompatible",
+    "kind": "if",
+    "condition": "existing.bucket !== input.bucket",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/backup/config.ts",
+    "line": 84,
+    "function": "assertCompatible",
+    "kind": "if",
+    "condition": "input.projectId && existing.projectId !== input.projectId.toLowerCase()",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/backup/config.ts",
+    "line": 84,
+    "function": "assertCompatible",
+    "kind": "short-circuit",
+    "condition": "input.projectId && existing.projectId !== input.projectId.toLowerCase()",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/backup/config.ts",
+    "line": 87,
+    "function": "assertCompatible",
+    "kind": "if",
+    "condition": "input.writerId && existing.writerId !== input.writerId.toLowerCase()",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/backup/config.ts",
+    "line": 87,
+    "function": "assertCompatible",
+    "kind": "short-circuit",
+    "condition": "input.writerId && existing.writerId !== input.writerId.toLowerCase()",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/backup/contracts.ts",
+    "line": 97,
+    "function": "decodeBackupManifest",
+    "kind": "if",
+    "condition": "!Array.isArray(tables) || !tables.every((item) => typeof item === 'string')",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/backup/contracts.ts",
+    "line": 98,
+    "function": "decodeBackupManifest",
+    "kind": "short-circuit",
+    "condition": "!Array.isArray(tables) || !tables.every((item) => typeof item === 'string')",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/backup/contracts.ts",
+    "line": 152,
+    "function": "parseObject",
+    "kind": "catch",
+    "condition": "cause",
+    "paths": [
+      "success",
+      "failure"
+    ]
+  },
+  {
+    "file": "src/backup/contracts.ts",
+    "line": 153,
+    "function": "parseObject",
+    "kind": "ternary",
+    "condition": "cause instanceof Error",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/backup/contracts.ts",
+    "line": 156,
+    "function": "parseObject",
+    "kind": "if",
+    "condition": "!isObject(value)",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/backup/contracts.ts",
+    "line": 161,
+    "function": "assertVersion",
+    "kind": "if",
+    "condition": "value.formatVersion !== BACKUP_FORMAT_VERSION",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/backup/contracts.ts",
+    "line": 173,
+    "function": "requiredObject",
+    "kind": "if",
+    "condition": "!isObject(field)",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/backup/contracts.ts",
+    "line": 179,
+    "function": "requiredString",
+    "kind": "if",
+    "condition": "typeof field !== 'string' || field.length === 0",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/backup/contracts.ts",
+    "line": 179,
+    "function": "requiredString",
+    "kind": "short-circuit",
+    "condition": "typeof field !== 'string' || field.length === 0",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/backup/contracts.ts",
+    "line": 190,
+    "function": "optionalString",
+    "kind": "if",
+    "condition": "field === null",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/backup/contracts.ts",
+    "line": 196,
+    "function": "requiredUuid",
+    "kind": "if",
+    "condition": "!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test( field, )",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/backup/contracts.ts",
+    "line": 211,
+    "function": "requiredGeneration",
+    "kind": "if",
+    "condition": "!/^\\d{8}T\\d{9}Z-[0-9a-f-]{36}$/.test(field)",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/backup/contracts.ts",
+    "line": 221,
+    "function": "optionalGeneration",
+    "kind": "if",
+    "condition": "value[key] === null",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/backup/contracts.ts",
+    "line": 227,
+    "function": "requiredDate",
+    "kind": "if",
+    "condition": "!Number.isFinite(Date.parse(field))",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/backup/contracts.ts",
+    "line": 234,
+    "function": "requiredDigest",
+    "kind": "if",
+    "condition": "!/^[0-9a-f]{64}$/.test(field)",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/backup/contracts.ts",
+    "line": 243,
+    "function": "requiredNonnegativeInteger",
+    "kind": "if",
+    "condition": "!Number.isSafeInteger(field) || typeof field !== 'number' || field < 0",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/backup/contracts.ts",
+    "line": 243,
+    "function": "requiredNonnegativeInteger",
+    "kind": "short-circuit",
+    "condition": "!Number.isSafeInteger(field) || typeof field !== 'number' || field < 0",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/backup/contracts.ts",
+    "line": 243,
+    "function": "requiredNonnegativeInteger",
+    "kind": "short-circuit",
+    "condition": "!Number.isSafeInteger(field) || typeof field !== 'number'",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/backup/contracts.ts",
+    "line": 253,
+    "function": "optionalNonnegativeInteger",
+    "kind": "if",
+    "condition": "value[key] === null",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/backup/contracts.ts",
+    "line": 258,
+    "function": "requiredSha256Algorithm",
+    "kind": "if",
+    "condition": "value.algorithm !== 'sha256'",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/backup/contracts.ts",
+    "line": 265,
+    "function": "isObject",
+    "kind": "short-circuit",
+    "condition": "typeof value === 'object' && value !== null && !Array.isArray(value)",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/backup/contracts.ts",
+    "line": 265,
+    "function": "isObject",
+    "kind": "short-circuit",
+    "condition": "typeof value === 'object' && value !== null",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/backup/database-metadata.ts",
+    "line": 47,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "migration?.created_at ?? null",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/backup/database-metadata.ts",
+    "line": 48,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "migration?.hash ?? null",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/backup/database-metadata.ts",
+    "line": 61,
+    "function": "assertSnapshotMetadata",
+    "kind": "if",
+    "condition": "expected.applicationVersion !== actual.applicationVersion",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/backup/database-metadata.ts",
+    "line": 66,
+    "function": "assertSnapshotMetadata",
+    "kind": "if",
+    "condition": "expected.migrationCreatedAt !== actual.migrationCreatedAt || expected.migrationHash !== actual.migrationHash",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/backup/database-metadata.ts",
+    "line": 67,
+    "function": "assertSnapshotMetadata",
+    "kind": "short-circuit",
+    "condition": "expected.migrationCreatedAt !== actual.migrationCreatedAt || expected.migrationHash !== actual.migrationHash",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/backup/database-metadata.ts",
+    "line": 74,
+    "function": "assertSnapshotMetadata",
+    "kind": "if",
+    "condition": "expected.tables.join('\\n') !== actual.tables.join('\\n')",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/backup/database-metadata.ts",
+    "line": 96,
+    "function": "assertRequiredTables",
+    "kind": "if",
+    "condition": "missing.length > 0",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/backup/database-metadata.ts",
+    "line": 106,
+    "function": "readApplicationVersion",
+    "kind": "if",
+    "condition": "typeof value !== 'object' || value === null || !('version' in value) || typeof value.version !== 'string'",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/backup/database-metadata.ts",
+    "line": 107,
+    "function": "readApplicationVersion",
+    "kind": "short-circuit",
+    "condition": "typeof value !== 'object' || value === null || !('version' in value) || typeof value.version !== 'string'",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/backup/database-metadata.ts",
+    "line": 107,
+    "function": "readApplicationVersion",
+    "kind": "short-circuit",
+    "condition": "typeof value !== 'object' || value === null || !('version' in value)",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/backup/database-metadata.ts",
+    "line": 107,
+    "function": "readApplicationVersion",
+    "kind": "short-circuit",
+    "condition": "typeof value !== 'object' || value === null",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/backup/object-store.ts",
+    "line": 33,
+    "function": "<module>",
+    "kind": "short-circuit",
+    "condition": "options.executable ?? process.env.CONTINUUM_WRANGLER ?? 'wrangler'",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/backup/object-store.ts",
+    "line": 33,
+    "function": "<module>",
+    "kind": "short-circuit",
+    "condition": "options.executable ?? process.env.CONTINUUM_WRANGLER",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/backup/object-store.ts",
+    "line": 34,
+    "function": "<module>",
+    "kind": "short-circuit",
+    "condition": "options.environment ?? process.env",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/backup/object-store.ts",
+    "line": 49,
+    "function": "<callback>",
+    "kind": "if",
+    "condition": "result.status === 0",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/backup/object-store.ts",
+    "line": 50,
+    "function": "<callback>",
+    "kind": "if",
+    "condition": "isMissingObject(result.stderr)",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/backup/object-store.ts",
+    "line": 70,
+    "function": "<callback>",
+    "kind": "if",
+    "condition": "result.status !== 0",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/backup/object-store.ts",
+    "line": 80,
+    "function": "#run",
+    "kind": "if",
+    "condition": "result.error",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/backup/object-store.ts",
+    "line": 85,
+    "function": "#run",
+    "kind": "short-circuit",
+    "condition": "result.stdout ?? ''",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/backup/object-store.ts",
+    "line": 86,
+    "function": "#run",
+    "kind": "short-circuit",
+    "condition": "result.stderr ?? ''",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/backup/object-store.ts",
+    "line": 98,
+    "function": "putImmutable",
+    "kind": "if",
+    "condition": "existing",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/backup/object-store.ts",
+    "line": 99,
+    "function": "putImmutable",
+    "kind": "if",
+    "condition": "bytesDigest(existing) !== bytesDigest(content)",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/backup/object-store.ts",
+    "line": 107,
+    "function": "putImmutable",
+    "kind": "if",
+    "condition": "!uploaded || bytesDigest(uploaded) !== bytesDigest(content)",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/backup/object-store.ts",
+    "line": 107,
+    "function": "putImmutable",
+    "kind": "short-circuit",
+    "condition": "!uploaded || bytesDigest(uploaded) !== bytesDigest(content)",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/backup/object-store.ts",
+    "line": 137,
+    "function": "commandFailure",
+    "kind": "short-circuit",
+    "condition": "result.stderr.trim() || result.stdout.trim() || 'unknown error'",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/backup/object-store.ts",
+    "line": 137,
+    "function": "commandFailure",
+    "kind": "short-circuit",
+    "condition": "result.stderr.trim() || result.stdout.trim()",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/backup/service.ts",
+    "line": 71,
+    "function": "listBackups",
+    "kind": "if",
+    "condition": "!Number.isSafeInteger(limit) || limit < 1 || limit > 1_000",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/backup/service.ts",
+    "line": 71,
+    "function": "listBackups",
+    "kind": "short-circuit",
+    "condition": "!Number.isSafeInteger(limit) || limit < 1 || limit > 1_000",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/backup/service.ts",
+    "line": 71,
+    "function": "listBackups",
+    "kind": "short-circuit",
+    "condition": "!Number.isSafeInteger(limit) || limit < 1",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/backup/service.ts",
+    "line": 76,
+    "function": "listBackups",
+    "kind": "if",
+    "condition": "!head",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/backup/service.ts",
+    "line": 81,
+    "function": "listBackups",
+    "kind": "loop",
+    "condition": "generation && manifests.length < limit",
+    "paths": [
+      "iterate",
+      "exit"
+    ]
+  },
+  {
+    "file": "src/backup/service.ts",
+    "line": 81,
+    "function": "listBackups",
+    "kind": "short-circuit",
+    "condition": "generation && manifests.length < limit",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/backup/service.ts",
+    "line": 82,
+    "function": "listBackups",
+    "kind": "if",
+    "condition": "visited.has(generation)",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/backup/service.ts",
+    "line": 98,
+    "function": "restoreBackup",
+    "kind": "short-circuit",
+    "condition": "options.generation ?? requireHead(store, config).generation",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/backup/service.ts",
+    "line": 102,
+    "function": "restoreBackup",
+    "kind": "if",
+    "condition": "!bytes",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/backup/service.ts",
+    "line": 107,
+    "function": "restoreBackup",
+    "kind": "short-circuit",
+    "condition": "options.outputPath ?? join( canonicalProjectDir(workspaceRoot), 'restores', `${generation}.sqlite`, )",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/backup/service.ts",
+    "line": 137,
+    "function": "createManifest",
+    "kind": "short-circuit",
+    "condition": "head?.generation ?? null",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/backup/service.ts",
+    "line": 153,
+    "function": "readHead",
+    "kind": "if",
+    "condition": "!bytes",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/backup/service.ts",
+    "line": 155,
+    "function": "readHead",
+    "kind": "if",
+    "condition": "head.projectId !== config.projectId",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/backup/service.ts",
+    "line": 158,
+    "function": "readHead",
+    "kind": "if",
+    "condition": "head.writerId !== config.writerId",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/backup/service.ts",
+    "line": 164,
+    "function": "readHead",
+    "kind": "if",
+    "condition": "head.manifestKey !== expectedKey",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/backup/service.ts",
+    "line": 175,
+    "function": "requireHead",
+    "kind": "if",
+    "condition": "!head",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/backup/service.ts",
+    "line": 187,
+    "function": "readManifest",
+    "kind": "if",
+    "condition": "!bytes",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/backup/service.ts",
+    "line": 189,
+    "function": "readManifest",
+    "kind": "if",
+    "condition": "manifest.projectId !== config.projectId || manifest.generation !== generation",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/backup/service.ts",
+    "line": 190,
+    "function": "readManifest",
+    "kind": "short-circuit",
+    "condition": "manifest.projectId !== config.projectId || manifest.generation !== generation",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/backup/service.ts",
+    "line": 195,
+    "function": "readManifest",
+    "kind": "if",
+    "condition": "manifest.writerId !== config.writerId",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/backup/service.ts",
+    "line": 199,
+    "function": "readManifest",
+    "kind": "if",
+    "condition": "manifest.database.objectKey !== expectedDatabaseKey",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/backup/service.ts",
+    "line": 211,
+    "function": "assertHeadUnchanged",
+    "kind": "if",
+    "condition": "current?.generation !== initial?.generation",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/backup/service.ts",
+    "line": 237,
+    "function": "publishHead",
+    "kind": "if",
+    "condition": "!published || bytesDigest(published) !== bytesDigest(content)",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/backup/service.ts",
+    "line": 237,
+    "function": "publishHead",
+    "kind": "short-circuit",
+    "condition": "!published || bytesDigest(published) !== bytesDigest(content)",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/backup/service.ts",
+    "line": 246,
+    "function": "validateDatabaseBytes",
+    "kind": "if",
+    "condition": "bytes.byteLength !== manifest.database.byteLength || bytesDigest(bytes) !== manifest.database.digest",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/backup/service.ts",
+    "line": 247,
+    "function": "validateDatabaseBytes",
+    "kind": "short-circuit",
+    "condition": "bytes.byteLength !== manifest.database.byteLength || bytesDigest(bytes) !== manifest.database.digest",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/backup/service.ts",
+    "line": 262,
+    "function": "validateGenerationInput",
+    "kind": "if",
+    "condition": "!/^\\d{8}T\\d{9}Z-[0-9a-f-]{36}$/.test(generation)",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/cli.ts",
+    "line": 31,
+    "function": "main",
+    "kind": "catch",
+    "condition": "error",
+    "paths": [
+      "success",
+      "failure"
+    ]
+  },
+  {
+    "file": "src/cli.ts",
+    "line": 32,
+    "function": "main",
+    "kind": "if",
+    "condition": "error instanceof Error && error.name === 'CommanderError'",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/cli.ts",
+    "line": 32,
+    "function": "main",
+    "kind": "short-circuit",
+    "condition": "error instanceof Error && error.name === 'CommanderError'",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/cli.ts",
+    "line": 39,
+    "function": "main",
+    "kind": "if",
+    "condition": "!options.preserveProcessExitCode",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/cli.ts",
+    "line": 87,
+    "function": "<callback>",
+    "kind": "if",
+    "condition": "!status.created",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/cli.ts",
+    "line": 110,
+    "function": "<callback>",
+    "kind": "loop",
+    "condition": "root.parent",
+    "paths": [
+      "iterate",
+      "exit"
+    ]
+  },
+  {
+    "file": "src/cli.ts",
+    "line": 114,
+    "function": "<callback>",
+    "kind": "if",
+    "condition": "options.cwd",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/cli.ts",
+    "line": 118,
+    "function": "<callback>",
+    "kind": "if",
+    "condition": "!isMemoryCommand(actionCommand)",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/cli.ts",
+    "line": 131,
+    "function": "<callback>",
+    "kind": "if",
+    "condition": "!isMemoryCommand(actionCommand)",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/cli.ts",
+    "line": 140,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "command[PREVIOUS_WORKSPACE_CONTEXT] ?? null",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/cli.ts",
+    "line": 141,
+    "function": "<callback>",
+    "kind": "if",
+    "condition": "previous",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/cli.ts",
+    "line": 151,
+    "function": "parseProgram",
+    "kind": "if",
+    "condition": "process.argv.length <= 2",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/cli.ts",
+    "line": 161,
+    "function": "isMemoryCommand",
+    "kind": "loop",
+    "condition": "current",
+    "paths": [
+      "iterate",
+      "exit"
+    ]
+  },
+  {
+    "file": "src/cli.ts",
+    "line": 162,
+    "function": "isMemoryCommand",
+    "kind": "if",
+    "condition": "current.name() === 'memory'",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/cli.ts",
+    "line": 165,
+    "function": "isMemoryCommand",
+    "kind": "short-circuit",
+    "condition": "current.parent ?? null",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/cli/commands/backup.ts",
+    "line": 82,
+    "function": "<callback>",
+    "kind": "if",
+    "condition": "manifests.length === 0",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/cli/commands/backup.ts",
+    "line": 86,
+    "function": "<callback>",
+    "kind": "loop",
+    "condition": "manifests",
+    "paths": [
+      "each",
+      "empty/done"
+    ]
+  },
+  {
+    "file": "src/cli/commands/backup.ts",
+    "line": 136,
+    "function": "parseLimit",
+    "kind": "if",
+    "condition": "!Number.isSafeInteger(parsed) || parsed < 1 || parsed > 1_000",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/cli/commands/backup.ts",
+    "line": 136,
+    "function": "parseLimit",
+    "kind": "short-circuit",
+    "condition": "!Number.isSafeInteger(parsed) || parsed < 1 || parsed > 1_000",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/cli/commands/backup.ts",
+    "line": 136,
+    "function": "parseLimit",
+    "kind": "short-circuit",
+    "condition": "!Number.isSafeInteger(parsed) || parsed < 1",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/cli/commands/memory/recall-basic-handlers.ts",
+    "line": 42,
+    "function": "<callback>",
+    "kind": "ternary",
+    "condition": "options.after",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/cli/commands/memory/recall-basic-handlers.ts",
+    "line": 43,
+    "function": "<callback>",
+    "kind": "ternary",
+    "condition": "options.limit",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/cli/commands/memory/recall-basic-handlers.ts",
+    "line": 49,
+    "function": "<callback>",
+    "kind": "ternary",
+    "condition": "result.dryRun",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/cli/commands/memory/recall-basic-handlers.ts",
+    "line": 60,
+    "function": "parseDate",
+    "kind": "if",
+    "condition": "Number.isNaN(date.getTime())",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/cli/io.ts",
+    "line": 34,
+    "function": "getGlobalOptions",
+    "kind": "if",
+    "condition": "!command || typeof (command as Command).opts !== 'function'",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/cli/io.ts",
+    "line": 34,
+    "function": "getGlobalOptions",
+    "kind": "short-circuit",
+    "condition": "!command || typeof (command as Command).opts !== 'function'",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/cli/io.ts",
+    "line": 38,
+    "function": "getGlobalOptions",
+    "kind": "short-circuit",
+    "condition": "activeWorkspace?.workspaceRoot ?? process.cwd()",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/cli/io.ts",
+    "line": 43,
+    "function": "getGlobalOptions",
+    "kind": "loop",
+    "condition": "root.parent",
+    "paths": [
+      "iterate",
+      "exit"
+    ]
+  },
+  {
+    "file": "src/cli/io.ts",
+    "line": 46,
+    "function": "getGlobalOptions",
+    "kind": "if",
+    "condition": "typeof root.opts !== 'function'",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/cli/io.ts",
+    "line": 50,
+    "function": "getGlobalOptions",
+    "kind": "short-circuit",
+    "condition": "activeWorkspace?.workspaceRoot ?? process.cwd()",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/cli/io.ts",
+    "line": 58,
+    "function": "getGlobalOptions",
+    "kind": "short-circuit",
+    "condition": "activeWorkspace?.workspaceRoot ?? options.cwd ?? process.cwd()",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/cli/io.ts",
+    "line": 58,
+    "function": "getGlobalOptions",
+    "kind": "short-circuit",
+    "condition": "activeWorkspace?.workspaceRoot ?? options.cwd",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/cli/io.ts",
+    "line": 63,
+    "function": "readInput",
+    "kind": "if",
+    "condition": "value === undefined",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/cli/io.ts",
+    "line": 64,
+    "function": "readInput",
+    "kind": "if",
+    "condition": "value === '@-'",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/cli/io.ts",
+    "line": 70,
+    "function": "readInput",
+    "kind": "if",
+    "condition": "process.stdin.isTTY",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/cli/io.ts",
+    "line": 74,
+    "function": "readInput",
+    "kind": "if",
+    "condition": "!stdin",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/cli/io.ts",
+    "line": 79,
+    "function": "readInput",
+    "kind": "if",
+    "condition": "value.startsWith('@')",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/cli/io.ts",
+    "line": 81,
+    "function": "readInput",
+    "kind": "if",
+    "condition": "!path",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/cli/io.ts",
+    "line": 93,
+    "function": "readJsonInput",
+    "kind": "if",
+    "condition": "raw === undefined",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/cli/io.ts",
+    "line": 96,
+    "function": "readJsonInput",
+    "kind": "catch",
+    "condition": "error",
+    "paths": [
+      "success",
+      "failure"
+    ]
+  },
+  {
+    "file": "src/cli/io.ts",
+    "line": 97,
+    "function": "readJsonInput",
+    "kind": "ternary",
+    "condition": "error instanceof Error",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/cli/io.ts",
+    "line": 103,
+    "function": "parseIdList",
+    "kind": "if",
+    "condition": "!value",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/cli/io.ts",
+    "line": 104,
+    "function": "parseIdList",
+    "kind": "ternary",
+    "condition": "Array.isArray(value)",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/cli/io.ts",
+    "line": 108,
+    "function": "parseIdList",
+    "kind": "ternary",
+    "condition": "trimmed.length > 0",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/cli/io.ts",
+    "line": 120,
+    "function": "runCommand",
+    "kind": "if",
+    "condition": "options.json",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/cli/io.ts",
+    "line": 129,
+    "function": "runCommand",
+    "kind": "if",
+    "condition": "!options.quiet",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/cli/io.ts",
+    "line": 132,
+    "function": "runCommand",
+    "kind": "catch",
+    "condition": "error",
+    "paths": [
+      "success",
+      "failure"
+    ]
+  },
+  {
+    "file": "src/cli/io.ts",
+    "line": 133,
+    "function": "runCommand",
+    "kind": "if",
+    "condition": "options.json",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/cli/io.ts",
+    "line": 171,
+    "function": "<callback>",
+    "kind": "if",
+    "condition": "Result.isFailure(result)",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/cli/io.ts",
+    "line": 179,
+    "function": "formatError",
+    "kind": "if",
+    "condition": "isContinuumError(error)",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/cli/io.ts",
+    "line": 186,
+    "function": "formatError",
+    "kind": "if",
+    "condition": "isCanonicalStorageError(error)",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/cli/io.ts",
+    "line": 189,
+    "function": "formatError",
+    "kind": "if",
+    "condition": "typeof error === 'object' && error !== null && '_tag' in error",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/cli/io.ts",
+    "line": 189,
+    "function": "formatError",
+    "kind": "short-circuit",
+    "condition": "typeof error === 'object' && error !== null && '_tag' in error",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/cli/io.ts",
+    "line": 189,
+    "function": "formatError",
+    "kind": "short-circuit",
+    "condition": "typeof error === 'object' && error !== null",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/cli/io.ts",
+    "line": 192,
+    "function": "formatError",
+    "kind": "ternary",
+    "condition": "cause instanceof Error",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/cli/io.ts",
+    "line": 192,
+    "function": "formatError",
+    "kind": "short-circuit",
+    "condition": "cause ?? ''",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/cli/io.ts",
+    "line": 198,
+    "function": "formatError",
+    "kind": "ternary",
+    "condition": "error instanceof Error",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/db/client.ts",
+    "line": 34,
+    "function": "getDbClientByPath",
+    "kind": "if",
+    "condition": "!client",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/db/client.ts",
+    "line": 38,
+    "function": "getDbClientByPath",
+    "kind": "if",
+    "condition": "options.migrate !== false && !migratedPaths.has(dbPath)",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/db/client.ts",
+    "line": 38,
+    "function": "getDbClientByPath",
+    "kind": "short-circuit",
+    "condition": "options.migrate !== false && !migratedPaths.has(dbPath)",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/db/migrate.ts",
+    "line": 33,
+    "function": "applyMigrations",
+    "kind": "if",
+    "condition": "migrations.length === 0",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/db/migrate.ts",
+    "line": 41,
+    "function": "applyMigrations",
+    "kind": "if",
+    "condition": "isMigrationStateCurrent(sqlite, latestMigrationMillis)",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/db/migrate.ts",
+    "line": 50,
+    "function": "applyMigrations",
+    "kind": "loop",
+    "condition": "migrations",
+    "paths": [
+      "each",
+      "empty/done"
+    ]
+  },
+  {
+    "file": "src/db/migrate.ts",
+    "line": 51,
+    "function": "applyMigrations",
+    "kind": "if",
+    "condition": "lastAppliedMillis !== null && Number(lastAppliedMillis) >= migration.folderMillis",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/db/migrate.ts",
+    "line": 52,
+    "function": "applyMigrations",
+    "kind": "short-circuit",
+    "condition": "lastAppliedMillis !== null && Number(lastAppliedMillis) >= migration.folderMillis",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/db/migrate.ts",
+    "line": 58,
+    "function": "applyMigrations",
+    "kind": "loop",
+    "condition": "migration.sql",
+    "paths": [
+      "each",
+      "empty/done"
+    ]
+  },
+  {
+    "file": "src/db/migrate.ts",
+    "line": 59,
+    "function": "applyMigrations",
+    "kind": "if",
+    "condition": "statement.trim().length === 0",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/db/migrate.ts",
+    "line": 72,
+    "function": "applyMigrations",
+    "kind": "catch",
+    "condition": "error",
+    "paths": [
+      "success",
+      "failure"
+    ]
+  },
+  {
+    "file": "src/db/migrate.ts",
+    "line": 82,
+    "function": "isMigrationStateCurrent",
+    "kind": "if",
+    "condition": "!hasMigrationsTable(sqlite)",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/db/migrate.ts",
+    "line": 88,
+    "function": "isMigrationStateCurrent",
+    "kind": "short-circuit",
+    "condition": "lastAppliedMillis !== null && Number(lastAppliedMillis) >= latestMigrationMillis",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/db/migrate.ts",
+    "line": 118,
+    "function": "readLastAppliedMigrationMillis",
+    "kind": "short-circuit",
+    "condition": "row?.created_at ?? null",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/db/migrate.ts",
+    "line": 123,
+    "function": "readArg",
+    "kind": "if",
+    "condition": "index === -1",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/db/migrate.ts",
+    "line": 124,
+    "function": "readArg",
+    "kind": "short-circuit",
+    "condition": "args[index + 1] ?? null",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/db/migrate.ts",
+    "line": 130,
+    "function": "main",
+    "kind": "short-circuit",
+    "condition": "readArg('--db', args) ?? `${process.cwd()}/.continuum/continuum.db`",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/db/migrate.ts",
+    "line": 134,
+    "function": "<module>",
+    "kind": "if",
+    "condition": "import.meta.main",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/db/paths.ts",
+    "line": 24,
+    "function": "canonicalDataHome",
+    "kind": "if",
+    "condition": "options.dataHome",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/db/paths.ts",
+    "line": 25,
+    "function": "canonicalDataHome",
+    "kind": "if",
+    "condition": "process.env.XDG_DATA_HOME",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/db/paths.ts",
+    "line": 26,
+    "function": "canonicalDataHome",
+    "kind": "short-circuit",
+    "condition": "process.env.HOME ?? homedir()",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/db/paths.ts",
+    "line": 33,
+    "function": "normalizedWorkspacePath",
+    "kind": "catch",
+    "condition": "cause",
+    "paths": [
+      "success",
+      "failure"
+    ]
+  },
+  {
+    "file": "src/db/storage-receipt.ts",
+    "line": 60,
+    "function": "publishMigrationReceipt",
+    "kind": "catch",
+    "condition": "cause",
+    "paths": [
+      "success",
+      "failure"
+    ]
+  },
+  {
+    "file": "src/db/storage-receipt.ts",
+    "line": 61,
+    "function": "publishMigrationReceipt",
+    "kind": "if",
+    "condition": "!existsSync(path)",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/db/storage-receipt.ts",
+    "line": 65,
+    "function": "publishMigrationReceipt",
+    "kind": "if",
+    "condition": "existsSync(staging)",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/db/storage-receipt.ts",
+    "line": 72,
+    "function": "readMigrationReceipt",
+    "kind": "catch",
+    "condition": "cause",
+    "paths": [
+      "success",
+      "failure"
+    ]
+  },
+  {
+    "file": "src/db/storage-receipt.ts",
+    "line": 85,
+    "function": "verifyMigrationReceipt",
+    "kind": "short-circuit",
+    "condition": "receipt.version === RECEIPT_VERSION && receipt.projectId === projectStorageId(workspaceRoot) && receipt.workspacePath === normalizedWorkspacePath(workspaceRoot) && receipt.sourcePath === sourcePath && receipt.destinationPath === destination",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/db/storage-receipt.ts",
+    "line": 85,
+    "function": "verifyMigrationReceipt",
+    "kind": "short-circuit",
+    "condition": "receipt.version === RECEIPT_VERSION && receipt.projectId === projectStorageId(workspaceRoot) && receipt.workspacePath === normalizedWorkspacePath(workspaceRoot) && receipt.sourcePath === sourcePath",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/db/storage-receipt.ts",
+    "line": 85,
+    "function": "verifyMigrationReceipt",
+    "kind": "short-circuit",
+    "condition": "receipt.version === RECEIPT_VERSION && receipt.projectId === projectStorageId(workspaceRoot) && receipt.workspacePath === normalizedWorkspacePath(workspaceRoot)",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/db/storage-receipt.ts",
+    "line": 85,
+    "function": "verifyMigrationReceipt",
+    "kind": "short-circuit",
+    "condition": "receipt.version === RECEIPT_VERSION && receipt.projectId === projectStorageId(workspaceRoot)",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/db/storage-receipt.ts",
+    "line": 90,
+    "function": "verifyMigrationReceipt",
+    "kind": "if",
+    "condition": "!identityMatches",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/db/storage-receipt.ts",
+    "line": 95,
+    "function": "verifyMigrationReceipt",
+    "kind": "if",
+    "condition": "receipt.sourceFingerprint.digest !== sourceFingerprint.digest",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/db/storage-receipt.ts",
+    "line": 110,
+    "function": "warnRemovableLegacySource",
+    "kind": "if",
+    "condition": "!warn || warnedSources.has(key)",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/db/storage-receipt.ts",
+    "line": 110,
+    "function": "warnRemovableLegacySource",
+    "kind": "short-circuit",
+    "condition": "!warn || warnedSources.has(key)",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/db/storage-receipt.ts",
+    "line": 123,
+    "function": "assertEquivalentReceipt",
+    "kind": "short-circuit",
+    "condition": "actual.version === expected.version && actual.projectId === expected.projectId && actual.sourcePath === expected.sourcePath && actual.destinationPath === expected.destinationPath && actual.sourceFingerprint.digest === expected.sourceFingerp",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/db/storage-receipt.ts",
+    "line": 123,
+    "function": "assertEquivalentReceipt",
+    "kind": "short-circuit",
+    "condition": "actual.version === expected.version && actual.projectId === expected.projectId && actual.sourcePath === expected.sourcePath && actual.destinationPath === expected.destinationPath",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/db/storage-receipt.ts",
+    "line": 123,
+    "function": "assertEquivalentReceipt",
+    "kind": "short-circuit",
+    "condition": "actual.version === expected.version && actual.projectId === expected.projectId && actual.sourcePath === expected.sourcePath",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/db/storage-receipt.ts",
+    "line": 123,
+    "function": "assertEquivalentReceipt",
+    "kind": "short-circuit",
+    "condition": "actual.version === expected.version && actual.projectId === expected.projectId",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/db/storage-receipt.ts",
+    "line": 128,
+    "function": "assertEquivalentReceipt",
+    "kind": "if",
+    "condition": "!equivalent",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/db/storage-snapshot.ts",
+    "line": 39,
+    "function": "readDatabaseSnapshot",
+    "kind": "catch",
+    "condition": "cause",
+    "paths": [
+      "success",
+      "failure"
+    ]
+  },
+  {
+    "file": "src/db/storage-snapshot.ts",
+    "line": 40,
+    "function": "readDatabaseSnapshot",
+    "kind": "if",
+    "condition": "cause instanceof CanonicalStorageError",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/db/storage-snapshot.ts",
+    "line": 56,
+    "function": "publishDatabaseSnapshot",
+    "kind": "if",
+    "condition": "validation.fingerprint.digest !== snapshot.fingerprint.digest",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/db/storage-snapshot.ts",
+    "line": 62,
+    "function": "publishDatabaseSnapshot",
+    "kind": "catch",
+    "condition": "cause",
+    "paths": [
+      "success",
+      "failure"
+    ]
+  },
+  {
+    "file": "src/db/storage-snapshot.ts",
+    "line": 63,
+    "function": "publishDatabaseSnapshot",
+    "kind": "if",
+    "condition": "cause instanceof CanonicalStorageError",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/db/storage-snapshot.ts",
+    "line": 69,
+    "function": "publishDatabaseSnapshot",
+    "kind": "if",
+    "condition": "existsSync(staging)",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/db/storage-snapshot.ts",
+    "line": 92,
+    "function": "publishWithoutOverwrite",
+    "kind": "catch",
+    "condition": "cause",
+    "paths": [
+      "success",
+      "failure"
+    ]
+  },
+  {
+    "file": "src/db/storage-snapshot.ts",
+    "line": 93,
+    "function": "publishWithoutOverwrite",
+    "kind": "if",
+    "condition": "!existsSync(destination)",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/db/storage-snapshot.ts",
+    "line": 95,
+    "function": "publishWithoutOverwrite",
+    "kind": "if",
+    "condition": "existing.fingerprint.digest !== validation.fingerprint.digest",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/db/storage-snapshot.ts",
+    "line": 105,
+    "function": "assertIntegrity",
+    "kind": "if",
+    "condition": "rows.length !== 1 || rows[0]?.integrity_check !== 'ok'",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/db/storage-snapshot.ts",
+    "line": 105,
+    "function": "assertIntegrity",
+    "kind": "short-circuit",
+    "condition": "rows.length !== 1 || rows[0]?.integrity_check !== 'ok'",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/db/storage.ts",
+    "line": 52,
+    "function": "prepareCanonicalDatabase",
+    "kind": "if",
+    "condition": "!existsSync(paths.sourcePath)",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/db/storage.ts",
+    "line": 57,
+    "function": "prepareCanonicalDatabase",
+    "kind": "if",
+    "condition": "existsSync(paths.receiptPath)",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/db/storage.ts",
+    "line": 60,
+    "function": "prepareCanonicalDatabase",
+    "kind": "if",
+    "condition": "destinationExisted",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/db/storage.ts",
+    "line": 63,
+    "function": "prepareCanonicalDatabase",
+    "kind": "if",
+    "condition": "!initialize",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/db/storage.ts",
+    "line": 77,
+    "function": "prepareWithoutLegacy",
+    "kind": "if",
+    "condition": "initialize && !destinationExisted",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/db/storage.ts",
+    "line": 77,
+    "function": "prepareWithoutLegacy",
+    "kind": "short-circuit",
+    "condition": "initialize && !destinationExisted",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/db/storage.ts",
+    "line": 81,
+    "function": "prepareWithoutLegacy",
+    "kind": "short-circuit",
+    "condition": "initialize && !destinationExisted",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/db/storage.ts",
+    "line": 98,
+    "function": "verifyRecordedMigration",
+    "kind": "if",
+    "condition": "!existsSync(paths.dbPath)",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/db/storage.ts",
+    "line": 114,
+    "function": "adoptEquivalentDestination",
+    "kind": "if",
+    "condition": "destination.fingerprint.digest !== source.fingerprint.digest",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/db/storage.ts",
+    "line": 153,
+    "function": "assertSourceUnchanged",
+    "kind": "if",
+    "condition": "current.fingerprint.digest !== expected.fingerprint.digest",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/mcp/init-tool.ts",
+    "line": 21,
+    "function": "initMcpWorkspace",
+    "kind": "short-circuit",
+    "condition": "after.pluginDirExists && after.dbFileExists",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/mcp/memory-tools.ts",
+    "line": 27,
+    "function": "consolidateMcpMemory",
+    "kind": "if",
+    "condition": "result.status === 'conflict'",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/mcp/memory-tools.ts",
+    "line": 36,
+    "function": "consolidateMcpMemory",
+    "kind": "if",
+    "condition": "result.status === 'completed'",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/mcp/memory-tools.ts",
+    "line": 75,
+    "function": "importMcpRecall",
+    "kind": "if",
+    "condition": "input.sourceDb && !isAbsolute(input.sourceDb)",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/mcp/memory-tools.ts",
+    "line": 75,
+    "function": "importMcpRecall",
+    "kind": "short-circuit",
+    "condition": "input.sourceDb && !isAbsolute(input.sourceDb)",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/mcp/memory-tools.ts",
+    "line": 78,
+    "function": "importMcpRecall",
+    "kind": "ternary",
+    "condition": "input.after",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/mcp/memory-tools.ts",
+    "line": 99,
+    "function": "parseDate",
+    "kind": "if",
+    "condition": "Number.isNaN(date.getTime())",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/mcp/tools.ts",
+    "line": 31,
+    "function": "getSummary",
+    "kind": "short-circuit",
+    "condition": "input.taskLimit ?? 5",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/mcp/tools.ts",
+    "line": 32,
+    "function": "getSummary",
+    "kind": "short-circuit",
+    "condition": "input.memoryLimit ?? 3",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/mcp/tools.ts",
+    "line": 69,
+    "function": "appendMcpMemory",
+    "kind": "ternary",
+    "condition": "input.tags",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/mcp/tools.ts",
+    "line": 95,
+    "function": "searchMcpMemory",
+    "kind": "short-circuit",
+    "condition": "input.limit ?? 20",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/mcp/tools.ts",
+    "line": 103,
+    "function": "resolveMcpWorkspace",
+    "kind": "if",
+    "condition": "!isAbsolute(workspace)",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/mcp/tools.ts",
+    "line": 106,
+    "function": "resolveMcpWorkspace",
+    "kind": "if",
+    "condition": "!existsSync(workspace) || !statSync(workspace).isDirectory()",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/mcp/tools.ts",
+    "line": 106,
+    "function": "resolveMcpWorkspace",
+    "kind": "short-circuit",
+    "condition": "!existsSync(workspace) || !statSync(workspace).isDirectory()",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/mcp/tools.ts",
+    "line": 111,
+    "function": "resolveMcpWorkspace",
+    "kind": "if",
+    "condition": "!existsSync(resolved.continuumDbPath)",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/mcp/tools.ts",
+    "line": 124,
+    "function": "resolveInitWorkspace",
+    "kind": "if",
+    "condition": "!isAbsolute(workspace)",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/mcp/tools.ts",
+    "line": 127,
+    "function": "resolveInitWorkspace",
+    "kind": "if",
+    "condition": "!existsSync(workspace) || !statSync(workspace).isDirectory()",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/mcp/tools.ts",
+    "line": 127,
+    "function": "resolveInitWorkspace",
+    "kind": "short-circuit",
+    "condition": "!existsSync(workspace) || !statSync(workspace).isDirectory()",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/append.ts",
+    "line": 46,
+    "function": "appendMemory",
+    "kind": "short-circuit",
+    "condition": "options.repository ?? makeJournalRepository(getDbClientByPath(options.dbPath))",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/append.ts",
+    "line": 54,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "(yield* repository.latestBoundary()) ?? 0",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/append.ts",
+    "line": 58,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "options.publish ?? publishNowProjection",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/append.ts",
+    "line": 71,
+    "function": "<callback>",
+    "kind": "ternary",
+    "condition": "projection._tag === 'Success'",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/memory/application/consolidate.ts",
+    "line": 63,
+    "function": "consolidateMemory",
+    "kind": "short-circuit",
+    "condition": "options.journal ?? makeJournalRepository(handle)",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/consolidate.ts",
+    "line": 65,
+    "function": "consolidateMemory",
+    "kind": "short-circuit",
+    "condition": "options.consolidations ?? makeConsolidationRepository(handle)",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/consolidate.ts",
+    "line": 67,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "(yield* journal.latestBoundary()) ?? 0",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/consolidate.ts",
+    "line": 69,
+    "function": "<callback>",
+    "kind": "if",
+    "condition": "snapshot === null || snapshot <= boundary",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/memory/application/consolidate.ts",
+    "line": 69,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "snapshot === null || snapshot <= boundary",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/consolidate.ts",
+    "line": 70,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "options.dryRun ?? false",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/consolidate.ts",
+    "line": 72,
+    "function": "<callback>",
+    "kind": "if",
+    "condition": "entries.length === 0",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/memory/application/consolidate.ts",
+    "line": 73,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "options.dryRun ?? false",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/consolidate.ts",
+    "line": 76,
+    "function": "<callback>",
+    "kind": "if",
+    "condition": "!first || !last",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/memory/application/consolidate.ts",
+    "line": 76,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "!first || !last",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/consolidate.ts",
+    "line": 77,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "options.dryRun ?? false",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/consolidate.ts",
+    "line": 79,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "options.config ?? (yield* loadMemoryConfig(options.memoryDir))",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/consolidate.ts",
+    "line": 81,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "options.summarize ?? defaultSummarizer(config)",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/consolidate.ts",
+    "line": 86,
+    "function": "<callback>",
+    "kind": "if",
+    "condition": "options.dryRun",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/memory/application/consolidate.ts",
+    "line": 104,
+    "function": "<callback>",
+    "kind": "if",
+    "condition": "Result.isFailure(completion)",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/memory/application/consolidate.ts",
+    "line": 105,
+    "function": "<callback>",
+    "kind": "if",
+    "condition": "completion.failure instanceof ConsolidationConflictError",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/memory/application/consolidate.ts",
+    "line": 120,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "options.publish ?? publishMemoryProjections",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/consolidate.ts",
+    "line": 129,
+    "function": "<callback>",
+    "kind": "ternary",
+    "condition": "projection._tag === 'Success'",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/memory/application/consolidate.ts",
+    "line": 139,
+    "function": "<callback>",
+    "kind": "ternary",
+    "condition": "config.consolidation",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/memory/application/consolidate.ts",
+    "line": 146,
+    "function": "renderSummaryEntry",
+    "kind": "if",
+    "condition": "entry.kind === 'user'",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/memory/application/consolidate.ts",
+    "line": 147,
+    "function": "renderSummaryEntry",
+    "kind": "if",
+    "condition": "entry.kind === 'agent'",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/memory/application/consolidate.ts",
+    "line": 148,
+    "function": "renderSummaryEntry",
+    "kind": "if",
+    "condition": "entry.kind === 'tool'",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/memory/application/legacy-migrate-persist.ts",
+    "line": 23,
+    "function": "<callback>",
+    "kind": "if",
+    "condition": "hasCompletedRun(sqlite)",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/memory/application/legacy-migrate-persist.ts",
+    "line": 24,
+    "function": "<callback>",
+    "kind": "loop",
+    "condition": "artifacts",
+    "paths": [
+      "each",
+      "empty/done"
+    ]
+  },
+  {
+    "file": "src/memory/application/legacy-migrate-persist.ts",
+    "line": 26,
+    "function": "<callback>",
+    "kind": "ternary",
+    "condition": "artifact.result === 'import'",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/memory/application/legacy-migrate-persist.ts",
+    "line": 52,
+    "function": "importArtifact",
+    "kind": "if",
+    "condition": "artifact.kind === 'opencode-summary'",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/memory/application/legacy-migrate-persist.ts",
+    "line": 54,
+    "function": "importArtifact",
+    "kind": "if",
+    "condition": "artifact.kind === 'opencode-normalized'",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/memory/application/legacy-migrate-persist.ts",
+    "line": 65,
+    "function": "importJournalArtifact",
+    "kind": "short-circuit",
+    "condition": "artifactDate(artifact) ?? new Date().toISOString()",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/legacy-migrate-persist.ts",
+    "line": 90,
+    "function": "importJournalArtifact",
+    "kind": "if",
+    "condition": "artifact.kind === 'now'",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/memory/application/legacy-migrate-persist.ts",
+    "line": 121,
+    "function": "importRecallSummary",
+    "kind": "if",
+    "condition": "!parsed",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/memory/application/legacy-migrate-persist.ts",
+    "line": 164,
+    "function": "importTranscript",
+    "kind": "if",
+    "condition": "!sessionId",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/memory/application/legacy-migrate-persist.ts",
+    "line": 211,
+    "function": "upsertRecallSource",
+    "kind": "short-circuit",
+    "condition": "existing?.id ?? stableId('legacy-opencode-source', source.sessionId)",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/legacy-migrate-persist.ts",
+    "line": 253,
+    "function": "<callback>",
+    "kind": "ternary",
+    "condition": "match[1] === 'User'",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/memory/application/legacy-migrate-persist.ts",
+    "line": 255,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "match[3] ?? ''",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/legacy-migrate-persist.ts",
+    "line": 285,
+    "function": "artifactDate",
+    "kind": "ternary",
+    "condition": "match?.[1]",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/memory/application/legacy-migrate-persist.ts",
+    "line": 293,
+    "function": "readString",
+    "kind": "ternary",
+    "condition": "typeof value === 'string' && value.trim()",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/memory/application/legacy-migrate-persist.ts",
+    "line": 293,
+    "function": "readString",
+    "kind": "short-circuit",
+    "condition": "typeof value === 'string' && value.trim()",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/legacy-migrate-persist.ts",
+    "line": 297,
+    "function": "readTimestamp",
+    "kind": "ternary",
+    "condition": "value && !Number.isNaN(Date.parse(value))",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/memory/application/legacy-migrate-persist.ts",
+    "line": 297,
+    "function": "readTimestamp",
+    "kind": "short-circuit",
+    "condition": "value && !Number.isNaN(Date.parse(value))",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/query-recall.ts",
+    "line": 49,
+    "function": "appendRecallEvidence",
+    "kind": "loop",
+    "condition": "rows",
+    "paths": [
+      "each",
+      "empty/done"
+    ]
+  },
+  {
+    "file": "src/memory/application/query-recall.ts",
+    "line": 51,
+    "function": "appendRecallEvidence",
+    "kind": "if",
+    "condition": "!includeHistory && !current",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/memory/application/query-recall.ts",
+    "line": 51,
+    "function": "appendRecallEvidence",
+    "kind": "short-circuit",
+    "condition": "!includeHistory && !current",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/query-recall.ts",
+    "line": 55,
+    "function": "appendRecallEvidence",
+    "kind": "ternary",
+    "condition": "derived",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/memory/application/query-recall.ts",
+    "line": 57,
+    "function": "appendRecallEvidence",
+    "kind": "ternary",
+    "condition": "derived",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/memory/application/query-recall.ts",
+    "line": 59,
+    "function": "appendRecallEvidence",
+    "kind": "ternary",
+    "condition": "current",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/memory/application/query-recall.ts",
+    "line": 70,
+    "function": "flattenRecallSummary",
+    "kind": "catch",
+    "condition": "cause",
+    "paths": [
+      "success",
+      "failure"
+    ]
+  },
+  {
+    "file": "src/memory/application/query-recall.ts",
+    "line": 73,
+    "function": "flattenRecallSummary",
+    "kind": "if",
+    "condition": "'narrative' in summary",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/memory/application/query.ts",
+    "line": 52,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "handle ?? getDbClientByPath(dbPath)",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/query.ts",
+    "line": 54,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "options.source ?? 'all'",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/query.ts",
+    "line": 55,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "options.tier ?? 'all'",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/query.ts",
+    "line": 57,
+    "function": "<callback>",
+    "kind": "if",
+    "condition": "source !== 'recall' && (tier === 'all' || tier === 'NOW')",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/memory/application/query.ts",
+    "line": 57,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "source !== 'recall' && (tier === 'all' || tier === 'NOW')",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/query.ts",
+    "line": 57,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "tier === 'all' || tier === 'NOW'",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/query.ts",
+    "line": 71,
+    "function": "<callback>",
+    "kind": "loop",
+    "condition": "rows",
+    "paths": [
+      "each",
+      "empty/done"
+    ]
+  },
+  {
+    "file": "src/memory/application/query.ts",
+    "line": 74,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "row.metadata ?? '{}'",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/query.ts",
+    "line": 83,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "row.source ?? 'journal'",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/query.ts",
+    "line": 84,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "metadata.tags ?? []",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/query.ts",
+    "line": 90,
+    "function": "<callback>",
+    "kind": "if",
+    "condition": "source !== 'recall' && tier !== 'NOW'",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/memory/application/query.ts",
+    "line": 90,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "source !== 'recall' && tier !== 'NOW'",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/query.ts",
+    "line": 97,
+    "function": "<callback>",
+    "kind": "loop",
+    "condition": "rows",
+    "paths": [
+      "each",
+      "empty/done"
+    ]
+  },
+  {
+    "file": "src/memory/application/query.ts",
+    "line": 116,
+    "function": "<callback>",
+    "kind": "if",
+    "condition": "source !== 'memory' && tier === 'all'",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/memory/application/query.ts",
+    "line": 116,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "source !== 'memory' && tier === 'all'",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/query.ts",
+    "line": 120,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "options.limit ?? evidence.length",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/query.ts",
+    "line": 123,
+    "function": "<callback>",
+    "kind": "ternary",
+    "condition": "cause instanceof DecodeError",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/memory/application/query.ts",
+    "line": 125,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "databaseBusyError('list memory evidence', cause) ?? new DatabaseQueryError({ operation: 'list memory evidence', cause })",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/query.ts",
+    "line": 157,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "b.score - a.score || compareDates(b.createdAt, a.createdAt)",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/query.ts",
+    "line": 159,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "limit ?? 20",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/query.ts",
+    "line": 173,
+    "function": "listMemoryEvidenceIncludingRecallHistory",
+    "kind": "ternary",
+    "condition": "options.source === 'recall'",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/memory/application/query.ts",
+    "line": 180,
+    "function": "<callback>",
+    "kind": "if",
+    "condition": "options.source === 'memory' || (options.tier !== undefined && options.tier !== 'all')",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/memory/application/query.ts",
+    "line": 181,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "options.source === 'memory' || (options.tier !== undefined && options.tier !== 'all')",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/query.ts",
+    "line": 182,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "options.tier !== undefined && options.tier !== 'all'",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/query.ts",
+    "line": 186,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "handle ?? getDbClientByPath(dbPath)",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/query.ts",
+    "line": 195,
+    "function": "<callback>",
+    "kind": "ternary",
+    "condition": "cause instanceof DecodeError",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/memory/application/query.ts",
+    "line": 197,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "databaseBusyError('list memory evidence history', cause) ?? new DatabaseQueryError({ operation: 'list memory evidence history', cause, })",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/query.ts",
+    "line": 214,
+    "function": "decodeJson",
+    "kind": "catch",
+    "condition": "cause",
+    "paths": [
+      "success",
+      "failure"
+    ]
+  },
+  {
+    "file": "src/memory/application/query.ts",
+    "line": 225,
+    "function": "<callback>",
+    "kind": "if",
+    "condition": "after && (!item.createdAt || Date.parse(item.createdAt) < after)",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/memory/application/query.ts",
+    "line": 225,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "after && (!item.createdAt || Date.parse(item.createdAt) < after)",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/query.ts",
+    "line": 225,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "!item.createdAt || Date.parse(item.createdAt) < after",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/query.ts",
+    "line": 228,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "!options.tags?.length || options.tags.every((tag) => item.tags.includes(tag))",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/query.ts",
+    "line": 266,
+    "function": "appendSummaryItems",
+    "kind": "if",
+    "condition": "items.length === 0",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/memory/application/query.ts",
+    "line": 275,
+    "function": "compareDates",
+    "kind": "short-circuit",
+    "condition": "Date.parse(left ?? '') - Date.parse(right ?? '') || 0",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/query.ts",
+    "line": 275,
+    "function": "compareDates",
+    "kind": "short-circuit",
+    "condition": "left ?? ''",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/query.ts",
+    "line": 275,
+    "function": "compareDates",
+    "kind": "short-circuit",
+    "condition": "right ?? ''",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/recall-import.ts",
+    "line": 60,
+    "function": "<callback>",
+    "kind": "ternary",
+    "condition": "options.repoPath && options.continuumDbPath",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/memory/application/recall-import.ts",
+    "line": 60,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "options.repoPath && options.continuumDbPath",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/recall-import.ts",
+    "line": 61,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "options.repoPath ?? workspace?.workspaceRoot",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/recall-import.ts",
+    "line": 63,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "options.continuumDbPath ?? workspace?.continuumDbPath",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/recall-import.ts",
+    "line": 64,
+    "function": "<callback>",
+    "kind": "if",
+    "condition": "!repoPath || !continuumDbPath",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/memory/application/recall-import.ts",
+    "line": 64,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "!repoPath || !continuumDbPath",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/recall-import.ts",
+    "line": 73,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "options.extract ?? extractOpencodeSessions",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/recall-import.ts",
+    "line": 84,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "options.repository ?? makeRecallRepository(getDbClientByPath(continuumDbPath))",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/recall-import.ts",
+    "line": 87,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "options.summaryConfig ?? resolveSummaryConfig( yield* loadMemoryConfig(options.memoryDir ?? workspace?.memoryDir), )",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/recall-import.ts",
+    "line": 89,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "options.memoryDir ?? workspace?.memoryDir",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/recall-import.ts",
+    "line": 98,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "options.dryRun ?? false",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/recall-import.ts",
+    "line": 105,
+    "function": "<callback>",
+    "kind": "loop",
+    "condition": "sessions",
+    "paths": [
+      "each",
+      "empty/done"
+    ]
+  },
+  {
+    "file": "src/memory/application/recall-import.ts",
+    "line": 125,
+    "function": "applySessionFilters",
+    "kind": "ternary",
+    "condition": "typeof limit === 'number'",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/memory/application/recall-import.ts",
+    "line": 131,
+    "function": "isAfter",
+    "kind": "short-circuit",
+    "condition": "!afterDate || typeof created !== 'number' || created >= afterDate.getTime()",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/recall-import.ts",
+    "line": 131,
+    "function": "isAfter",
+    "kind": "short-circuit",
+    "condition": "!afterDate || typeof created !== 'number'",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/recall-import.ts",
+    "line": 138,
+    "function": "isRecallMessage",
+    "kind": "short-circuit",
+    "condition": "message.role === 'user' || message.role === 'assistant'",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/recall-import.ts",
+    "line": 158,
+    "function": "<callback>",
+    "kind": "if",
+    "condition": "existing?.fingerprint === fingerprint",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/memory/application/recall-import.ts",
+    "line": 162,
+    "function": "<callback>",
+    "kind": "if",
+    "condition": "options.dryRun",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/memory/application/recall-import.ts",
+    "line": 163,
+    "function": "<callback>",
+    "kind": "ternary",
+    "condition": "existing",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/memory/application/recall-import.ts",
+    "line": 167,
+    "function": "<callback>",
+    "kind": "if",
+    "condition": "!config",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/memory/application/recall-import.ts",
+    "line": 178,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "options.summarize ?? summarizeOpencodeSession",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/recall-import.ts",
+    "line": 185,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "options.now ?? (() => new Date())",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/recall-import.ts",
+    "line": 186,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "existing?.id ?? `recall_opencode_${session.session.id}`",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/recall-import.ts",
+    "line": 193,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "session.session.title ?? session.session.slug ?? null",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/recall-import.ts",
+    "line": 193,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "session.session.title ?? session.session.slug",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/recall-import.ts",
+    "line": 197,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "existing?.firstIngestedAt ?? timestamp",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/recall-import.ts",
+    "line": 219,
+    "function": "<callback>",
+    "kind": "ternary",
+    "condition": "existing",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/memory/application/recall-import.ts",
+    "line": 234,
+    "function": "fingerprintSession",
+    "kind": "short-circuit",
+    "condition": "session.session.title ?? null",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/recall-import.ts",
+    "line": 235,
+    "function": "fingerprintSession",
+    "kind": "short-circuit",
+    "condition": "session.session.time?.updated ?? null",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/application/recall-import.ts",
+    "line": 248,
+    "function": "toIso",
+    "kind": "ternary",
+    "condition": "typeof value === 'number'",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/memory/collectors/opencode-summary-config.ts",
+    "line": 8,
+    "function": "resolveSummaryConfig",
+    "kind": "if",
+    "condition": "!consolidation",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/memory/config.ts",
+    "line": 87,
+    "function": "<callback>",
+    "kind": "ternary",
+    "condition": "memoryDir",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/memory/config.ts",
+    "line": 95,
+    "function": "readConfigFile",
+    "kind": "if",
+    "condition": "!existsSync(path)",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/memory/config.ts",
+    "line": 98,
+    "function": "readConfigFile",
+    "kind": "ternary",
+    "condition": "isRecord(value)",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/memory/config.ts",
+    "line": 99,
+    "function": "readConfigFile",
+    "kind": "catch",
+    "condition": "cause",
+    "paths": [
+      "success",
+      "failure"
+    ]
+  },
+  {
+    "file": "src/memory/config.ts",
+    "line": 134,
+    "function": "resolveConsolidationConfig",
+    "kind": "ternary",
+    "condition": "isRecord(raw)",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/memory/config.ts",
+    "line": 136,
+    "function": "resolveConsolidationConfig",
+    "kind": "short-circuit",
+    "condition": "readNonEmptyString(record?.api_key) ?? environment.zenApiKey ?? environment.summaryApiKey ?? environment.consolidationApiKey ?? environment.openaiApiKey",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/config.ts",
+    "line": 136,
+    "function": "resolveConsolidationConfig",
+    "kind": "short-circuit",
+    "condition": "readNonEmptyString(record?.api_key) ?? environment.zenApiKey ?? environment.summaryApiKey ?? environment.consolidationApiKey",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/config.ts",
+    "line": 136,
+    "function": "resolveConsolidationConfig",
+    "kind": "short-circuit",
+    "condition": "readNonEmptyString(record?.api_key) ?? environment.zenApiKey ?? environment.summaryApiKey",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/config.ts",
+    "line": 136,
+    "function": "resolveConsolidationConfig",
+    "kind": "short-circuit",
+    "condition": "readNonEmptyString(record?.api_key) ?? environment.zenApiKey",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/config.ts",
+    "line": 142,
+    "function": "resolveConsolidationConfig",
+    "kind": "short-circuit",
+    "condition": "readNonEmptyString(record?.model) ?? environment.summaryModel ?? environment.consolidationModel ?? (apiKey ? DEFAULT_CONSOLIDATION_MODEL : undefined)",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/config.ts",
+    "line": 142,
+    "function": "resolveConsolidationConfig",
+    "kind": "short-circuit",
+    "condition": "readNonEmptyString(record?.model) ?? environment.summaryModel ?? environment.consolidationModel",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/config.ts",
+    "line": 142,
+    "function": "resolveConsolidationConfig",
+    "kind": "short-circuit",
+    "condition": "readNonEmptyString(record?.model) ?? environment.summaryModel",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/config.ts",
+    "line": 145,
+    "function": "resolveConsolidationConfig",
+    "kind": "ternary",
+    "condition": "apiKey",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/memory/config.ts",
+    "line": 146,
+    "function": "resolveConsolidationConfig",
+    "kind": "if",
+    "condition": "!apiKey || !model",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/memory/config.ts",
+    "line": 146,
+    "function": "resolveConsolidationConfig",
+    "kind": "short-circuit",
+    "condition": "!apiKey || !model",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/config.ts",
+    "line": 150,
+    "function": "resolveConsolidationConfig",
+    "kind": "short-circuit",
+    "condition": "readNonEmptyString(record?.api_url) ?? environment.summaryApiUrl ?? DEFAULT_CONSOLIDATION_API_URL",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/config.ts",
+    "line": 150,
+    "function": "resolveConsolidationConfig",
+    "kind": "short-circuit",
+    "condition": "readNonEmptyString(record?.api_url) ?? environment.summaryApiUrl",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/config.ts",
+    "line": 181,
+    "function": "optionRedacted",
+    "kind": "ternary",
+    "condition": "Option.isSome(value)",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/memory/config.ts",
+    "line": 182,
+    "function": "optionRedacted",
+    "kind": "short-circuit",
+    "condition": "readNonEmptyString(Redacted.value(value.value)) ?? undefined",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/config.ts",
+    "line": 187,
+    "function": "optionString",
+    "kind": "short-circuit",
+    "condition": "readNonEmptyString(Option.getOrUndefined(value)) ?? undefined",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/config.ts",
+    "line": 191,
+    "function": "readNonEmptyString",
+    "kind": "if",
+    "condition": "typeof value !== 'string'",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/memory/config.ts",
+    "line": 193,
+    "function": "readNonEmptyString",
+    "kind": "ternary",
+    "condition": "trimmed.length > 0",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/memory/config.ts",
+    "line": 197,
+    "function": "readPositiveInt",
+    "kind": "if",
+    "condition": "typeof value !== 'number' || !Number.isFinite(value)",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/memory/config.ts",
+    "line": 197,
+    "function": "readPositiveInt",
+    "kind": "short-circuit",
+    "condition": "typeof value !== 'number' || !Number.isFinite(value)",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/config.ts",
+    "line": 199,
+    "function": "readPositiveInt",
+    "kind": "ternary",
+    "condition": "rounded > 0",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/memory/config.ts",
+    "line": 203,
+    "function": "readPositiveNumber",
+    "kind": "ternary",
+    "condition": "typeof value === 'number' && Number.isFinite(value) && value > 0",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/memory/config.ts",
+    "line": 203,
+    "function": "readPositiveNumber",
+    "kind": "short-circuit",
+    "condition": "typeof value === 'number' && Number.isFinite(value) && value > 0",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/config.ts",
+    "line": 203,
+    "function": "readPositiveNumber",
+    "kind": "short-circuit",
+    "condition": "typeof value === 'number' && Number.isFinite(value)",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/config.ts",
+    "line": 209,
+    "function": "normalizeSections",
+    "kind": "ternary",
+    "condition": "Array.isArray(value)",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/memory/config.ts",
+    "line": 212,
+    "function": "normalizeSections",
+    "kind": "ternary",
+    "condition": "provided.length > 0",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/memory/config.ts",
+    "line": 213,
+    "function": "normalizeSections",
+    "kind": "loop",
+    "condition": "DEFAULT_SECTIONS",
+    "paths": [
+      "each",
+      "empty/done"
+    ]
+  },
+  {
+    "file": "src/memory/config.ts",
+    "line": 214,
+    "function": "normalizeSections",
+    "kind": "if",
+    "condition": "sections.length >= 3",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/memory/config.ts",
+    "line": 215,
+    "function": "normalizeSections",
+    "kind": "if",
+    "condition": "!sections.includes(fallback)",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/memory/config.ts",
+    "line": 217,
+    "function": "normalizeSections",
+    "kind": "if",
+    "condition": "!sections.includes('Sessions')",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/memory/config.ts",
+    "line": 222,
+    "function": "isRecord",
+    "kind": "short-circuit",
+    "condition": "typeof value === 'object' && value !== null && !Array.isArray(value)",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/config.ts",
+    "line": 222,
+    "function": "isRecord",
+    "kind": "short-circuit",
+    "condition": "typeof value === 'object' && value !== null",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/domain/errors.ts",
+    "line": 79,
+    "function": "databaseBusyError",
+    "kind": "if",
+    "condition": "!cause || typeof cause !== 'object'",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/memory/domain/errors.ts",
+    "line": 79,
+    "function": "databaseBusyError",
+    "kind": "short-circuit",
+    "condition": "!cause || typeof cause !== 'object'",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/domain/errors.ts",
+    "line": 80,
+    "function": "databaseBusyError",
+    "kind": "ternary",
+    "condition": "'code' in cause",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/memory/domain/errors.ts",
+    "line": 81,
+    "function": "databaseBusyError",
+    "kind": "ternary",
+    "condition": "code.includes('SQLITE_BUSY') || code.includes('SQLITE_LOCKED')",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/memory/domain/errors.ts",
+    "line": 81,
+    "function": "databaseBusyError",
+    "kind": "short-circuit",
+    "condition": "code.includes('SQLITE_BUSY') || code.includes('SQLITE_LOCKED')",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/repository/consolidation-repository.ts",
+    "line": 77,
+    "function": "<callback>",
+    "kind": "if",
+    "condition": "existing",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/memory/repository/consolidation-repository.ts",
+    "line": 79,
+    "function": "<callback>",
+    "kind": "if",
+    "condition": "actualBoundary !== input.expectedBoundary",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/memory/repository/consolidation-repository.ts",
+    "line": 99,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "input.model ?? null",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/repository/consolidation-repository.ts",
+    "line": 108,
+    "function": "<callback>",
+    "kind": "if",
+    "condition": "!inserted",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/memory/repository/consolidation-repository.ts",
+    "line": 114,
+    "function": "<callback>",
+    "kind": "ternary",
+    "condition": "cause instanceof ConsolidationConflictError",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/memory/repository/consolidation-repository.ts",
+    "line": 116,
+    "function": "<callback>",
+    "kind": "ternary",
+    "condition": "cause instanceof DecodeError",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/memory/repository/consolidation-repository.ts",
+    "line": 118,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "databaseBusyError('persist consolidation', cause) ?? new ConsolidationPersistenceError({ cause })",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/repository/consolidation-repository.ts",
+    "line": 149,
+    "function": "<callback>",
+    "kind": "ternary",
+    "condition": "cause instanceof DecodeError",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/memory/repository/consolidation-repository.ts",
+    "line": 151,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "databaseBusyError('list consolidations', cause) ?? new ConsolidationPersistenceError({ cause })",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/repository/consolidation-repository.ts",
+    "line": 201,
+    "function": "decodeRow",
+    "kind": "catch",
+    "condition": "cause",
+    "paths": [
+      "success",
+      "failure"
+    ]
+  },
+  {
+    "file": "src/memory/repository/journal-repository.ts",
+    "line": 76,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "databaseBusyError('read maximum journal sequence', cause) ?? new JournalAppendError({ cause })",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/repository/journal-repository.ts",
+    "line": 90,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "databaseBusyError('append journal entry', cause) ?? new JournalAppendError({ cause })",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/repository/journal-repository.ts",
+    "line": 101,
+    "function": "insertOrRead",
+    "kind": "short-circuit",
+    "condition": "input.id ?? crypto.randomUUID()",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/repository/journal-repository.ts",
+    "line": 102,
+    "function": "insertOrRead",
+    "kind": "short-circuit",
+    "condition": "input.createdAt ?? new Date().toISOString()",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/repository/journal-repository.ts",
+    "line": 104,
+    "function": "<callback>",
+    "kind": "if",
+    "condition": "input.idempotencyKey",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/memory/repository/journal-repository.ts",
+    "line": 106,
+    "function": "<callback>",
+    "kind": "if",
+    "condition": "existing",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/memory/repository/journal-repository.ts",
+    "line": 119,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "input.source ?? null",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/repository/journal-repository.ts",
+    "line": 120,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "input.sourceProjectId ?? null",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/repository/journal-repository.ts",
+    "line": 121,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "input.sourceSessionId ?? null",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/repository/journal-repository.ts",
+    "line": 122,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "input.idempotencyKey ?? null",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/repository/journal-repository.ts",
+    "line": 123,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "input.metadata ?? {}",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/repository/journal-repository.ts",
+    "line": 124,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "input.payloadVersion ?? 1",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/repository/journal-repository.ts",
+    "line": 155,
+    "function": "<callback>",
+    "kind": "ternary",
+    "condition": "through === undefined",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/memory/repository/journal-repository.ts",
+    "line": 169,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "databaseBusyError('list journal entries', cause) ?? new JournalAppendError({ cause })",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/repository/journal-repository.ts",
+    "line": 190,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "databaseBusyError('read consolidation boundary', cause) ?? new JournalAppendError({ cause })",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/repository/recall-repository.ts",
+    "line": 80,
+    "function": "<callback>",
+    "kind": "ternary",
+    "condition": "row",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/memory/repository/recall-repository.ts",
+    "line": 83,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "databaseBusyError('read recall source', cause) ?? new RecallSourceError({ cause })",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/repository/recall-repository.ts",
+    "line": 122,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "existing?.first_ingested_at ?? value.source.firstIngestedAt",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/repository/recall-repository.ts",
+    "line": 133,
+    "function": "<callback>",
+    "kind": "loop",
+    "condition": "value.messages",
+    "paths": [
+      "each",
+      "empty/done"
+    ]
+  },
+  {
+    "file": "src/memory/repository/recall-repository.ts",
+    "line": 162,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "databaseBusyError('persist recall import', cause) ?? new RecallIngestionError({ cause })",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/memory/repository/recall-repository.ts",
+    "line": 192,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "databaseBusyError('search recall evidence', cause) ?? new RecallSourceError({ cause })",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/sdk/graph.ts",
+    "line": 12,
+    "function": "list_all_tasks",
+    "kind": "loop",
+    "condition": "cursor",
+    "paths": [
+      "iterate",
+      "exit"
+    ]
+  },
+  {
+    "file": "src/sdk/graph.ts",
+    "line": 25,
+    "function": "collect_descendants",
+    "kind": "loop",
+    "condition": "tasks",
+    "paths": [
+      "each",
+      "empty/done"
+    ]
+  },
+  {
+    "file": "src/sdk/graph.ts",
+    "line": 26,
+    "function": "collect_descendants",
+    "kind": "if",
+    "condition": "!task.parentId",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/sdk/graph.ts",
+    "line": 27,
+    "function": "collect_descendants",
+    "kind": "short-circuit",
+    "condition": "byParent.get(task.parentId) ?? []",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/sdk/graph.ts",
+    "line": 33,
+    "function": "collect_descendants",
+    "kind": "short-circuit",
+    "condition": "byParent.get(parentId) ?? []",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/sdk/graph.ts",
+    "line": 34,
+    "function": "collect_descendants",
+    "kind": "loop",
+    "condition": "queue.length > 0",
+    "paths": [
+      "iterate",
+      "exit"
+    ]
+  },
+  {
+    "file": "src/sdk/graph.ts",
+    "line": 36,
+    "function": "collect_descendants",
+    "kind": "if",
+    "condition": "!current",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/sdk/graph.ts",
+    "line": 39,
+    "function": "collect_descendants",
+    "kind": "if",
+    "condition": "children",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/sdk/graph.ts",
+    "line": 48,
+    "function": "collect_ancestors",
+    "kind": "loop",
+    "condition": "current?.parentId",
+    "paths": [
+      "iterate",
+      "exit"
+    ]
+  },
+  {
+    "file": "src/sdk/graph.ts",
+    "line": 60,
+    "function": "query_task_graph",
+    "kind": "if",
+    "condition": "query === 'children'",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/sdk/graph.ts",
+    "line": 69,
+    "function": "query_task_graph",
+    "kind": "if",
+    "condition": "query === 'ancestors'",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/sdk/index.ts",
+    "line": 63,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "finalStatus.pluginDirExists && finalStatus.dbFileExists",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/sdk/index.ts",
+    "line": 71,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "options.includeDeleted === true || options.status === 'deleted'",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/sdk/index.ts",
+    "line": 89,
+    "function": "<callback>",
+    "kind": "ternary",
+    "condition": "task",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/sdk/index.ts",
+    "line": 126,
+    "function": "<callback>",
+    "kind": "if",
+    "condition": "nextStatus === 'deleted'",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/sdk/index.ts",
+    "line": 133,
+    "function": "<callback>",
+    "kind": "if",
+    "condition": "!task",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/sdk/index.ts",
+    "line": 141,
+    "function": "<callback>",
+    "kind": "ternary",
+    "condition": "nextStatus === 'completed'",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/sdk/index.ts",
+    "line": 162,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "step.summary ?? undefined",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/sdk/index.ts",
+    "line": 163,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "step.notes ?? undefined",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/sdk/index.ts",
+    "line": 177,
+    "function": "<callback>",
+    "kind": "if",
+    "condition": "!Number.isFinite(parsedStepId)",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/sdk/index.ts",
+    "line": 186,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "input.summary ?? undefined",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/sdk/index.ts",
+    "line": 188,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "input.notes ?? undefined",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/sdk/index.ts",
+    "line": 196,
+    "function": "<callback>",
+    "kind": "ternary",
+    "condition": "input.stepId",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/sdk/index.ts",
+    "line": 197,
+    "function": "<callback>",
+    "kind": "if",
+    "condition": "input.stepId && !Number.isFinite(stepId)",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/sdk/index.ts",
+    "line": 197,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "input.stepId && !Number.isFinite(stepId)",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/sdk/index.ts",
+    "line": 213,
+    "function": "<callback>",
+    "kind": "if",
+    "condition": "input.kind === 'discovery'",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/sdk/index.ts",
+    "line": 225,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "input.rationale ?? undefined",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/task/collection-patch.ts",
+    "line": 5,
+    "function": "normalize_id",
+    "kind": "ternary",
+    "condition": "typeof id === 'string'",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/task/collection-patch.ts",
+    "line": 6,
+    "function": "normalize_id",
+    "kind": "if",
+    "condition": "!Number.isFinite(value)",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/task/collection-patch.ts",
+    "line": 28,
+    "function": "patch_collection",
+    "kind": "if",
+    "condition": "!patch",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/task/collection-patch.ts",
+    "line": 32,
+    "function": "patch_collection",
+    "kind": "if",
+    "condition": "patch.delete && patch.delete.length > 0",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/task/collection-patch.ts",
+    "line": 32,
+    "function": "patch_collection",
+    "kind": "short-circuit",
+    "condition": "patch.delete && patch.delete.length > 0",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/task/collection-patch.ts",
+    "line": 36,
+    "function": "patch_collection",
+    "kind": "loop",
+    "condition": "deleteIds",
+    "paths": [
+      "each",
+      "empty/done"
+    ]
+  },
+  {
+    "file": "src/task/collection-patch.ts",
+    "line": 38,
+    "function": "patch_collection",
+    "kind": "if",
+    "condition": "!exists",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/task/collection-patch.ts",
+    "line": 48,
+    "function": "patch_collection",
+    "kind": "loop",
+    "condition": "deleteIds",
+    "paths": [
+      "each",
+      "empty/done"
+    ]
+  },
+  {
+    "file": "src/task/collection-patch.ts",
+    "line": 53,
+    "function": "patch_collection",
+    "kind": "if",
+    "condition": "patch.update && patch.update.length > 0",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/task/collection-patch.ts",
+    "line": 53,
+    "function": "patch_collection",
+    "kind": "short-circuit",
+    "condition": "patch.update && patch.update.length > 0",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/task/collection-patch.ts",
+    "line": 54,
+    "function": "patch_collection",
+    "kind": "loop",
+    "condition": "patch.update",
+    "paths": [
+      "each",
+      "empty/done"
+    ]
+  },
+  {
+    "file": "src/task/collection-patch.ts",
+    "line": 57,
+    "function": "patch_collection",
+    "kind": "if",
+    "condition": "index === -1",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/task/collection-patch.ts",
+    "line": 64,
+    "function": "patch_collection",
+    "kind": "if",
+    "condition": "!current",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/task/collection-patch.ts",
+    "line": 74,
+    "function": "patch_collection",
+    "kind": "if",
+    "condition": "patch.add && patch.add.length > 0",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/task/collection-patch.ts",
+    "line": 74,
+    "function": "patch_collection",
+    "kind": "short-circuit",
+    "condition": "patch.add && patch.add.length > 0",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/task/notes.repository.ts",
+    "line": 23,
+    "function": "add_discovery",
+    "kind": "short-circuit",
+    "condition": "input.source ?? 'system'",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/task/notes.repository.ts",
+    "line": 24,
+    "function": "add_discovery",
+    "kind": "short-circuit",
+    "condition": "input.impact ?? null",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/task/notes.repository.ts",
+    "line": 52,
+    "function": "add_decision",
+    "kind": "short-circuit",
+    "condition": "input.rationale ?? null",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/task/notes.repository.ts",
+    "line": 53,
+    "function": "add_decision",
+    "kind": "short-circuit",
+    "condition": "input.source ?? 'system'",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/task/notes.repository.ts",
+    "line": 54,
+    "function": "add_decision",
+    "kind": "short-circuit",
+    "condition": "input.impact ?? null",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/task/steps.repository.ts",
+    "line": 27,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "s.description ?? s.details ?? ''",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/task/steps.repository.ts",
+    "line": 27,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "s.description ?? s.details",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/task/steps.repository.ts",
+    "line": 28,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "s.position ?? 0",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/task/steps.repository.ts",
+    "line": 31,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "s.status ?? 'pending'",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/task/steps.repository.ts",
+    "line": 32,
+    "function": "<callback>",
+    "kind": "short-circuit",
+    "condition": "s.notes ?? null",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/task/steps.repository.ts",
+    "line": 38,
+    "function": "add_steps",
+    "kind": "if",
+    "condition": "currentStep === null && allSteps.length > 0",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/task/steps.repository.ts",
+    "line": 38,
+    "function": "add_steps",
+    "kind": "short-circuit",
+    "condition": "currentStep === null && allSteps.length > 0",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/task/steps.repository.ts",
+    "line": 40,
+    "function": "add_steps",
+    "kind": "short-circuit",
+    "condition": "firstPending?.id ?? null",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/task/steps.repository.ts",
+    "line": 62,
+    "function": "complete_step",
+    "kind": "short-circuit",
+    "condition": "input.step_id ?? task.current_step",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/task/steps.repository.ts",
+    "line": 63,
+    "function": "complete_step",
+    "kind": "if",
+    "condition": "stepId === null",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/task/steps.repository.ts",
+    "line": 72,
+    "function": "complete_step",
+    "kind": "if",
+    "condition": "stepIndex === -1",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/task/steps.repository.ts",
+    "line": 77,
+    "function": "complete_step",
+    "kind": "if",
+    "condition": "existingStep.status === 'completed'",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/task/steps.repository.ts",
+    "line": 88,
+    "function": "complete_step",
+    "kind": "short-circuit",
+    "condition": "existingStep.description ?? existingStep.details ?? ''",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/task/steps.repository.ts",
+    "line": 88,
+    "function": "complete_step",
+    "kind": "short-circuit",
+    "condition": "existingStep.description ?? existingStep.details",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/task/steps.repository.ts",
+    "line": 89,
+    "function": "complete_step",
+    "kind": "short-circuit",
+    "condition": "existingStep.position ?? 0",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/task/steps.repository.ts",
+    "line": 93,
+    "function": "complete_step",
+    "kind": "short-circuit",
+    "condition": "input.notes ?? existingStep.notes",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/task/steps.repository.ts",
+    "line": 97,
+    "function": "complete_step",
+    "kind": "loop",
+    "condition": "updatedSteps",
+    "paths": [
+      "each",
+      "empty/done"
+    ]
+  },
+  {
+    "file": "src/task/steps.repository.ts",
+    "line": 98,
+    "function": "complete_step",
+    "kind": "if",
+    "condition": "step.status === 'pending'",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/task/steps.repository.ts",
+    "line": 124,
+    "function": "update_step",
+    "kind": "if",
+    "condition": "stepIndex === -1",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/task/steps.repository.ts",
+    "line": 134,
+    "function": "update_step",
+    "kind": "ternary",
+    "condition": "input.description !== undefined",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/task/steps.repository.ts",
+    "line": 136,
+    "function": "update_step",
+    "kind": "ternary",
+    "condition": "input.details !== undefined",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/task/steps.repository.ts",
+    "line": 138,
+    "function": "update_step",
+    "kind": "short-circuit",
+    "condition": "existingStep.description ?? existingStep.details ?? ''",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/task/steps.repository.ts",
+    "line": 138,
+    "function": "update_step",
+    "kind": "short-circuit",
+    "condition": "existingStep.description ?? existingStep.details",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/task/steps.repository.ts",
+    "line": 140,
+    "function": "update_step",
+    "kind": "ternary",
+    "condition": "input.details !== undefined",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/task/steps.repository.ts",
+    "line": 144,
+    "function": "update_step",
+    "kind": "short-circuit",
+    "condition": "input.title ?? existingStep.title",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/task/steps.repository.ts",
+    "line": 147,
+    "function": "update_step",
+    "kind": "ternary",
+    "condition": "input.position !== undefined",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/task/steps.repository.ts",
+    "line": 148,
+    "function": "update_step",
+    "kind": "short-circuit",
+    "condition": "input.summary ?? existingStep.summary",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/task/steps.repository.ts",
+    "line": 150,
+    "function": "update_step",
+    "kind": "short-circuit",
+    "condition": "input.status ?? existingStep.status",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/task/steps.repository.ts",
+    "line": 151,
+    "function": "update_step",
+    "kind": "ternary",
+    "condition": "input.notes !== undefined",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/task/steps.repository.ts",
+    "line": 168,
+    "function": "requireStep",
+    "kind": "if",
+    "condition": "!step",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.list.ts",
+    "line": 37,
+    "function": "decode_cursor",
+    "kind": "if",
+    "condition": "!cursor",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.list.ts",
+    "line": 45,
+    "function": "decode_cursor",
+    "kind": "if",
+    "condition": "parsed.sortValue === undefined || parsed.id === undefined",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.list.ts",
+    "line": 45,
+    "function": "decode_cursor",
+    "kind": "short-circuit",
+    "condition": "parsed.sortValue === undefined || parsed.id === undefined",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.list.ts",
+    "line": 46,
+    "function": "decode_cursor",
+    "kind": "if",
+    "condition": "typeof parsed.id !== 'string' || parsed.id.length === 0",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.list.ts",
+    "line": 46,
+    "function": "decode_cursor",
+    "kind": "short-circuit",
+    "condition": "typeof parsed.id !== 'string' || parsed.id.length === 0",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.list.ts",
+    "line": 52,
+    "function": "decode_cursor",
+    "kind": "catch",
+    "condition": "cause",
+    "paths": [
+      "success",
+      "failure"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.list.ts",
+    "line": 60,
+    "function": "build_list_where",
+    "kind": "short-circuit",
+    "condition": "filters.includeDeleted === true || filters.status === 'deleted'",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.list.ts",
+    "line": 62,
+    "function": "build_list_where",
+    "kind": "if",
+    "condition": "!includeDeleted",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.list.ts",
+    "line": 66,
+    "function": "build_list_where",
+    "kind": "if",
+    "condition": "!filters.status",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.list.ts",
+    "line": 73,
+    "function": "build_list_where",
+    "kind": "if",
+    "condition": "filters.type",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.list.ts",
+    "line": 77,
+    "function": "build_list_where",
+    "kind": "if",
+    "condition": "filters.parent_id !== undefined",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.list.ts",
+    "line": 79,
+    "function": "build_list_where",
+    "kind": "ternary",
+    "condition": "filters.parent_id === null",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.list.ts",
+    "line": 98,
+    "function": "resolve_list_sort",
+    "kind": "short-circuit",
+    "condition": "filters.sort ?? 'priority'",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.list.ts",
+    "line": 100,
+    "function": "resolve_list_sort",
+    "kind": "ternary",
+    "condition": "sortKey === 'priority'",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.list.ts",
+    "line": 102,
+    "function": "resolve_list_sort",
+    "kind": "ternary",
+    "condition": "sortKey === 'updatedAt'",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.list.ts",
+    "line": 109,
+    "function": "resolve_list_sort",
+    "kind": "ternary",
+    "condition": "filters.order === 'desc'",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.list.ts",
+    "line": 110,
+    "function": "resolve_list_sort",
+    "kind": "ternary",
+    "condition": "filters.limit && filters.limit > 0",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.list.ts",
+    "line": 110,
+    "function": "resolve_list_sort",
+    "kind": "short-circuit",
+    "condition": "filters.limit && filters.limit > 0",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.list.ts",
+    "line": 125,
+    "function": "append_cursor_where",
+    "kind": "ternary",
+    "condition": "sortOrder === 'desc'",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.list.ts",
+    "line": 126,
+    "function": "append_cursor_where",
+    "kind": "if",
+    "condition": "sortKey !== 'priority'",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.list.ts",
+    "line": 133,
+    "function": "append_cursor_where",
+    "kind": "if",
+    "condition": "cursor.secondarySortValue !== undefined",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.list.ts",
+    "line": 155,
+    "function": "build_next_cursor",
+    "kind": "ternary",
+    "condition": "sortKey === 'priority'",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.list.ts",
+    "line": 157,
+    "function": "build_next_cursor",
+    "kind": "ternary",
+    "condition": "sortKey === 'updatedAt'",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.list.ts",
+    "line": 164,
+    "function": "build_next_cursor",
+    "kind": "ternary",
+    "condition": "sortKey === 'priority'",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.list.ts",
+    "line": 176,
+    "function": "list_tasks",
+    "kind": "if",
+    "condition": "cursor",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.list.ts",
+    "line": 180,
+    "function": "list_tasks",
+    "kind": "ternary",
+    "condition": "sortOrder === 'desc'",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.list.ts",
+    "line": 183,
+    "function": "list_tasks",
+    "kind": "ternary",
+    "condition": "where.length > 0",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.list.ts",
+    "line": 185,
+    "function": "list_tasks",
+    "kind": "ternary",
+    "condition": "sortKey === 'priority'",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.list.ts",
+    "line": 195,
+    "function": "list_tasks",
+    "kind": "ternary",
+    "condition": "hasMore",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.list.ts",
+    "line": 198,
+    "function": "list_tasks",
+    "kind": "if",
+    "condition": "!hasMore",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.list.ts",
+    "line": 203,
+    "function": "list_tasks",
+    "kind": "ternary",
+    "condition": "last",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.list.ts",
+    "line": 219,
+    "function": "list_tasks_by_statuses",
+    "kind": "if",
+    "condition": "filters.statuses.length > 0",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.list.ts",
+    "line": 223,
+    "function": "list_tasks_by_statuses",
+    "kind": "if",
+    "condition": "filters.parent_id !== undefined",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.list.ts",
+    "line": 224,
+    "function": "list_tasks_by_statuses",
+    "kind": "if",
+    "condition": "filters.parent_id === null",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.ts",
+    "line": 30,
+    "function": "task_exists",
+    "kind": "short-circuit",
+    "condition": "row?.count ?? 0",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.ts",
+    "line": 38,
+    "function": "require_task",
+    "kind": "if",
+    "condition": "!task",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.ts",
+    "line": 49,
+    "function": "validate_blockers",
+    "kind": "if",
+    "condition": "blockers.length === 0",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.ts",
+    "line": 65,
+    "function": "validate_parent_exists",
+    "kind": "if",
+    "condition": "!parent_id",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.ts",
+    "line": 67,
+    "function": "validate_parent_exists",
+    "kind": "if",
+    "condition": "!parentExists",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.ts",
+    "line": 78,
+    "function": "has_open_blockers",
+    "kind": "if",
+    "condition": "task.blocked_by.length === 0",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.ts",
+    "line": 96,
+    "function": "create_task",
+    "kind": "ternary",
+    "condition": "input.status === 'completed'",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.ts",
+    "line": 97,
+    "function": "create_task",
+    "kind": "short-circuit",
+    "condition": "input.blocked_by ?? []",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.ts",
+    "line": 104,
+    "function": "create_task",
+    "kind": "if",
+    "condition": "missingBlockers.length > 0",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.ts",
+    "line": 118,
+    "function": "create_task",
+    "kind": "short-circuit",
+    "condition": "input.status ?? 'open'",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.ts",
+    "line": 120,
+    "function": "create_task",
+    "kind": "short-circuit",
+    "condition": "input.intent ?? null",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.ts",
+    "line": 121,
+    "function": "create_task",
+    "kind": "short-circuit",
+    "condition": "input.description ?? null",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.ts",
+    "line": 122,
+    "function": "create_task",
+    "kind": "short-circuit",
+    "condition": "input.plan ?? null",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.ts",
+    "line": 129,
+    "function": "create_task",
+    "kind": "short-circuit",
+    "condition": "input.parent_id ?? null",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.ts",
+    "line": 137,
+    "function": "create_task",
+    "kind": "if",
+    "condition": "!row",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.ts",
+    "line": 153,
+    "function": "ensure_task",
+    "kind": "if",
+    "condition": "!task",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.ts",
+    "line": 159,
+    "function": "update_task",
+    "kind": "if",
+    "condition": "input.parent_id !== undefined",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.ts",
+    "line": 163,
+    "function": "update_task",
+    "kind": "if",
+    "condition": "input.blocked_by !== undefined",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.ts",
+    "line": 164,
+    "function": "update_task",
+    "kind": "short-circuit",
+    "condition": "input.blocked_by ?? []",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.ts",
+    "line": 165,
+    "function": "update_task",
+    "kind": "short-circuit",
+    "condition": "input.blocked_by ?? []",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.ts",
+    "line": 166,
+    "function": "update_task",
+    "kind": "if",
+    "condition": "missingBlockers.length > 0",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.ts",
+    "line": 177,
+    "function": "update_task",
+    "kind": "if",
+    "condition": "input.steps",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.ts",
+    "line": 184,
+    "function": "update_task",
+    "kind": "if",
+    "condition": "input.discoveries",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.ts",
+    "line": 192,
+    "function": "update_task",
+    "kind": "if",
+    "condition": "input.decisions",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.ts",
+    "line": 197,
+    "function": "update_task",
+    "kind": "if",
+    "condition": "Object.keys(updates).length === 0",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.ts",
+    "line": 206,
+    "function": "update_task",
+    "kind": "if",
+    "condition": "!row",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.ts",
+    "line": 218,
+    "function": "get_task",
+    "kind": "ternary",
+    "condition": "row",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.ts",
+    "line": 232,
+    "function": "delete_task",
+    "kind": "if",
+    "condition": "!row",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/task/tasks.repository.ts",
+    "line": 244,
+    "function": "complete_task",
+    "kind": "if",
+    "condition": "openBlockers.length > 0",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/task/util.ts",
+    "line": 14,
+    "function": "dir_exists",
+    "kind": "catch",
+    "condition": "cause",
+    "paths": [
+      "success",
+      "failure"
+    ]
+  },
+  {
+    "file": "src/task/util.ts",
+    "line": 23,
+    "function": "file_exists",
+    "kind": "catch",
+    "condition": "cause",
+    "paths": [
+      "success",
+      "failure"
+    ]
+  },
+  {
+    "file": "src/task/util.ts",
+    "line": 47,
+    "function": "init_project",
+    "kind": "if",
+    "condition": "!(await dir_exists(continuumDir(directory)))",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/workspace/resolve.ts",
+    "line": 29,
+    "function": "resolveWorkspaceContext",
+    "kind": "short-circuit",
+    "condition": "options.startDir ?? process.cwd()",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/workspace/resolve.ts",
+    "line": 30,
+    "function": "resolveWorkspaceContext",
+    "kind": "ternary",
+    "condition": "options.cwd",
+    "paths": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "file": "src/workspace/resolve.ts",
+    "line": 33,
+    "function": "resolveWorkspaceContext",
+    "kind": "short-circuit",
+    "condition": "requestedCwd ?? invocationCwd",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/workspace/resolve.ts",
+    "line": 58,
+    "function": "resolveFrom",
+    "kind": "if",
+    "condition": "isAbsolute(value)",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/workspace/resolve.ts",
+    "line": 67,
+    "function": "findWorkspaceRoot",
+    "kind": "loop",
+    "condition": "true",
+    "paths": [
+      "iterate",
+      "exit"
+    ]
+  },
+  {
+    "file": "src/workspace/resolve.ts",
+    "line": 68,
+    "function": "findWorkspaceRoot",
+    "kind": "if",
+    "condition": "isWorkspaceRoot(current)",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/workspace/resolve.ts",
+    "line": 72,
+    "function": "findWorkspaceRoot",
+    "kind": "if",
+    "condition": "parent === current",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/workspace/resolve.ts",
+    "line": 81,
+    "function": "isWorkspaceRoot",
+    "kind": "short-circuit",
+    "condition": "hasDirectory(join(directory, CONTINUUM_DIR_NAME)) || hasGitMarker(directory)",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  },
+  {
+    "file": "src/workspace/resolve.ts",
+    "line": 87,
+    "function": "hasGitMarker",
+    "kind": "if",
+    "condition": "!existsSync(gitPath)",
+    "paths": [
+      "true",
+      "fallthrough"
+    ]
+  },
+  {
+    "file": "src/workspace/resolve.ts",
+    "line": 96,
+    "function": "hasDirectory",
+    "kind": "catch",
+    "condition": "cause",
+    "paths": [
+      "success",
+      "failure"
+    ]
+  },
+  {
+    "file": "src/workspace/resolve.ts",
+    "line": 104,
+    "function": "resolveDefaultOpencodeDbPath",
+    "kind": "short-circuit",
+    "condition": "dataHome ?? join(homedir(), '.local', 'share')",
+    "paths": [
+      "left determines",
+      "evaluate right"
+    ]
+  }
+]
