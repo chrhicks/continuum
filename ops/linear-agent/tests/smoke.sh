@@ -9,6 +9,8 @@ bash -n \
   "$root/bin/run-once" \
   "$root/bin/install-user" \
   "$root/bin/validate-continuum-worktree"
+grep -q 'open PR plus ready status: this is requested-change work' "$root/prompts/scout.md"
+grep -q 'do not repeat that dispatch' "$root/prompts/scout.md"
 set +e
 "$root/bin/validate-continuum-worktree" >/dev/null 2>&1
 helper_status=$?
