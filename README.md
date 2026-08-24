@@ -1,6 +1,6 @@
 # Continuum
 
-Continuum is a local Bun CLI and TypeScript SDK for durable project tasks and agent memory. SQLite at `.continuum/continuum.db` is canonical; Markdown memory files are generated, non-authoritative projections.
+Continuum is a local Bun CLI and TypeScript SDK for durable project tasks and agent memory. One SQLite database per project under `${XDG_DATA_HOME:-~/.local/share}/continuum/projects/` is canonical; Markdown memory files are generated, non-authoritative projections.
 
 ## Requirements
 
@@ -110,6 +110,10 @@ Useful options are `--no-tasks`, `--no-memory`, `--limit <n>`, and `--memory-lin
 
 Commander is a thin argument adapter. Each memory or summary command creates one scoped Effect runtime containing explicit workspace, memory directory, database path, and one configured `bun:sqlite` handle. Application functions return Effects; the CLI boundary runs them and centrally renders success or tagged operational errors.
 
+The canonical path is `${XDG_DATA_HOME:-~/.local/share}/continuum/projects/<project-id>/continuum.db`. The project ID is the SHA-256 hash of the normalized absolute workspace path, which is deterministic and avoids unsafe path text in filenames. It preserves local project isolation, but it is intentionally machine/path-local; future cross-machine linking needs an explicit portable project identity rather than assuming hashes match.
+
+On `continuum init`, an existing `.continuum/continuum.db` is copied as a SQLite logical snapshot so committed WAL data is included. Continuum validates integrity before atomic publication and records `legacy-migration-receipt.json` beside the canonical database. It never modifies or deletes the source. Later commands call the source removable only while its exact fingerprint still matches the receipt; a changed source or an unproven divergent destination fails with actionable diagnostics.
+
 SQLite uses:
 
 - `busy_timeout = 5000`
@@ -139,7 +143,7 @@ Deleting projections does not delete canonical memory. Normal append and consoli
 
 ## Configuration
 
-The database path and workspace are resolved explicitly for each CLI runtime. Optional consolidation and recall summarization settings are read from `.continuum/memory/config.yml` when present.
+The database path and workspace are resolved explicitly for each CLI runtime. `XDG_DATA_HOME` selects the user-level data root; otherwise Continuum uses `$HOME/.local/share`. `.continuum/memory/config.yml` and generated Markdown projections remain project-local. `.continuum/continuum.db` is legacy input only and receives no new writes after migration.
 
 LLM environment fallbacks include:
 
@@ -174,7 +178,7 @@ git diff --check
 
 `bun run validate` runs typechecking, the full test suite, and goal-invariant verification. Migrations are additive SQL files under `drizzle/` and are applied by `src/db/migrate.ts`.
 
-See `CONTRIBUTING.md`, `AGENTS.md`, and `PLAN/CHECKLIST.md` for repository workflows and release scope.
+See `CONTRIBUTING.md`, `AGENTS.md`, and `PLAN/CHECKLIST.md` for repository workflows and release scope. The credential-independent R2 backup/sync analysis is in `docs/R2-BACKUP-DESIGN.md`.
 
 ## License
 
