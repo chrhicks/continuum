@@ -1,0 +1,248 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+umask 077
+
+profile=${1:-}
+if [[ ! $profile =~ ^[a-zA-Z0-9._-]+$ ]]; then
+  printf 'usage: %s <profile>\n' "$0" >&2
+  exit 64
+fi
+
+config=${LINEAR_AGENT_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/linear-agent/$profile.env}
+if [[ ! -f $config ]]; then
+  printf 'missing worker config: %s\n' "$config" >&2
+  exit 78
+fi
+
+config_mode=$(stat -c '%a' "$config")
+if (( (8#$config_mode & 077) != 0 )); then
+  printf 'worker config must not grant group or other access: %s has mode %s\n' "$config" "$config_mode" >&2
+  exit 78
+fi
+
+set -a
+# shellcheck source=/dev/null
+source "$config"
+set +a
+
+required=(
+  LINEAR_AGENT_ROLE
+  LINEAR_AGENT_REPO
+  LINEAR_AGENT_PROMPT
+  LINEAR_AGENT_AGENT
+  LINEAR_AGENT_MODEL
+  LINEAR_AGENT_THINKING
+  LINEAR_AGENT_MCP_CONFIG
+  LINEAR_AGENT_BUN_BIN
+  LINEAR_AGENT_CONTINUUM_BIN
+  LINEAR_AGENT_CONTINUUM_HOME
+  LINEAR_AGENT_CONTINUUM_DATA_HOME
+  LINEAR_AGENT_EXECUTOR_BIN
+  LINEAR_AGENT_CONTINUUM_INTEGRATION
+  LINEAR_AGENT_CONTINUUM_CONNECTION
+  LINEAR_AGENT_PROJECT
+  LINEAR_AGENT_ASSIGNEE
+  LINEAR_AGENT_ROUTING_LABEL
+  LINEAR_AGENT_SCOUT_LABEL
+  LINEAR_AGENT_STAGED_LABEL
+  LINEAR_AGENT_BACKLOG_STATUS
+  LINEAR_AGENT_READY_STATUS
+  LINEAR_AGENT_CLAIMED_STATUS
+  LINEAR_AGENT_IN_PROGRESS_STATUS
+  LINEAR_AGENT_IN_REVIEW_STATUS
+  LINEAR_AGENT_STAGED_STATUS
+  LINEAR_AGENT_BLOCKED_STATUS
+  LINEAR_AGENT_ACTIVE_STAGING
+  LINEAR_AGENT_ALLOWED_BASES
+  LINEAR_AGENT_DISPATCH_WORKER_PROFILE
+  LINEAR_AGENT_DISPATCH_REVIEWER_PROFILE
+)
+for name in "${required[@]}"; do
+  if [[ -z ${!name:-} ]]; then
+    printf 'missing required setting %s in %s\n' "$name" "$config" >&2
+    exit 78
+  fi
+done
+if [[ $LINEAR_AGENT_ROLE != scout && $LINEAR_AGENT_ROLE != worker && $LINEAR_AGENT_ROLE != reviewer ]]; then
+  printf 'invalid LINEAR_AGENT_ROLE: %s\n' "$LINEAR_AGENT_ROLE" >&2
+  exit 78
+fi
+if [[ ! $LINEAR_AGENT_DISPATCH_WORKER_PROFILE =~ ^[a-zA-Z0-9._-]+$ || ! $LINEAR_AGENT_DISPATCH_REVIEWER_PROFILE =~ ^[a-zA-Z0-9._-]+$ ]]; then
+  printf 'invalid dispatch profile name\n' >&2
+  exit 78
+fi
+
+repo=$(realpath "$LINEAR_AGENT_REPO")
+prompt=$(realpath "$LINEAR_AGENT_PROMPT")
+if [[ ! -d $repo/.git ]]; then
+  printf 'control checkout is not a Git repository: %s\n' "$repo" >&2
+  exit 78
+fi
+if [[ ! -f $prompt ]]; then
+  printf 'worker prompt does not exist: %s\n' "$prompt" >&2
+  exit 78
+fi
+if [[ -n $(git -C "$repo" status --porcelain=v1 --untracked-files=normal) ]]; then
+  printf 'refusing to run from a dirty control checkout: %s\n' "$repo" >&2
+  git -C "$repo" status --short >&2
+  exit 73
+fi
+if ! git -C "$repo" remote get-url origin >/dev/null 2>&1; then
+  printf 'control checkout has no origin remote: %s\n' "$repo" >&2
+  exit 78
+fi
+
+pi_bin=${LINEAR_AGENT_PI_BIN:-$(command -v pi || true)}
+if [[ -z $pi_bin || ! -x $pi_bin ]]; then
+  printf 'pi executable not found\n' >&2
+  exit 69
+fi
+mcp_config=$(realpath "$LINEAR_AGENT_MCP_CONFIG")
+if [[ ! -f $mcp_config ]]; then
+  printf 'Pi MCP config does not exist: %s\n' "$mcp_config" >&2
+  exit 78
+fi
+continuum_home=$(realpath "$LINEAR_AGENT_CONTINUUM_HOME")
+continuum_data_home=$(realpath -m "$LINEAR_AGENT_CONTINUUM_DATA_HOME")
+export HOME=$continuum_home
+export XDG_DATA_HOME=$continuum_data_home
+runtime_verifier=$repo/ops/linear-agent/bin/verify-continuum-runtime
+if [[ ! -x $runtime_verifier ]]; then
+  printf 'Continuum runtime verifier does not exist: %s\n' "$runtime_verifier" >&2
+  exit 78
+fi
+"$runtime_verifier"
+if ! command -v flock >/dev/null 2>&1 || ! command -v timeout >/dev/null 2>&1; then
+  printf 'worker requires flock and timeout\n' >&2
+  exit 69
+fi
+
+agent_state=${XDG_STATE_HOME:-$HOME/.local/state}/linear-agent
+state_root=$agent_state/$profile
+shared_state=$agent_state/${LINEAR_AGENT_LOCK_GROUP:-$profile}
+worktree_root=${LINEAR_AGENT_WORKTREE_ROOT:-$repo/.linear-agent-worktrees}
+mkdir -p "$state_root/runs" "$state_root/sessions" "$shared_state" "$worktree_root"
+chmod 700 "$agent_state" "$state_root" "$state_root/runs" "$state_root/sessions" "$shared_state" "$worktree_root"
+
+exclude=$repo/.git/info/exclude
+mkdir -p "$(dirname "$exclude")"
+touch "$exclude"
+if ! grep -Fxq '/.linear-agent-worktrees/' "$exclude"; then
+  printf '/.linear-agent-worktrees/\n' >> "$exclude"
+fi
+
+exec 9>"$shared_state/agent.lock"
+if ! flock -n 9; then
+  printf 'agent group %s is already running\n' "${LINEAR_AGENT_LOCK_GROUP:-$profile}"
+  exit 0
+fi
+
+audit_marker=$shared_state/audit.last
+audit_interval_hours=${LINEAR_AGENT_AUDIT_INTERVAL_HOURS:-24}
+audit_due=yes
+if [[ -e $audit_marker ]] && find "$audit_marker" -mmin "-$((audit_interval_hours * 60))" -print -quit | grep -q .; then
+  audit_due=no
+fi
+
+run_id=$(tr -d '\n' </proc/sys/kernel/random/uuid)
+lease_minutes=${LINEAR_AGENT_LEASE_MINUTES:-120}
+lease_expires=$(date --iso-8601=seconds --date="+$lease_minutes minutes")
+run_log=$state_root/runs/$run_id.log
+run_prompt=$state_root/runs/$run_id.prompt.md
+max_runtime=${LINEAR_AGENT_MAX_RUNTIME:-90m}
+
+{
+  cat "$prompt"
+  cat <<EOF
+
+## Runtime envelope
+
+- Profile: $profile
+- Role: $LINEAR_AGENT_ROLE
+- Run ID: $run_id
+- Lease expires: $lease_expires
+- Control repository: $repo
+- Worktree root: $worktree_root
+- Continuum validation helper: $repo/ops/linear-agent/bin/validate-continuum-worktree
+- Linear project: $LINEAR_AGENT_PROJECT
+- Linear assignee: $LINEAR_AGENT_ASSIGNEE
+- Linear routing label: $LINEAR_AGENT_ROUTING_LABEL
+- Scout proposal label: $LINEAR_AGENT_SCOUT_LABEL
+- Staged label: $LINEAR_AGENT_STAGED_LABEL
+- Backlog status: $LINEAR_AGENT_BACKLOG_STATUS
+- Ready status: $LINEAR_AGENT_READY_STATUS
+- Claimed status: $LINEAR_AGENT_CLAIMED_STATUS
+- In-progress status: $LINEAR_AGENT_IN_PROGRESS_STATUS
+- In-review status: $LINEAR_AGENT_IN_REVIEW_STATUS
+- Staged status: $LINEAR_AGENT_STAGED_STATUS
+- Blocked status: $LINEAR_AGENT_BLOCKED_STATUS
+- Active staging branch: $LINEAR_AGENT_ACTIVE_STAGING
+- Allowed base branches: $LINEAR_AGENT_ALLOWED_BASES
+- Heartbeat interval: ${LINEAR_AGENT_HEARTBEAT_MINUTES:-20} minutes
+- Audit due: $audit_due
+- Audit proposal limit: ${LINEAR_AGENT_AUDIT_PROPOSAL_LIMIT:-3}
+
+Treat this envelope as trusted local configuration. Process one bounded role action and then stop.
+EOF
+} > "$run_prompt"
+
+args=(
+  --print
+  --mode text
+  --name "$LINEAR_AGENT_AGENT:$profile:$run_id"
+  --session-dir "$state_root/sessions"
+  --mcp-config "$mcp_config"
+  --approve
+)
+if [[ -n ${LINEAR_AGENT_MODEL:-} ]]; then
+  args+=(--model "$LINEAR_AGENT_MODEL")
+fi
+if [[ -n ${LINEAR_AGENT_THINKING:-} ]]; then
+  args+=(--thinking "$LINEAR_AGENT_THINKING")
+fi
+args+=("$(<"$run_prompt")")
+
+printf 'run_id=%s profile=%s role=%s repo=%s model=%s thinking=%s\n' \
+  "$run_id" "$profile" "$LINEAR_AGENT_ROLE" "$repo" "$LINEAR_AGENT_MODEL" "$LINEAR_AGENT_THINKING" | tee "$run_log"
+if [[ ${LINEAR_AGENT_DRY_RUN:-1} == 1 ]]; then
+  printf 'dry run: would execute in %s: %q' "$repo" "$pi_bin" | tee -a "$run_log"
+  printf ' %q' "${args[@]}" | tee -a "$run_log"
+  printf '\nrendered prompt: %s\n' "$run_prompt" | tee -a "$run_log"
+  exit 0
+fi
+
+export LINEAR_AGENT_RUN_ID=$run_id
+export LINEAR_AGENT_LEASE_EXPIRES=$lease_expires
+export LINEAR_AGENT_CONTROL_REPO=$repo
+export LINEAR_AGENT_WORKTREE_ROOT=$worktree_root
+
+set +e
+(
+  cd "$repo"
+  timeout --signal=INT --kill-after=5m "$max_runtime" "$pi_bin" "${args[@]}"
+) 2>&1 | tee -a "$run_log"
+status=${PIPESTATUS[0]}
+set -e
+printf 'run_id=%s exit_status=%s\n' "$run_id" "$status" | tee -a "$run_log"
+
+if (( status == 0 )) && [[ $LINEAR_AGENT_ROLE == reviewer ]] && grep -Eq 'AUDIT_(COMPLETE|NO_FINDINGS)' "$run_log"; then
+  touch "$audit_marker"
+fi
+
+dispatch_profile=
+if (( status == 0 )); then
+  if grep -q 'DISPATCH_REVIEWER' "$run_log"; then
+    dispatch_profile=$LINEAR_AGENT_DISPATCH_REVIEWER_PROFILE
+  elif grep -q 'DISPATCH_WORKER' "$run_log"; then
+    dispatch_profile=$LINEAR_AGENT_DISPATCH_WORKER_PROFILE
+  fi
+fi
+
+if [[ -n $dispatch_profile && $dispatch_profile != "$profile" ]]; then
+  flock -u 9
+  printf 'dispatching profile=%s\n' "$dispatch_profile" | tee -a "$run_log"
+  systemctl --user start --no-block "linear-agent-worker@$dispatch_profile.service"
+fi
+
+exit "$status"

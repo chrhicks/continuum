@@ -38,11 +38,18 @@ Global options must precede the command:
 
 Workspace resolution walks upward from the effective working directory to the nearest `.continuum` or `.git` directory.
 
+`continuum runtime` is a read-only diagnostic for runtime wiring. It reports the
+storage generation, normalized workspace, exact CLI entrypoint, HOME, XDG data
+home, and canonical database path without initializing or writing storage. Use
+`continuum --cwd <absolute-workspace> --json runtime` in automation that must
+fail closed when a different binary or storage root is selected.
+
 ### MCP
 
 `continuum mcp` serves the primary agent interface over local stdio MCP. It
 provides typed tools for:
 
+- read-only runtime and canonical storage diagnostics
 - workspace initialization and summary
 - task CRUD, validation, graph queries, steps, and notes
 - memory append, search, and consolidation

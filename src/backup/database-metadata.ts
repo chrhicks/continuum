@@ -58,11 +58,6 @@ export function assertSnapshotMetadata(
   expected: BackupDatabaseMetadata,
   actual: BackupDatabaseMetadata,
 ): void {
-  if (expected.applicationVersion !== actual.applicationVersion) {
-    throw new Error(
-      `Backup application version ${expected.applicationVersion} is not supported by ${actual.applicationVersion}`,
-    )
-  }
   if (
     expected.migrationCreatedAt !== actual.migrationCreatedAt ||
     expected.migrationHash !== actual.migrationHash

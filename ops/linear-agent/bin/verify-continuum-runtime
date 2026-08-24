@@ -1,0 +1,157 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+required=(
+  LINEAR_AGENT_REPO
+  LINEAR_AGENT_MCP_CONFIG
+  LINEAR_AGENT_BUN_BIN
+  LINEAR_AGENT_CONTINUUM_BIN
+  LINEAR_AGENT_CONTINUUM_HOME
+  LINEAR_AGENT_CONTINUUM_DATA_HOME
+  LINEAR_AGENT_EXECUTOR_BIN
+  LINEAR_AGENT_CONTINUUM_INTEGRATION
+  LINEAR_AGENT_CONTINUUM_CONNECTION
+)
+for name in "${required[@]}"; do
+  if [[ -z ${!name:-} ]]; then
+    printf 'continuum runtime contract missing %s\n' "$name" >&2
+    exit 78
+  fi
+done
+if ! command -v jq >/dev/null 2>&1; then
+  printf 'continuum runtime contract requires jq\n' >&2
+  exit 69
+fi
+
+repo=$(realpath "$LINEAR_AGENT_REPO")
+mcp_config=$(realpath "$LINEAR_AGENT_MCP_CONFIG")
+bun_bin=$(realpath "$LINEAR_AGENT_BUN_BIN")
+continuum_bin=$(realpath "$LINEAR_AGENT_CONTINUUM_BIN")
+continuum_home=$(realpath "$LINEAR_AGENT_CONTINUUM_HOME")
+data_home=$(realpath -m "$LINEAR_AGENT_CONTINUUM_DATA_HOME")
+executor_bin=$(realpath "$LINEAR_AGENT_EXECUTOR_BIN")
+expected_continuum_bin=$(realpath "$repo/bin/continuum")
+
+if [[ $continuum_bin != "$expected_continuum_bin" ]]; then
+  printf 'Continuum CLI mismatch: expected=%s actual=%s\n' \
+    "$expected_continuum_bin" "$continuum_bin" >&2
+  exit 78
+fi
+if [[ ! -x $bun_bin || ! -x $continuum_bin || ! -x $executor_bin ]]; then
+  printf 'Continuum runtime executable missing: bun=%s cli=%s executor=%s\n' \
+    "$bun_bin" "$continuum_bin" "$executor_bin" >&2
+  exit 69
+fi
+
+mcp_command=$(jq -r '.mcpServers.executor.command // ""' "$mcp_config")
+mcp_args=$(jq -c '.mcpServers.executor.args // []' "$mcp_config")
+if [[ $(realpath -m "$mcp_command") != "$executor_bin" || $mcp_args != '["mcp"]' ]]; then
+  printf 'Pi MCP Executor mismatch: expected_command=%s expected_args=["mcp"] actual_command=%s args_match=%s\n' \
+    "$executor_bin" "$mcp_command" "$([[ $mcp_args == '["mcp"]' ]] && printf yes || printf no)" >&2
+  exit 78
+fi
+
+runtime_json=$(
+  HOME="$continuum_home" XDG_DATA_HOME="$data_home" \
+    "$bun_bin" run "$continuum_bin" --cwd "$repo" --json runtime
+)
+if ! jq -e '.ok == true' >/dev/null <<<"$runtime_json"; then
+  printf 'Continuum runtime diagnostic failed for %s\n' "$continuum_bin" >&2
+  exit 78
+fi
+runtime_workspace=$(jq -er '.data.workspace' <<<"$runtime_json")
+runtime_entrypoint=$(jq -er '.data.entrypoint' <<<"$runtime_json")
+runtime_home=$(jq -er '.data.home' <<<"$runtime_json")
+runtime_data_home=$(jq -er '.data.dataHome' <<<"$runtime_json")
+runtime_database=$(jq -er '.data.database' <<<"$runtime_json")
+storage_generation=$(jq -er '.data.storageGeneration' <<<"$runtime_json")
+
+if [[ $storage_generation != xdg-project-sha256-v1 || \
+      $runtime_workspace != "$repo" || \
+      $runtime_entrypoint != "$continuum_bin" || \
+      $runtime_home != "$continuum_home" || \
+      $runtime_data_home != "$data_home" || \
+      $runtime_database != "$data_home"/continuum/projects/*/continuum.db ]]; then
+  printf 'Continuum runtime diagnostic mismatch: generation=%s workspace=%s cli=%s home=%s data_home=%s database=%s\n' \
+    "$storage_generation" "$runtime_workspace" "$runtime_entrypoint" \
+    "$runtime_home" "$runtime_data_home" "$runtime_database" >&2
+  exit 78
+fi
+
+server_json=$(
+  "$executor_bin" call executor mcp getServer \
+    "{\"slug\":\"$LINEAR_AGENT_CONTINUUM_INTEGRATION\"}"
+)
+server_command=$(jq -r '.data.integration.config.command // ""' <<<"$server_json")
+server_args=$(jq -c '.data.integration.config.args // []' <<<"$server_json")
+server_cwd=$(jq -r '.data.integration.config.cwd // ""' <<<"$server_json")
+server_home=$(jq -r '.data.integration.config.env.HOME // ""' <<<"$server_json")
+server_data_home=$(jq -r '.data.integration.config.env.XDG_DATA_HOME // ""' <<<"$server_json")
+server_cli=$(jq -r '.data.integration.config.args[1] // ""' <<<"$server_json")
+expected_args=$(jq -cn --arg cli "$continuum_bin" '["run", $cli, "mcp"]')
+
+if [[ $(realpath -m "$server_command") != "$bun_bin" || \
+      $server_args != "$expected_args" || \
+      $(realpath -m "$server_cwd") != "$repo" || \
+      $(realpath -m "$server_home") != "$continuum_home" || \
+      $(realpath -m "$server_data_home") != "$data_home" ]]; then
+  printf 'Executor Continuum runtime mismatch: expected_command=%s expected_args=%s expected_cwd=%s expected_HOME=%s expected_XDG_DATA_HOME=%s\n' \
+    "$bun_bin" "$expected_args" "$repo" "$continuum_home" "$data_home" >&2
+  printf 'Executor Continuum runtime mismatch: actual_command=%s actual_cli=%s args_match=%s actual_cwd=%s actual_HOME=%s actual_XDG_DATA_HOME=%s\n' \
+    "$server_command" "$server_cli" \
+    "$([[ $server_args == "$expected_args" ]] && printf yes || printf no)" \
+    "$server_cwd" "$server_home" "$server_data_home" >&2
+  exit 78
+fi
+
+connections_json=$("$executor_bin" call executor coreTools connections list '{}')
+if ! jq -e --arg address "$LINEAR_AGENT_CONTINUUM_CONNECTION" \
+  '.data.connections[] | select(.address == $address and .template == "none")' \
+  >/dev/null <<<"$connections_json"; then
+  printf 'Executor Continuum connection missing: %s\n' \
+    "$LINEAR_AGENT_CONTINUUM_CONNECTION" >&2
+  exit 78
+fi
+
+IFS=. read -r tools_namespace connection_integration connection_owner \
+  connection_name connection_extra <<<"$LINEAR_AGENT_CONTINUUM_CONNECTION"
+if [[ $tools_namespace != tools || \
+      $connection_integration != "$LINEAR_AGENT_CONTINUUM_INTEGRATION" || \
+      -z $connection_owner || -z $connection_name || -n $connection_extra ]]; then
+  printf 'invalid Executor Continuum connection address: %s\n' \
+    "$LINEAR_AGENT_CONTINUUM_CONNECTION" >&2
+  exit 78
+fi
+typed_runtime_json=$(
+  "$executor_bin" call tools "$connection_integration" "$connection_owner" \
+    "$connection_name" continuum_runtime \
+    "$(jq -cn --arg workspace "$repo" '{workspace:$workspace}')"
+)
+typed_workspace=$(jq -r '.data.structuredContent.workspace // ""' \
+  <<<"$typed_runtime_json")
+typed_entrypoint=$(jq -r '.data.structuredContent.entrypoint // ""' \
+  <<<"$typed_runtime_json")
+typed_home=$(jq -r '.data.structuredContent.home // ""' \
+  <<<"$typed_runtime_json")
+typed_data_home=$(jq -r '.data.structuredContent.dataHome // ""' \
+  <<<"$typed_runtime_json")
+typed_database=$(jq -r '.data.structuredContent.database // ""' \
+  <<<"$typed_runtime_json")
+typed_generation=$(jq -r '.data.structuredContent.storageGeneration // ""' \
+  <<<"$typed_runtime_json")
+if [[ $typed_workspace != "$runtime_workspace" || \
+      $typed_entrypoint != "$runtime_entrypoint" || \
+      $typed_home != "$runtime_home" || \
+      $typed_data_home != "$runtime_data_home" || \
+      $typed_database != "$runtime_database" || \
+      $typed_generation != "$storage_generation" ]]; then
+  printf 'Executor typed Continuum runtime mismatch: workspace=%s cli=%s home=%s data_home=%s database=%s storage_generation=%s\n' \
+    "$typed_workspace" "$typed_entrypoint" "$typed_home" \
+    "$typed_data_home" "$typed_database" "$typed_generation" >&2
+  exit 78
+fi
+
+printf 'continuum_runtime workspace=%s bun=%s cli=%s home=%s data_home=%s database=%s storage_generation=%s executor_integration=%s connection=%s\n' \
+  "$repo" "$bun_bin" "$continuum_bin" "$continuum_home" "$data_home" \
+  "$runtime_database" "$storage_generation" \
+  "$LINEAR_AGENT_CONTINUUM_INTEGRATION" "$LINEAR_AGENT_CONTINUUM_CONNECTION"

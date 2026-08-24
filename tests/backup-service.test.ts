@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { configureBackup, readBackupConfig } from '../src/backup/config'
 import {
   databaseObjectKey,
+  decodeBackupManifest,
   encodeJson,
   headObjectKey,
   manifestObjectKey,
@@ -145,6 +146,31 @@ describe('R2 backup service', () => {
         outputPath: join(fixture.root, 'corrupt.sqlite'),
       }),
     ).toThrow('checksum mismatch')
+  })
+
+  test('restores a valid snapshot created by a different application version', async () => {
+    const fixture = await createFixture()
+    const backup = createBackup(fixture.workspace, fixture.store, fixedDate(1))
+    const manifestKey = manifestObjectKey(PROJECT_ID, backup.generation)
+    const manifestBytes = fixture.store.get(manifestKey)
+    if (!manifestBytes) throw new Error('missing test manifest')
+    const manifest = decodeBackupManifest(manifestBytes)
+    fixture.store.put(
+      manifestKey,
+      encodeJson({
+        ...manifest,
+        metadata: { ...manifest.metadata, applicationVersion: '0.0.0' },
+      }),
+      'application/json',
+    )
+    const output = join(fixture.root, 'recovery', 'historical.sqlite')
+
+    expect(
+      restoreBackup(fixture.workspace, fixture.store, {
+        generation: backup.generation,
+        outputPath: output,
+      }).outputPath,
+    ).toBe(output)
   })
 
   test('keeps portable identity explicit and configuration idempotent', async () => {
