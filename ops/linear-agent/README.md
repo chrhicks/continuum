@@ -43,6 +43,47 @@ It starts from `feature/xdg-storage-migration`. Worker PRs target staging. The R
 
 After promotion, create a fresh staging branch and update all three profiles.
 
+## Continuum runtime contract
+
+Every role fails closed before Pi starts unless the control ledger resolves one
+explicit runtime contract:
+
+- the workspace is the absolute `LINEAR_AGENT_REPO` control checkout;
+- `LINEAR_AGENT_BUN_BIN` runs that checkout's exact
+  `LINEAR_AGENT_CONTINUUM_BIN`;
+- `LINEAR_AGENT_CONTINUUM_HOME` and
+  `LINEAR_AGENT_CONTINUUM_DATA_HOME` select the canonical XDG storage
+  generation and database;
+- Pi's MCP config starts the configured `LINEAR_AGENT_EXECUTOR_BIN`; and
+- Executor's configured Continuum stdio integration uses that same Bun, CLI,
+  checkout, HOME, and XDG data home through the configured no-auth connection.
+
+Inspect Executor's registered server before enabling a profile:
+
+```bash
+executor call executor mcp getServer '{"slug":"continuum"}'
+executor call executor coreTools connections list '{}'
+```
+
+After registering the checkout-backed server, refresh or recreate its no-auth
+connection so Executor discovers `continuum_runtime`; a stale connection is
+rejected even when the server catalog entry is correct.
+
+The expected stdio command is the absolute Bun path with arguments
+`run <control-checkout>/bin/continuum mcp`, `cwd` is the control checkout, and
+its explicit environment contains only the configured path contract (including
+`HOME` and `XDG_DATA_HOME`; never add credentials to repository config).
+`run-once` also invokes the read-only `continuum_runtime` tool through the
+configured Executor connection and compares its result with the checkout CLI
+diagnostic. It prints the resolved workspace, Bun, CLI, data home, canonical
+database, storage generation, integration, and connection, or exits with a
+mismatch diagnostic before any agent operation.
+
+`bin/validate-continuum-worktree` is intentionally different: it runs the
+source worktree CLI with temporary HOME, XDG data, and workspace directories.
+It verifies that the resolved database is below that temporary XDG root before
+initialization or validation, so it cannot write the durable control ledger.
+
 ## Prerequisites
 
 - Pi with `pi-mcp-adapter`
@@ -71,7 +112,9 @@ Edit and verify:
 ~/.config/linear-agent/continuum-reviewer.env
 ```
 
-The installer preserves existing profile files. New files start with `LINEAR_AGENT_DRY_RUN=1`.
+The installer preserves existing profile files. Add every runtime-contract
+setting from the matching example to an existing profile; preserved profiles
+are not migrated automatically. New files start with `LINEAR_AGENT_DRY_RUN=1`.
 
 ## Verification
 

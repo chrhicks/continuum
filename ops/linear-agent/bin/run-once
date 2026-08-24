@@ -34,6 +34,13 @@ required=(
   LINEAR_AGENT_MODEL
   LINEAR_AGENT_THINKING
   LINEAR_AGENT_MCP_CONFIG
+  LINEAR_AGENT_BUN_BIN
+  LINEAR_AGENT_CONTINUUM_BIN
+  LINEAR_AGENT_CONTINUUM_HOME
+  LINEAR_AGENT_CONTINUUM_DATA_HOME
+  LINEAR_AGENT_EXECUTOR_BIN
+  LINEAR_AGENT_CONTINUUM_INTEGRATION
+  LINEAR_AGENT_CONTINUUM_CONNECTION
   LINEAR_AGENT_PROJECT
   LINEAR_AGENT_ASSIGNEE
   LINEAR_AGENT_ROUTING_LABEL
@@ -96,6 +103,16 @@ if [[ ! -f $mcp_config ]]; then
   printf 'Pi MCP config does not exist: %s\n' "$mcp_config" >&2
   exit 78
 fi
+continuum_home=$(realpath "$LINEAR_AGENT_CONTINUUM_HOME")
+continuum_data_home=$(realpath -m "$LINEAR_AGENT_CONTINUUM_DATA_HOME")
+export HOME=$continuum_home
+export XDG_DATA_HOME=$continuum_data_home
+runtime_verifier=$repo/ops/linear-agent/bin/verify-continuum-runtime
+if [[ ! -x $runtime_verifier ]]; then
+  printf 'Continuum runtime verifier does not exist: %s\n' "$runtime_verifier" >&2
+  exit 78
+fi
+"$runtime_verifier"
 if ! command -v flock >/dev/null 2>&1 || ! command -v timeout >/dev/null 2>&1; then
   printf 'worker requires flock and timeout\n' >&2
   exit 69

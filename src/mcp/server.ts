@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { appendMcpMemory, getSummary, searchMcpMemory } from './tools'
 import { registerTaskTools } from './register-task-tools'
 import { registerMemoryTools } from './register-memory-tools'
+import { registerRuntimeTool } from './register-runtime-tool'
 import { toolResult } from './result'
 
 const workspaceSchema = () =>
@@ -18,6 +19,7 @@ export function createContinuumMcpServer(): McpServer {
 
   registerTaskTools(server)
   registerMemoryTools(server)
+  registerRuntimeTool(server)
 
   server.registerTool(
     'continuum_summary',
