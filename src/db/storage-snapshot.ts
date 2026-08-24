@@ -107,7 +107,7 @@ function assertIntegrity(sqlite: Database, path: string): void {
   }
 }
 
-function fingerprintStorage(bytes: Uint8Array): StorageFingerprint {
+export function fingerprintStorage(bytes: Uint8Array): StorageFingerprint {
   return {
     algorithm: 'sha256',
     digest: createHash('sha256').update(bytes).digest('hex'),

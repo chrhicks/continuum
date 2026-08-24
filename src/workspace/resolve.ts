@@ -1,7 +1,12 @@
 import { existsSync, statSync } from 'node:fs'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { homedir } from 'node:os'
-import { canonicalDbFilePath } from '../db/paths'
+import {
+  canonicalDbFilePath,
+  ensureProjectStorageId,
+  legacyDbFilePath,
+  pathHashCanonicalDbFilePath,
+} from '../db/paths'
 
 export type WorkspaceContext = {
   invocationCwd: string
@@ -32,6 +37,7 @@ export function resolveWorkspaceContext(
     : null
   const rootCandidate = requestedCwd ?? invocationCwd
   const workspaceRoot = findWorkspaceRoot(rootCandidate)
+  ensureExistingStorageIdentity(workspaceRoot)
   const continuumDir = join(workspaceRoot, CONTINUUM_DIR_NAME)
   const memoryDir = join(continuumDir, MEMORY_DIR_NAME)
   const recallDir = join(continuumDir, ...RECALL_DIR_PARTS)
@@ -95,6 +101,15 @@ function hasDirectory(path: string): boolean {
     return statSync(path).isDirectory()
   } catch {
     return false
+  }
+}
+
+function ensureExistingStorageIdentity(workspaceRoot: string): void {
+  if (
+    existsSync(legacyDbFilePath(workspaceRoot)) ||
+    existsSync(pathHashCanonicalDbFilePath(workspaceRoot))
+  ) {
+    ensureProjectStorageId(workspaceRoot)
   }
 }
 

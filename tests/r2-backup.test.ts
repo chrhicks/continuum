@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { Database } from 'bun:sqlite'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { join } from 'node:path'
 import { configureBackup, readBackupConfig } from '../src/backup/config'
 import {
   databaseObjectKey,
@@ -13,8 +13,7 @@ import {
 } from '../src/backup/contracts'
 import type { BackupObjectStore } from '../src/backup/object-store'
 import { createBackup, listBackups, restoreBackup } from '../src/backup/service'
-import { canonicalDbFilePath } from '../src/db/paths'
-import { migrateDb } from '../src/db/migrate'
+import { prepareCanonicalDatabase } from '../src/db/storage'
 
 const PROJECT_ID = '11111111-1111-4111-8111-111111111111'
 const WRITER_ID = '22222222-2222-4222-8222-222222222222'
@@ -185,9 +184,10 @@ async function createFixture(): Promise<Fixture> {
     writerId: WRITER_ID,
     now: fixedDate(0),
   })
-  const dbPath = canonicalDbFilePath(workspace)
-  mkdirSync(dirname(dbPath), { recursive: true })
-  await migrateDb(dbPath)
+  const dbPath = prepareCanonicalDatabase(workspace, {
+    initialize: true,
+    warn: false,
+  }).dbPath
   return { root, workspace, dbPath, store: new MemoryObjectStore() }
 }
 

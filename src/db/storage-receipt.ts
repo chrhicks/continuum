@@ -12,7 +12,7 @@ import { CanonicalStorageError, migrationFailure } from './storage-errors'
 import type { StorageFingerprint } from './storage-snapshot'
 import { writeDurably } from './storage-snapshot'
 
-const RECEIPT_VERSION = 1
+const RECEIPT_VERSION = 2
 const warnedSources = new Set<string>()
 
 export type MigrationReceipt = {
@@ -74,25 +74,31 @@ export function readMigrationReceipt(path: string): MigrationReceipt {
   }
 }
 
-export function verifyMigrationReceipt(
+export function verifyMigrationReceiptIdentity(
   receipt: MigrationReceipt,
   workspaceRoot: string,
-  sourcePath: string,
-  destinationPath: string,
-  sourceFingerprint: StorageFingerprint,
 ): void {
   const identityMatches =
     receipt.version === RECEIPT_VERSION &&
-    receipt.projectId === projectStorageId(workspaceRoot) &&
-    receipt.workspacePath === normalizedWorkspacePath(workspaceRoot) &&
-    receipt.sourcePath === sourcePath &&
-    receipt.destinationPath === destinationPath
+    receipt.projectId === projectStorageId(workspaceRoot)
   if (!identityMatches) {
     throw migrationFailure(
       `Migration receipt does not match workspace identity: ${receipt.sourcePath}`,
     )
   }
-  if (receipt.sourceFingerprint.digest !== sourceFingerprint.digest) {
+}
+
+export function verifyMigrationReceipt(
+  receipt: MigrationReceipt,
+  workspaceRoot: string,
+  sourcePath: string,
+  sourceFingerprint: StorageFingerprint,
+): void {
+  verifyMigrationReceiptIdentity(receipt, workspaceRoot)
+  if (
+    receipt.sourceFingerprint.digest !== sourceFingerprint.digest ||
+    receipt.sourceFingerprint.byteLength !== sourceFingerprint.byteLength
+  ) {
     throw new CanonicalStorageError(
       'STORAGE_MIGRATION_CONFLICT',
       `Legacy database changed since migration: ${sourcePath}. ` +
@@ -122,9 +128,9 @@ function assertEquivalentReceipt(
   const equivalent =
     actual.version === expected.version &&
     actual.projectId === expected.projectId &&
-    actual.sourcePath === expected.sourcePath &&
-    actual.destinationPath === expected.destinationPath &&
-    actual.sourceFingerprint.digest === expected.sourceFingerprint.digest
+    actual.sourceFingerprint.digest === expected.sourceFingerprint.digest &&
+    actual.sourceFingerprint.byteLength ===
+      expected.sourceFingerprint.byteLength
   if (!equivalent) {
     throw migrationFailure(
       `Concurrent migration published a conflicting receipt: ${actual.sourcePath}`,
