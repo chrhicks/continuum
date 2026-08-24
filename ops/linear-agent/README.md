@@ -99,10 +99,12 @@ Worker and Reviewer services are dispatched on demand.
 
 ## Operations
 
+Use one read-only snapshot for normal observation. It combines timer and role state, recent result markers, control/deployment drift, open staging PRs, the Linear queue, and the expected next role:
+
 ```bash
-# Current timer and services
-systemctl --user list-timers 'linear-agent-worker@*'
-systemctl --user status 'linear-agent-worker@continuum-*'
+linear-agent-status continuum
+linear-agent-status continuum --follow  # snapshot, then follow role journals
+linear-agent-status continuum --local   # skip GitHub and Linear queries
 
 # Run a role manually
 systemctl --user start linear-agent-worker@continuum-reviewer.service

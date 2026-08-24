@@ -8,7 +8,9 @@ trap 'rm -rf "$tmp"' EXIT
 bash -n \
   "$root/bin/run-once" \
   "$root/bin/install-user" \
+  "$root/bin/status" \
   "$root/bin/validate-continuum-worktree"
+"$root/bin/status" --help >/dev/null
 grep -q 'open PR plus ready status: this is requested-change work' "$root/prompts/scout.md"
 grep -q 'do not repeat that dispatch' "$root/prompts/scout.md"
 set +e
@@ -27,6 +29,7 @@ PATH="$tmp/home/bin:$PATH" \
   "$root/bin/install-user" >/dev/null
 [[ $(stat -c '%a' "$tmp/config/linear-agent/continuum-worker.env") == 600 ]]
 [[ -x $tmp/home/.local/libexec/linear-agent/run-once ]]
+[[ -x $tmp/home/.local/bin/linear-agent-status ]]
 [[ -f $tmp/data/linear-agent/reviewer.md ]]
 HOME="$tmp/home" \
 XDG_CONFIG_HOME="$tmp/config" \
@@ -90,6 +93,14 @@ LINEAR_AGENT_DISPATCH_REVIEWER_PROFILE=test-reviewer
 LINEAR_AGENT_DRY_RUN=1
 EOF
 chmod 600 "$tmp/run/config/linear-agent/test.env"
+cp "$tmp/run/config/linear-agent/test.env" "$tmp/run/config/linear-agent/test-scout.env"
+HOME="$tmp/run" \
+XDG_CONFIG_HOME="$tmp/run/config" \
+XDG_STATE_HOME="$tmp/run/state" \
+PATH="$tmp/run/bin:$PATH" \
+  "$root/bin/status" test --local > "$tmp/status.log"
+grep -q '^Linear agent status: test$' "$tmp/status.log"
+grep -q "repo=$tmp/run/repo" "$tmp/status.log"
 HOME="$tmp/run" \
 XDG_CONFIG_HOME="$tmp/run/config" \
 XDG_STATE_HOME="$tmp/run/state" \

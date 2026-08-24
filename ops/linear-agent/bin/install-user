@@ -29,6 +29,7 @@ unit_home=$config_home/systemd/user
 config=$config_home/linear-agent/$profile.env
 
 install -Dm755 "$root/bin/run-once" "$libexec_home/linear-agent/run-once"
+install -Dm755 "$root/bin/status" "$HOME/.local/bin/linear-agent-status"
 install -Dm644 "$root/prompts/worker.md" "$data_home/linear-agent/worker.md"
 install -Dm644 "$root/prompts/scout.md" "$data_home/linear-agent/scout.md"
 install -Dm644 "$root/prompts/reviewer.md" "$data_home/linear-agent/reviewer.md"
