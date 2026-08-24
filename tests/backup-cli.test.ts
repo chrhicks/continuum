@@ -87,6 +87,53 @@ describe('backup CLI boundaries', () => {
     )
   })
 
+  test('renders stable missing and remote-error status outcomes', () => {
+    const workspace = createWorkspace()
+    configureWorkspace(workspace)
+    const fake = createFakeWrangler(dirname(workspace))
+    const args = ['backup', 'status', '--wrangler', fake.executable]
+
+    const humanResult = runCli(workspace, args, {
+      json: false,
+      environment: { ...process.env, ...cliEnvironment(fake, 'missing') },
+    })
+    expect(humanResult.status).toBe(0)
+    expect(humanResult.stdout).toContain('R2 backup status: missing\n')
+    expect(humanResult.stdout).toContain('Freshness threshold: 86400 seconds\n')
+    expect(humanResult.stdout).toContain('Remote: no backup head\n')
+
+    const jsonResult = runCli(workspace, args, {
+      environment: { ...process.env, ...cliEnvironment(fake, 'missing') },
+    })
+    expect(jsonResult.status).toBe(0)
+    expect(JSON.parse(jsonResult.stdout)).toMatchObject({
+      ok: true,
+      data: {
+        state: 'missing',
+        staleAfterSeconds: 86_400,
+        local: { digest: expect.stringMatching(/^[0-9a-f]{64}$/) },
+        remote: null,
+        errorCode: null,
+      },
+    })
+
+    const errorResult = runCli(workspace, args, {
+      environment: { ...process.env, ...cliEnvironment(fake, 'auth') },
+    })
+    expect(errorResult.status).toBe(0)
+    expect(JSON.parse(errorResult.stdout)).toMatchObject({
+      ok: true,
+      data: {
+        state: 'remote-error',
+        remote: null,
+        errorCode: 'BACKUP_REMOTE_ERROR',
+      },
+    })
+    expect(
+      `${humanResult.stdout}${jsonResult.stdout}${errorResult.stdout}`,
+    ).not.toContain(FAKE_WRANGLER_TOKEN)
+  })
+
   test('exposes stable remote error codes without disclosing tokens', () => {
     const workspace = createWorkspace()
     configureWorkspace(workspace)
@@ -143,6 +190,8 @@ function runCli(
 }
 
 function configureWorkspace(workspace: string): void {
+  const initialized = runCli(workspace, ['init'])
+  expect(initialized.status).toBe(0)
   const result = runCli(workspace, [
     'backup',
     'configure',

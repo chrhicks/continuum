@@ -3,6 +3,7 @@ import { Effect, Result } from 'effect'
 import { configureBackup, readBackupConfig } from '../../backup/config'
 import { wranglerObjectStoreLayer } from '../../backup/object-store'
 import { createBackup, listBackups, restoreBackup } from '../../backup/service'
+import { getBackupStatus, type BackupStatus } from '../../backup/status'
 import { resolveWorkspaceContext } from '../../workspace/resolve'
 import { runCommand } from '../io'
 
@@ -14,6 +15,7 @@ export function createBackupCommand(): Command {
       '\nCredentials are inherited by Wrangler; Continuum never reads or stores them.',
     )
   addConfigureCommand(command)
+  addStatusCommand(command)
   addCreateCommand(command)
   addListCommand(command)
   addRestoreCommand(command)
@@ -39,6 +41,33 @@ function addConfigureCommand(command: Command): void {
           console.log(`Project ID: ${config.projectId}`)
           console.log(`Writer ID: ${config.writerId}`)
         },
+      )
+    })
+}
+
+function addStatusCommand(command: Command): void {
+  command
+    .command('status')
+    .description('Compare local state with the remote backup head')
+    .option('--wrangler <path>', 'Wrangler v4 executable')
+    .action(async (options, actionCommand) => {
+      await runCommand(
+        actionCommand,
+        async () => {
+          const workspaceRoot = resolveWorkspaceContext().workspaceRoot
+          const config = await runEffect(readBackupConfig(workspaceRoot))
+          return runEffect(
+            getBackupStatus(workspaceRoot).pipe(
+              Effect.provide(
+                wranglerObjectStoreLayer({
+                  bucket: config.bucket,
+                  executable: options.wrangler,
+                }),
+              ),
+            ),
+          )
+        },
+        renderBackupStatus,
       )
     })
 }
@@ -149,6 +178,23 @@ function addRestoreCommand(command: Command): void {
         },
       )
     })
+}
+
+function renderBackupStatus(status: BackupStatus): void {
+  console.log(`R2 backup status: ${status.state}`)
+  console.log(`Checked at: ${status.checkedAt}`)
+  console.log(`Freshness threshold: ${status.staleAfterSeconds} seconds`)
+  console.log(`Local SHA-256: ${status.local.digest}`)
+  if (status.remote) {
+    console.log(`Remote generation: ${status.remote.generation}`)
+    console.log(`Remote SHA-256: ${status.remote.digest}`)
+    console.log(`Remote updated at: ${status.remote.updatedAt}`)
+    console.log(`Remote age: ${status.remote.ageSeconds} seconds`)
+  } else if (status.state === 'missing') {
+    console.log('Remote: no backup head')
+  } else {
+    console.log(`Remote: unavailable (${status.errorCode})`)
+  }
 }
 
 async function runEffect<A, E>(effect: Effect.Effect<A, E>): Promise<A> {
