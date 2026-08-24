@@ -60,7 +60,13 @@ export function patch_collection<
           `${options.label} ${itemId} not found`,
         )
       }
-      const current = next[index]!
+      const current = next[index]
+      if (!current) {
+        throw new ContinuumError(
+          'ITEM_NOT_FOUND',
+          `${options.label} ${itemId} not found`,
+        )
+      }
       next[index] = options.apply_update(current, update)
     }
   }

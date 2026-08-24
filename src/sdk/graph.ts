@@ -32,7 +32,8 @@ function collect_descendants(tasks: SdkTask[], parentId: string): string[] {
   const result: string[] = []
   const queue = [...(byParent.get(parentId) ?? [])]
   while (queue.length > 0) {
-    const current = queue.shift()!
+    const current = queue.shift()
+    if (!current) continue
     result.push(current.id)
     const children = byParent.get(current.id)
     if (children) queue.push(...children)

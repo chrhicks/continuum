@@ -52,7 +52,7 @@ function importArtifact(sqlite: Database, artifact: LegacyArtifact): string {
   if (artifact.kind === 'opencode-summary')
     return importRecallSummary(sqlite, artifact)
   if (artifact.kind === 'opencode-normalized')
-    return importNormalizedTranscript(sqlite, artifact)
+    return importTranscript(sqlite, artifact)
   return importJournalArtifact(sqlite, artifact)
 }
 
@@ -117,7 +117,8 @@ function importRecallSummary(
   sqlite: Database,
   artifact: LegacyArtifact,
 ): string {
-  const parsed = parseOpencodeSummary(artifact.content)!
+  const parsed = parseOpencodeSummary(artifact.content)
+  if (!parsed) throw new Error(`Invalid OpenCode summary: ${artifact.path}`)
   const sourceFingerprint = fingerprint(`legacy\0${parsed.sessionId}`)
   const sourceId = upsertRecallSource(sqlite, {
     sessionId: parsed.sessionId,
@@ -157,12 +158,10 @@ function importRecallSummary(
   return id
 }
 
-function importNormalizedTranscript(
-  sqlite: Database,
-  artifact: LegacyArtifact,
-): string {
+function importTranscript(sqlite: Database, artifact: LegacyArtifact): string {
   const frontmatter = parseFrontmatter(artifact.content).frontmatter
-  const sessionId = readSessionId(artifact.content)!
+  const sessionId = readSessionId(artifact.content)
+  if (!sessionId) throw new Error('Missing transcript session ID')
   const sourceFingerprint = fingerprint(`legacy\0${sessionId}`)
   const sourceId = upsertRecallSource(sqlite, {
     sessionId,

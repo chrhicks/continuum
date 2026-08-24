@@ -260,7 +260,8 @@ describe('legacy memory migration', () => {
     const pending = await Effect.runPromise(journal.listPending(boundary ?? 0))
     expect(boundary).toBe(4)
     expect(pending).toHaveLength(2)
-    expect(pending.every((entry) => entry.sequence > boundary!)).toBe(true)
+    if (boundary === null) throw new Error('Expected consolidation boundary')
+    expect(pending.every((entry) => entry.sequence > boundary)).toBe(true)
     expect(
       pending.every((entry) =>
         entry.content.includes(

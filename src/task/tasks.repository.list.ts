@@ -199,11 +199,13 @@ export async function list_tasks(
     return { tasks: mapped }
   }
 
-  const last = slice[slice.length - 1]!
-  return {
-    tasks: mapped,
-    nextCursor: build_next_cursor(sortKey, last),
-  }
+  const last = slice.at(-1)
+  return last
+    ? {
+        tasks: mapped,
+        nextCursor: build_next_cursor(sortKey, last),
+      }
+    : { tasks: mapped }
 }
 
 export async function list_tasks_by_statuses(

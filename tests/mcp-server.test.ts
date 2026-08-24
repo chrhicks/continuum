@@ -163,17 +163,18 @@ describe('Continuum MCP server', () => {
           steps: [{ title: 'Verify', description: 'Run MCP checks' }],
         },
       })
-      const stepId = (
+      const firstStep = (
         stepsAdded.structuredContent as {
           task: { steps: Array<{ id: string }> }
         }
-      ).task.steps[0]!.id
+      ).task.steps[0]
+      if (!firstStep) throw new Error('Expected MCP step')
       await client.callTool({
         name: 'continuum_task_steps_update',
         arguments: {
           workspace,
           id: task.id,
-          stepId,
+          stepId: firstStep.id,
           patch: { status: 'in_progress' },
         },
       })
@@ -188,7 +189,12 @@ describe('Continuum MCP server', () => {
       })
       await client.callTool({
         name: 'continuum_task_steps_complete',
-        arguments: { workspace, id: task.id, stepId, notes: 'Verified' },
+        arguments: {
+          workspace,
+          id: task.id,
+          stepId: firstStep.id,
+          notes: 'Verified',
+        },
       })
       const validation = await client.callTool({
         name: 'continuum_task_validate',

@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm'
 import type { DbClient } from '../db/client'
 import { tasks } from '../db/schema'
 import { ContinuumError } from './error'
-import { get_task, require_task } from './tasks.repository'
+import { require_task } from './tasks.repository'
 import type {
   AddStepsInput,
   CompleteStepInput,
@@ -50,7 +50,7 @@ export async function add_steps(
     .where(eq(tasks.id, input.task_id))
     .run()
 
-  return (await get_task(db, input.task_id))!
+  return require_task(db, input.task_id)
 }
 
 export async function complete_step(
@@ -73,7 +73,7 @@ export async function complete_step(
     throw new ContinuumError('ITEM_NOT_FOUND', `Step ${stepId} not found`)
   }
 
-  const existingStep = task.steps[stepIndex]!
+  const existingStep = requireStep(task.steps, stepIndex, stepId)
   if (existingStep.status === 'completed') {
     return {
       task,
@@ -111,7 +111,7 @@ export async function complete_step(
     .where(eq(tasks.id, input.task_id))
     .run()
 
-  return { task: (await get_task(db, input.task_id))! }
+  return { task: await require_task(db, input.task_id) }
 }
 
 export async function update_step(
@@ -128,7 +128,7 @@ export async function update_step(
     )
   }
 
-  const existingStep = task.steps[stepIndex]!
+  const existingStep = requireStep(task.steps, stepIndex, input.step_id)
   const updatedSteps = [...task.steps]
   const description =
     input.description !== undefined
@@ -160,5 +160,13 @@ export async function update_step(
     .where(eq(tasks.id, input.task_id))
     .run()
 
-  return (await get_task(db, input.task_id))!
+  return require_task(db, input.task_id)
+}
+
+function requireStep(steps: Step[], index: number, id: number): Step {
+  const step = steps[index]
+  if (!step) {
+    throw new ContinuumError('ITEM_NOT_FOUND', `Step ${id} not found`)
+  }
+  return step
 }

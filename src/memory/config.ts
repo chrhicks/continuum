@@ -24,7 +24,7 @@ export type MemoryConfig = {
   consolidation?: ConsolidationLlmConfig
 }
 
-export type SummaryEnvironment = {
+type SummaryEnvironment = {
   zenApiKey?: string
   consolidationApiKey?: string
   summaryApiKey?: string
@@ -65,20 +65,20 @@ const summaryEnvironmentConfig = Config.all({
   summaryApiUrl: Config.option(Config.string('SUMMARY_API_URL')),
 })
 
-export const loadSummaryEnvironment = Effect.fn(
-  'MemoryConfig.loadSummaryEnvironment',
-)(function* () {
-  const values = yield* summaryEnvironmentConfig
-  return {
-    zenApiKey: optionRedacted(values.zenApiKey),
-    consolidationApiKey: optionRedacted(values.consolidationApiKey),
-    summaryApiKey: optionRedacted(values.summaryApiKey),
-    openaiApiKey: optionRedacted(values.openaiApiKey),
-    summaryModel: optionString(values.summaryModel),
-    consolidationModel: optionString(values.consolidationModel),
-    summaryApiUrl: optionString(values.summaryApiUrl),
-  }
-})
+const loadSummaryEnvironment = Effect.fn('MemoryConfig.loadSummaryEnvironment')(
+  function* () {
+    const values = yield* summaryEnvironmentConfig
+    return {
+      zenApiKey: optionRedacted(values.zenApiKey),
+      consolidationApiKey: optionRedacted(values.consolidationApiKey),
+      summaryApiKey: optionRedacted(values.summaryApiKey),
+      openaiApiKey: optionRedacted(values.openaiApiKey),
+      summaryModel: optionString(values.summaryModel),
+      consolidationModel: optionString(values.consolidationModel),
+      summaryApiUrl: optionString(values.summaryApiUrl),
+    }
+  },
+)
 
 export const loadMemoryConfig = Effect.fn('MemoryConfig.load')(function* (
   memoryDir?: string,
@@ -135,6 +135,7 @@ function resolveConsolidationConfig(
   const apiKey =
     readNonEmptyString(record?.api_key) ??
     environment.zenApiKey ??
+    environment.summaryApiKey ??
     environment.consolidationApiKey ??
     environment.openaiApiKey
   const model =

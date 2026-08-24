@@ -1,6 +1,5 @@
 import { Effect } from 'effect'
 import type { DbHandle } from '../../db/client'
-import { getDbClientByPath } from '../../db/client'
 import {
   DatabaseBusyError,
   RecallIngestionError,
@@ -61,12 +60,6 @@ export function makeRecallRepository(
       return yield* searchRows(handle)
     }),
   }
-}
-
-export function recallRepositoryForPath(
-  dbPath: string,
-): RecallRepositoryService {
-  return makeRecallRepository(getDbClientByPath(dbPath))
 }
 
 function findSource(

@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm'
 import type { DbClient } from '../db/client'
 import { tasks } from '../db/schema'
-import { get_task, require_task } from './tasks.repository'
+import { require_task } from './tasks.repository'
 import type {
   AddDecisionInput,
   AddDiscoveryInput,
@@ -36,7 +36,7 @@ export async function add_discovery(
     .where(eq(tasks.id, input.task_id))
     .run()
 
-  return (await get_task(db, input.task_id))!
+  return require_task(db, input.task_id)
 }
 
 export async function add_decision(
@@ -66,5 +66,5 @@ export async function add_decision(
     .where(eq(tasks.id, input.task_id))
     .run()
 
-  return (await get_task(db, input.task_id))!
+  return require_task(db, input.task_id)
 }

@@ -261,5 +261,5 @@ export async function complete_task(
     .where(eq(tasks.id, input.task_id))
     .run()
 
-  return (await get_task(db, input.task_id))!
+  return require_task(db, input.task_id)
 }

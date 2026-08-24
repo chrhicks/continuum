@@ -32,7 +32,8 @@ describe('memory journal migration', () => {
           '0000_initial.sql',
           '0001_add_task_priority.sql',
           '0002_add_memory_checkpoints.sql',
-        ][index]!
+        ][index]
+        if (!tag) throw new Error(`Missing migration fixture ${index}`)
         sqlite.exec(
           readFileSync(join(import.meta.dir, '..', 'drizzle', tag), 'utf8'),
         )

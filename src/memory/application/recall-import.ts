@@ -14,11 +14,12 @@ import type {
 } from '../collectors/opencode-artifacts'
 import type { RecallSummaryResult } from '../opencode/summary-schema'
 import {
-  recallRepositoryForPath,
+  makeRecallRepository,
   type RecallRepositoryService,
 } from '../repository/recall-repository'
 import { RecallSourceError, RecallSummaryError } from '../domain/errors'
-import { loadMemoryConfig, loadSummaryEnvironment } from '../config'
+import { loadMemoryConfig } from '../config'
+import { getDbClientByPath } from '../../db/client'
 
 export type CanonicalRecallImportOptions = {
   continuumDbPath?: string
@@ -80,13 +81,12 @@ export function importCanonicalOpencodeRecall(
       catch: (cause) => new RecallSourceError({ cause }),
     })
     const repository =
-      options.repository ?? recallRepositoryForPath(continuumDbPath)
+      options.repository ??
+      makeRecallRepository(getDbClientByPath(continuumDbPath))
     const config =
       options.summaryConfig ??
       resolveSummaryConfig(
-        {},
         yield* loadMemoryConfig(options.memoryDir ?? workspace?.memoryDir),
-        yield* loadSummaryEnvironment(),
       )
     const sessions = applySessionFilters(
       extraction.sessions,
