@@ -119,6 +119,7 @@ max_runtime=${LINEAR_AGENT_MAX_RUNTIME:-90m}
 - Lease expires: $lease_expires
 - Control repository: $repo
 - Worktree root: $worktree_root
+- Continuum validation helper: $repo/ops/linear-agent/bin/validate-continuum-worktree
 - Linear project: $LINEAR_AGENT_PROJECT
 - Linear assignee: $LINEAR_AGENT_ASSIGNEE
 - Linear routing label: $LINEAR_AGENT_ROUTING_LABEL
