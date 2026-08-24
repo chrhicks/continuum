@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+worktree=${1:-}
+if [[ -z $worktree ]]; then
+  printf 'usage: %s <continuum-worktree>\n' "$0" >&2
+  exit 64
+fi
+worktree=$(realpath "$worktree")
+if [[ ! -f $worktree/package.json || ! -f $worktree/bin/continuum ]]; then
+  printf 'not a Continuum source worktree: %s\n' "$worktree" >&2
+  exit 66
+fi
+
+bun_bin=${CONTINUUM_VALIDATION_BUN_BIN:-$(command -v bun || true)}
+if [[ -z $bun_bin || ! -x $bun_bin ]]; then
+  printf 'Bun executable not found for isolated validation\n' >&2
+  exit 69
+fi
+bun_bin=$(realpath "$bun_bin")
+if ! command -v jq >/dev/null 2>&1; then
+  printf 'isolated validation requires jq\n' >&2
+  exit 69
+fi
+
+root=$(mktemp -d)
+trap 'rm -rf "$root"' EXIT
+home=$root/home
+xdg=$root/xdg
+workspace=$root/workspace
+wrapper_dir=$root/bin
+mkdir -p "$home" "$xdg" "$workspace" "$wrapper_dir"
+git -C "$workspace" init -q
+
+runtime_json=$(
+  HOME="$home" XDG_DATA_HOME="$xdg" \
+    "$bun_bin" run "$worktree/bin/continuum" \
+    --cwd "$workspace" --json runtime
+)
+runtime_workspace=$(jq -er '.data.workspace' <<<"$runtime_json")
+runtime_entrypoint=$(jq -er '.data.entrypoint' <<<"$runtime_json")
+runtime_data_home=$(jq -er '.data.dataHome' <<<"$runtime_json")
+runtime_database=$(jq -er '.data.database' <<<"$runtime_json")
+storage_generation=$(jq -er '.data.storageGeneration' <<<"$runtime_json")
+if [[ $runtime_workspace != "$workspace" || \
+      $runtime_entrypoint != "$worktree/bin/continuum" || \
+      $runtime_data_home != "$xdg" || \
+      $runtime_database != "$xdg"/continuum/projects/*/continuum.db || \
+      $storage_generation != xdg-project-sha256-v1 ]]; then
+  printf 'isolated validation runtime mismatch: generation=%s workspace=%s cli=%s data_home=%s database=%s\n' \
+    "$storage_generation" "$runtime_workspace" "$runtime_entrypoint" \
+    "$runtime_data_home" "$runtime_database" >&2
+  exit 78
+fi
+printf 'isolated_validation_runtime workspace=%s bun=%s cli=%s data_home=%s database=%s storage_generation=%s\n' \
+  "$runtime_workspace" "$bun_bin" "$runtime_entrypoint" "$runtime_data_home" \
+  "$runtime_database" "$storage_generation"
+
+HOME="$home" XDG_DATA_HOME="$xdg" \
+  "$bun_bin" run "$worktree/bin/continuum" --cwd "$workspace" init >/dev/null
+
+cat > "$wrapper_dir/continuum" <<EOF
+#!/usr/bin/env bash
+exec env HOME=$(printf '%q' "$home") XDG_DATA_HOME=$(printf '%q' "$xdg") \
+  $(printf '%q' "$bun_bin") run $(printf '%q' "$worktree/bin/continuum") \
+  --cwd $(printf '%q' "$workspace") "\$@"
+EOF
+chmod 700 "$wrapper_dir/continuum"
+
+cd "$worktree"
+HOME="$home" XDG_DATA_HOME="$xdg" PATH="$wrapper_dir:$PATH" \
+  "$bun_bin" run validate

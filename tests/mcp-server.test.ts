@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, realpathSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
+import { canonicalDbFilePath } from '../src/db/paths'
 
 const repoRoot = process.cwd()
 const continuumBin = join(repoRoot, 'bin', 'continuum')
@@ -15,6 +16,14 @@ afterEach(() => {
   }
 })
 
+function stringEnvironment(): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(process.env).filter(
+      (entry): entry is [string, string] => entry[1] !== undefined,
+    ),
+  )
+}
+
 describe('Continuum MCP server', () => {
   test('exposes the MVP tools and preserves formatted memory content', async () => {
     const workspace = mkdtempSync(join(tmpdir(), 'continuum-mcp-'))
@@ -24,6 +33,7 @@ describe('Continuum MCP server', () => {
       command: 'bun',
       args: ['run', continuumBin, 'mcp'],
       cwd: repoRoot,
+      env: stringEnvironment(),
       stderr: 'pipe',
     })
     const client = new Client({ name: 'continuum-test', version: '1.0.0' })
@@ -38,6 +48,7 @@ describe('Continuum MCP server', () => {
         'continuum_memory_search',
         'continuum_recall_import',
         'continuum_recall_status',
+        'continuum_runtime',
         'continuum_summary',
         'continuum_task_complete',
         'continuum_task_create',
@@ -61,6 +72,20 @@ describe('Continuum MCP server', () => {
         tools.tools.find((tool) => tool.name === 'continuum_summary')
           ?.inputSchema.properties?.memoryLimit,
       ).toMatchObject({ type: 'integer' })
+
+      const runtime = await client.callTool({
+        name: 'continuum_runtime',
+        arguments: { workspace },
+      })
+      expect(runtime.isError).not.toBe(true)
+      expect(runtime.structuredContent).toMatchObject({
+        storageGeneration: 'xdg-project-sha256-v1',
+        workspace,
+        entrypoint: realpathSync(continuumBin),
+        home: process.env.HOME,
+        dataHome: process.env.XDG_DATA_HOME,
+        database: canonicalDbFilePath(workspace),
+      })
 
       const init = await client.callTool({
         name: 'continuum_init',

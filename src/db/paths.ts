@@ -3,6 +3,8 @@ import { realpathSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 
+export const CANONICAL_STORAGE_GENERATION = 'xdg-project-sha256-v1'
+
 const CONTINUUM_DATA_DIR = 'continuum'
 const PROJECTS_DIR = 'projects'
 const DB_FILE = 'continuum.db'

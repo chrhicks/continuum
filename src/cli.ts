@@ -6,6 +6,7 @@ import { createGuideCommand } from './cli/commands/guide'
 import { createSummaryCommand } from './cli/commands/summary'
 import { createMcpCommand } from './cli/commands/mcp'
 import { createBackupCommand } from './cli/commands/backup'
+import { createRuntimeCommand } from './cli/commands/runtime'
 import { runCommand } from './cli/io'
 import continuum from './sdk'
 import {
@@ -64,6 +65,7 @@ function createProgram(): Command {
   program.addCommand(createSummaryCommand())
   program.addCommand(createMcpCommand())
   program.addCommand(createBackupCommand())
+  program.addCommand(createRuntimeCommand())
   program.addCommand(createMemoryCommand())
   program.addCommand(createTaskCommand())
   program.exitOverride()

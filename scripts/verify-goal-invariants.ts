@@ -1,6 +1,14 @@
 import { spawnSync } from 'node:child_process'
-import { readdirSync, readFileSync, statSync } from 'node:fs'
-import { relative, resolve } from 'node:path'
+import {
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+} from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join, relative, resolve } from 'node:path'
 import ts from 'typescript'
 
 type Match = {
@@ -370,10 +378,15 @@ const hasBunTestPassingSummary = (output: string): boolean => {
   return failCount === 0 && passCount > 0
 }
 
-const runCommandStatus = (command: string, args: string[]): CommandStatus => {
+const runCommandStatus = (
+  command: string,
+  args: string[],
+  options: { cwd?: string; env?: Record<string, string> } = {},
+): CommandStatus => {
   const result = spawnSync(command, args, {
-    cwd: ROOT,
+    cwd: options.cwd ?? ROOT,
     encoding: 'utf8',
+    env: options.env ? { ...process.env, ...options.env } : process.env,
   })
   const output = `${result.stdout ?? ''}\n${result.stderr ?? ''}`.trim()
   const bunTestFalseFailure =
@@ -390,6 +403,27 @@ const runCommandStatus = (command: string, args: string[]): CommandStatus => {
     ok: result.status === 0 || bunTestFalseFailure,
     exitCode: bunTestFalseFailure ? 0 : result.status,
     snippet: firstLine.length > 0 && !bunTestFalseFailure ? firstLine : null,
+  }
+}
+
+const runIsolatedCliValidation = (): CommandStatus[] => {
+  const root = mkdtempSync(join(tmpdir(), 'continuum-goal-validation-'))
+  const workspace = join(root, 'workspace')
+  const home = join(root, 'home')
+  const dataHome = join(root, 'xdg-data')
+  mkdirSync(join(workspace, '.git'), { recursive: true })
+  mkdirSync(home, { recursive: true })
+  const env = { HOME: home, XDG_DATA_HOME: dataHome }
+  const cli = ['run', 'bin/continuum', '--cwd', workspace]
+  try {
+    return [
+      runCommandStatus('bun', [...cli, 'init'], { env }),
+      runCommandStatus('bun', [...cli, '--json', 'task', 'list'], { env }),
+      runCommandStatus('bun', [...cli, 'summary', '--no-tasks'], { env }),
+      runCommandStatus('bun', [...cli, 'memory', 'recall', 'status'], { env }),
+    ]
+  } finally {
+    rmSync(root, { recursive: true, force: true })
   }
 }
 
@@ -707,9 +741,7 @@ const run = () => {
   const validationStatuses: CommandStatus[] = [
     runCommandStatus('bun', ['run', 'typecheck']),
     runCommandStatus('bun', ['test']),
-    runCommandStatus('continuum', ['task', 'list', '--json']),
-    runCommandStatus('continuum', ['summary', '--no-tasks']),
-    runCommandStatus('continuum', ['memory', 'recall', 'status']),
+    ...runIsolatedCliValidation(),
   ]
 
   printHeader('File Length (src <= 300 lines)')
