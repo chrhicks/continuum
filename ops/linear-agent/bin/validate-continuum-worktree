@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+worktree=${1:-}
+if [[ -z $worktree ]]; then
+  printf 'usage: %s <continuum-worktree>\n' "$0" >&2
+  exit 64
+fi
+worktree=$(realpath "$worktree")
+if [[ ! -f $worktree/package.json || ! -f $worktree/bin/continuum ]]; then
+  printf 'not a Continuum source worktree: %s\n' "$worktree" >&2
+  exit 66
+fi
+
+root=$(mktemp -d)
+trap 'rm -rf "$root"' EXIT
+home=$root/home
+xdg=$root/xdg
+workspace=$root/workspace
+wrapper_dir=$root/bin
+mkdir -p "$home" "$xdg" "$workspace" "$wrapper_dir"
+git -C "$workspace" init -q
+
+HOME="$home" XDG_DATA_HOME="$xdg" \
+  bun run "$worktree/bin/continuum" --cwd "$workspace" init >/dev/null
+
+cat > "$wrapper_dir/continuum" <<EOF
+#!/usr/bin/env bash
+exec env HOME=$(printf '%q' "$home") XDG_DATA_HOME=$(printf '%q' "$xdg") \
+  bun run $(printf '%q' "$worktree/bin/continuum") \
+  --cwd $(printf '%q' "$workspace") "\$@"
+EOF
+chmod 700 "$wrapper_dir/continuum"
+
+cd "$worktree"
+HOME="$home" XDG_DATA_HOME="$xdg" PATH="$wrapper_dir:$PATH" bun run validate

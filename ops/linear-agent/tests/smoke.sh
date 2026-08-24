@@ -5,7 +5,15 @@ root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
-bash -n "$root/bin/run-once" "$root/bin/install-user"
+bash -n \
+  "$root/bin/run-once" \
+  "$root/bin/install-user" \
+  "$root/bin/validate-continuum-worktree"
+set +e
+"$root/bin/validate-continuum-worktree" >/dev/null 2>&1
+helper_status=$?
+set -e
+[[ $helper_status == 64 ]]
 
 mkdir -p "$tmp/home/bin"
 printf '#!/bin/sh\nexit 0\n' > "$tmp/home/bin/systemctl"

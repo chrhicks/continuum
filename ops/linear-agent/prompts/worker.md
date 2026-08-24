@@ -92,6 +92,8 @@ If acceptance criteria are unsafe, contradictory, or impossible, do not improvis
 ## 7. Validate and hand off
 
 1. Run every validation command from the issue.
+   - For a Continuum worktree, run the validation helper from the runtime envelope instead of invoking `bun run validate` directly. It executes the worktree CLI against fresh temporary HOME, XDG storage, and workspace state.
+   - Never redirect validation smoke commands to the control repository. The control ledger may be served by a different Continuum generation, and validation must not migrate, reconcile, overwrite, or delete it.
 2. Inspect the final diff for scope, generated files, credentials, and accidental changes.
 3. Commit with the Linear issue identifier.
 4. Push the issue branch without force.

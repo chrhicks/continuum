@@ -19,6 +19,8 @@ systemd timer
 
 The wrapper defaults to dry-run mode, rejects group-readable configuration, refuses dirty control checkouts, allows one process per profile, and stops the agent after a configured timeout.
 
+Continuum's GOAL validation invokes CLI smoke commands. `bin/validate-continuum-worktree` runs those commands with the issue worktree's source and fresh temporary HOME, XDG, and workspace state. It never points validation at the control ledger. This avoids cross-generation storage conflicts without reconciling or deleting either database.
+
 ## Prerequisites
 
 - Pi with `pi-mcp-adapter`
