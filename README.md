@@ -74,6 +74,19 @@ The CLI remains the human, scripting, and recovery interface.
 
 Run `continuum guide task` or `continuum task --help` for current options and workflows.
 
+### R2 backup
+
+`continuum backup` creates one-way, immutable Cloudflare R2 recovery points:
+
+```sh
+continuum backup configure --bucket <dedicated-private-bucket>
+continuum backup create
+continuum backup list
+continuum backup restore [--generation <id>] [--output <new-path>]
+```
+
+Continuum passes object operations to Wrangler and never reads or stores its credentials. Snapshots are WAL-aware SQLite logical snapshots with verified checksums and immutable manifests. Restore publishes a separate recovery database and never overwrites divergent local state. This is a strict single-writer backup protocol, not live or bidirectional synchronization. See `docs/R2-BACKUP-DESIGN.md` for identity linking, credentials, retention, recovery drills, and limitations.
+
 ### Memory
 
 The supported memory workflow is:
@@ -145,6 +158,8 @@ Deleting projections does not delete canonical memory. Normal append and consoli
 
 The database path and workspace are resolved explicitly for each CLI runtime. `XDG_DATA_HOME` selects the user-level data root; otherwise Continuum uses `$HOME/.local/share`. `.continuum/memory/config.yml` and generated Markdown projections remain project-local. `.continuum/continuum.db` is legacy input only and receives no new writes after migration.
 
+R2 backup configuration is project-local at `.continuum/r2-backup.json`. It contains a portable project UUID, a single-writer UUID, and a private bucket name, but no credentials. `CLOUDFLARE_API_TOKEN` is inherited directly by the configured Wrangler child process; `CONTINUUM_WRANGLER` may select its executable without putting secrets in command arguments.
+
 LLM environment fallbacks include:
 
 - API key: `OPENCODE_ZEN_API_KEY`, then `CONSOLIDATION_API_KEY`, then `OPENAI_API_KEY`
@@ -178,7 +193,7 @@ git diff --check
 
 `bun run validate` runs typechecking, the full test suite, and goal-invariant verification. Migrations are additive SQL files under `drizzle/` and are applied by `src/db/migrate.ts`.
 
-See `CONTRIBUTING.md`, `AGENTS.md`, and `PLAN/CHECKLIST.md` for repository workflows and release scope. The credential-independent R2 backup/sync analysis is in `docs/R2-BACKUP-DESIGN.md`.
+See `CONTRIBUTING.md`, `AGENTS.md`, and `PLAN/CHECKLIST.md` for repository workflows and release scope. R2 backup setup, safety contracts, retention, and recovery procedures are in `docs/R2-BACKUP-DESIGN.md`.
 
 ## License
 
