@@ -6,8 +6,10 @@ import {
   searchMemoryEvidence,
   type MemoryEvidence,
 } from '../memory/application/query'
-import { getDbClientByPath } from '../db/client'
+import { getDbClientByPath, getReadOnlyDbClientByPath } from '../db/client'
+import { continuumDir, workspaceIdentityPath } from '../db/paths'
 import { prepareCanonicalDatabase } from '../db/storage'
+import { readOnlyUnavailable } from '../db/storage-errors'
 import { renderMemorySummary } from '../cli/commands/summary-memory'
 import {
   loadTaskSummary,
@@ -27,12 +29,12 @@ export async function getSummary(input: {
   taskLimit?: number
   memoryLimit?: number
 }): Promise<{ workspace: string; output: string }> {
-  const context = resolveMcpWorkspace(input.workspace)
+  const context = resolveReadOnlyMcpWorkspace(input.workspace)
   const taskLimit = input.taskLimit ?? 5
   const memoryLimit = input.memoryLimit ?? 3
-  const handle = getDbClientByPath(context.dbPath)
+  const handle = getReadOnlyDbClientByPath(context.dbPath)
   const [tasks, evidence] = await Promise.all([
-    loadTaskSummary(taskLimit, context.workspaceRoot),
+    loadTaskSummary(taskLimit, context.workspaceRoot, { readOnly: true }),
     runMcpEffect(listMemoryEvidence(context.dbPath, {}, handle)),
   ])
   const output = [
@@ -86,8 +88,8 @@ export async function searchMcpMemory(input: {
   workspace: string
   matches: Array<MemoryEvidence & { score: number }>
 }> {
-  const context = resolveMcpWorkspace(input.workspace)
-  const handle = getDbClientByPath(context.dbPath)
+  const context = resolveReadOnlyMcpWorkspace(input.workspace)
+  const handle = getReadOnlyDbClientByPath(context.dbPath)
   const matches = await runMcpEffect(
     searchMemoryEvidence(
       context.dbPath,
@@ -100,12 +102,7 @@ export async function searchMcpMemory(input: {
 }
 
 export function resolveMcpWorkspace(workspace: string): McpWorkspace {
-  if (!isAbsolute(workspace)) {
-    throw new Error('workspace must be an absolute path')
-  }
-  if (!existsSync(workspace) || !statSync(workspace).isDirectory()) {
-    throw new Error(`workspace directory does not exist: ${workspace}`)
-  }
+  validateWorkspaceInput(workspace)
   const resolved = resolveWorkspaceContext({ startDir: workspace })
   prepareCanonicalDatabase(resolved.workspaceRoot)
   if (!existsSync(resolved.continuumDbPath)) {
@@ -113,6 +110,47 @@ export function resolveMcpWorkspace(workspace: string): McpWorkspace {
       `Continuum is not initialized in workspace: ${resolved.workspaceRoot}`,
     )
   }
+  return toMcpWorkspace(resolved)
+}
+
+export function resolveReadOnlyMcpWorkspace(workspace: string): McpWorkspace {
+  validateWorkspaceInput(workspace)
+  const resolved = resolveWorkspaceContext({
+    startDir: workspace,
+    access: 'read-only',
+  })
+  if (!existsSync(continuumDir(resolved.workspaceRoot))) {
+    throw readOnlyUnavailable(
+      `Continuum is not initialized in workspace: ${resolved.workspaceRoot}. Run \`continuum init\` with write approval.`,
+    )
+  }
+  if (!existsSync(workspaceIdentityPath(resolved.workspaceRoot))) {
+    throw readOnlyUnavailable(
+      `Continuum workspace storage metadata requires initialization: ${resolved.workspaceRoot}. Run \`continuum init\` with write approval.`,
+    )
+  }
+  if (!existsSync(resolved.continuumDbPath)) {
+    throw readOnlyUnavailable(
+      `Continuum database is missing: ${resolved.continuumDbPath}. Run \`continuum init\` with write approval.`,
+    )
+  }
+  return toMcpWorkspace(resolved)
+}
+
+function validateWorkspaceInput(workspace: string): void {
+  if (!isAbsolute(workspace)) {
+    throw new Error('workspace must be an absolute path')
+  }
+  if (!existsSync(workspace) || !statSync(workspace).isDirectory()) {
+    throw new Error(`workspace directory does not exist: ${workspace}`)
+  }
+}
+
+function toMcpWorkspace(resolved: {
+  workspaceRoot: string
+  memoryDir: string
+  continuumDbPath: string
+}): McpWorkspace {
   return {
     workspaceRoot: resolved.workspaceRoot,
     memoryDir: resolved.memoryDir,

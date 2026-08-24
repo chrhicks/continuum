@@ -113,6 +113,13 @@ export function canonicalProjectDir(
   return canonicalProjectDirForId(projectId, options)
 }
 
+export function readOnlyCanonicalProjectDir(
+  directory: string,
+  options: CanonicalPathOptions = {},
+): string {
+  return canonicalProjectDirForId(projectStorageId(directory), options)
+}
+
 export function pathHashCanonicalProjectDir(
   directory: string,
   options: CanonicalPathOptions = {},
@@ -125,6 +132,13 @@ export function canonicalDbFilePath(
   options: CanonicalPathOptions = {},
 ): string {
   return join(canonicalProjectDir(directory, options), DB_FILE)
+}
+
+export function readOnlyCanonicalDbFilePath(
+  directory: string,
+  options: CanonicalPathOptions = {},
+): string {
+  return join(readOnlyCanonicalProjectDir(directory, options), DB_FILE)
 }
 
 export function pathHashCanonicalDbFilePath(

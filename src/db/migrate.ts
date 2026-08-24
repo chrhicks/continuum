@@ -12,6 +12,15 @@ export function runMigrations(sqlite: Database): void {
   applyMigrations(sqlite)
 }
 
+export function hasCurrentMigrationState(sqlite: Database): boolean {
+  const migrations = loadMigrations()
+  if (migrations.length === 0) return true
+  const latestMigrationMillis = Math.max(
+    ...migrations.map((migration) => migration.folderMillis),
+  )
+  return isMigrationStateCurrent(sqlite, latestMigrationMillis)
+}
+
 export function migrateDbSync(dbPath: string): void {
   const sqlite = new Database(dbPath)
   configureSqlite(sqlite)
@@ -26,10 +35,12 @@ export async function migrateDb(dbPath: string): Promise<void> {
   migrateDbSync(dbPath)
 }
 
+function loadMigrations(): ReturnType<typeof readMigrationFiles> {
+  return readMigrationFiles({ migrationsFolder: migrationsFolder() })
+}
+
 function applyMigrations(sqlite: Database): void {
-  const migrations = readMigrationFiles({
-    migrationsFolder: migrationsFolder(),
-  })
+  const migrations = loadMigrations()
   if (migrations.length === 0) {
     return
   }

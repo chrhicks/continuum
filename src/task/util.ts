@@ -1,5 +1,9 @@
 import { mkdir, stat } from 'node:fs/promises'
-import { canonicalDbFilePath, continuumDir } from '../db/paths'
+import {
+  canonicalDbFilePath,
+  continuumDir,
+  readOnlyCanonicalDbFilePath,
+} from '../db/paths'
 import { prepareCanonicalDatabase } from '../db/storage'
 
 interface InitStatus {
@@ -27,11 +31,16 @@ async function file_exists(path: string): Promise<boolean> {
 
 export async function init_status({
   directory,
+  readOnly = false,
 }: {
   directory: string
+  readOnly?: boolean
 }): Promise<InitStatus> {
   const pluginDirExists = await dir_exists(continuumDir(directory))
-  const dbFileExists = await file_exists(canonicalDbFilePath(directory))
+  const dbPath = readOnly
+    ? readOnlyCanonicalDbFilePath(directory)
+    : canonicalDbFilePath(directory)
+  const dbFileExists = await file_exists(dbPath)
 
   return {
     pluginDirExists,

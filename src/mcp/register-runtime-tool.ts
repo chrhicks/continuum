@@ -24,6 +24,10 @@ export function registerRuntimeTool(server: McpServer): void {
       },
     },
     async (input) =>
-      toolResult(resolveRuntimeContract(resolveInitWorkspace(input.workspace))),
+      toolResult(
+        resolveRuntimeContract(resolveInitWorkspace(input.workspace), {
+          readOnly: true,
+        }),
+      ),
   )
 }

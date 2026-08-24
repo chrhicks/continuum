@@ -1,4 +1,5 @@
-import { getDbClient } from '../db/client'
+import { getDbClient, getReadOnlyDbClientByPath } from '../db/client'
+import { readOnlyCanonicalDbFilePath } from '../db/paths'
 import { ContinuumError } from './error'
 import { init_status } from './util'
 import type {
@@ -29,8 +30,13 @@ import {
 import { add_decision, add_discovery } from './notes.repository'
 import { add_steps, complete_step, update_step } from './steps.repository'
 
-async function get_task_db(directory: string) {
-  const status = await init_status({ directory })
+export type TaskReadOptions = { readOnly?: boolean }
+
+async function get_task_db(directory: string, options: TaskReadOptions = {}) {
+  const status = await init_status({
+    directory,
+    readOnly: options.readOnly,
+  })
 
   if (!status.pluginDirExists) {
     throw new ContinuumError(
@@ -47,31 +53,36 @@ async function get_task_db(directory: string) {
     )
   }
 
-  const { db } = await getDbClient(directory)
-  return db
+  const handle = options.readOnly
+    ? getReadOnlyDbClientByPath(readOnlyCanonicalDbFilePath(directory))
+    : await getDbClient(directory)
+  return handle.db
 }
 
 export async function list_tasks_for_directory(
   directory: string,
   filters: ListTaskFilters = {},
+  options: TaskReadOptions = {},
 ): Promise<ListTasksResult> {
-  const db = await get_task_db(directory)
+  const db = await get_task_db(directory, options)
   return list_tasks(db, filters)
 }
 
 export async function list_tasks_by_statuses_for_directory(
   directory: string,
   filters: { statuses: TaskStatus[]; parent_id?: string | null },
+  options: TaskReadOptions = {},
 ): Promise<Task[]> {
-  const db = await get_task_db(directory)
+  const db = await get_task_db(directory, options)
   return list_tasks_by_statuses(db, filters)
 }
 
 export async function get_task_for_directory(
   directory: string,
   task_id: string,
+  options: TaskReadOptions = {},
 ): Promise<Task | null> {
-  const db = await get_task_db(directory)
+  const db = await get_task_db(directory, options)
   return get_task(db, task_id)
 }
 
@@ -151,8 +162,9 @@ export async function add_decision_for_directory(
 export async function get_open_blockers_for_directory(
   directory: string,
   task_id: string,
+  options: TaskReadOptions = {},
 ): Promise<string[]> {
-  const db = await get_task_db(directory)
+  const db = await get_task_db(directory, options)
   const task = await get_task(db, task_id)
   if (!task) {
     throw new ContinuumError('TASK_NOT_FOUND', 'Task not found')

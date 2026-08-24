@@ -6,6 +6,7 @@ import {
   ensureProjectStorageId,
   legacyDbFilePath,
   pathHashCanonicalDbFilePath,
+  readOnlyCanonicalDbFilePath,
 } from '../db/paths'
 
 export type WorkspaceContext = {
@@ -22,6 +23,7 @@ export type WorkspaceContext = {
 export type WorkspaceResolveOptions = {
   cwd?: string | null
   startDir?: string | null
+  access?: 'read-write' | 'read-only'
 }
 
 const CONTINUUM_DIR_NAME = '.continuum'
@@ -37,7 +39,8 @@ export function resolveWorkspaceContext(
     : null
   const rootCandidate = requestedCwd ?? invocationCwd
   const workspaceRoot = findWorkspaceRoot(rootCandidate)
-  ensureExistingStorageIdentity(workspaceRoot)
+  const readOnly = options.access === 'read-only'
+  if (!readOnly) ensureExistingStorageIdentity(workspaceRoot)
   const continuumDir = join(workspaceRoot, CONTINUUM_DIR_NAME)
   const memoryDir = join(continuumDir, MEMORY_DIR_NAME)
   const recallDir = join(continuumDir, ...RECALL_DIR_PARTS)
@@ -49,7 +52,9 @@ export function resolveWorkspaceContext(
     continuumDir,
     memoryDir,
     recallDir,
-    continuumDbPath: canonicalDbFilePath(workspaceRoot),
+    continuumDbPath: readOnly
+      ? readOnlyCanonicalDbFilePath(workspaceRoot)
+      : canonicalDbFilePath(workspaceRoot),
     opencodeDbPath: resolveDefaultOpencodeDbPath(),
   }
 }
