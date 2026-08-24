@@ -7,14 +7,16 @@ import {
   completeMcpTaskStep,
   createMcpTask,
   deleteMcpTask,
+  updateMcpTask,
+  updateMcpTaskStep,
+} from './task-tools'
+import {
   getMcpTask,
   graphMcpTasks,
   listMcpTasks,
   listMcpTaskSteps,
-  updateMcpTask,
-  updateMcpTaskStep,
   validateMcpTask,
-} from './task-tools'
+} from './task-read-tools'
 import { initMcpWorkspace } from './init-tool'
 import {
   idSchema,

@@ -1,12 +1,13 @@
 import { Database } from 'bun:sqlite'
-import { mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { drizzle } from 'drizzle-orm/bun-sqlite'
 import * as schema from './schema'
 import { canonicalDbFilePath } from './paths'
 import { prepareCanonicalDatabase } from './storage'
-import { runMigrations } from './migrate'
+import { hasCurrentMigrationState, runMigrations } from './migrate'
 import { configureSqlite } from './sqlite'
+import { readOnlyUnavailable } from './storage-errors'
 
 export type DbClient = ReturnType<typeof drizzle>
 
@@ -16,6 +17,7 @@ export interface DbHandle {
 }
 
 const clientCache = new Map<string, DbHandle>()
+const readOnlyClientCache = new Map<string, DbHandle>()
 const migratedPaths = new Set<string>()
 
 export function createClient(dbPath: string): DbHandle {
@@ -24,6 +26,43 @@ export function createClient(dbPath: string): DbHandle {
   configureSqlite(sqlite)
   const db = drizzle(sqlite, { schema })
   return { db, sqlite }
+}
+
+export function createReadOnlyClient(dbPath: string): DbHandle {
+  if (!existsSync(dbPath)) {
+    throw readOnlyUnavailable(
+      `Continuum database is missing: ${dbPath}. Run \`continuum init\` with write approval before using read-only tools.`,
+    )
+  }
+  let sqlite: Database
+  try {
+    sqlite = new Database(dbPath, { readonly: true })
+  } catch (cause) {
+    throw readOnlyUnavailable(
+      `Continuum database cannot be opened read-only: ${dbPath}`,
+      cause,
+    )
+  }
+  try {
+    if (!hasCurrentMigrationState(sqlite)) {
+      throw readOnlyUnavailable(
+        `Continuum database requires migration: ${dbPath}. Run \`continuum init\` with write approval before using read-only tools.`,
+      )
+    }
+    return { db: drizzle(sqlite, { schema }), sqlite }
+  } catch (cause) {
+    sqlite.close()
+    throw cause
+  }
+}
+
+export function getReadOnlyDbClientByPath(dbPath: string): DbHandle {
+  let client = readOnlyClientCache.get(dbPath)
+  if (!client) {
+    client = createReadOnlyClient(dbPath)
+    readOnlyClientCache.set(dbPath, client)
+  }
+  return client
 }
 
 export function getDbClientByPath(

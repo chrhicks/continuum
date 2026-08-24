@@ -1,7 +1,10 @@
 import { isContinuumError } from '../../sdk'
 import { map_task } from '../../sdk/mappers'
 import type { Task, TaskNote } from '../../sdk/types'
-import { list_tasks_for_directory } from '../../task/tasks.service'
+import {
+  list_tasks_for_directory,
+  type TaskReadOptions,
+} from '../../task/tasks.service'
 
 export type TaskSummary = {
   initialized: boolean
@@ -17,20 +20,20 @@ export type TaskSummary = {
 export async function loadTaskSummary(
   limit: number,
   directory: string = process.cwd(),
+  options: TaskReadOptions = {},
 ): Promise<TaskSummary> {
   try {
     const [result, completedResult] = await Promise.all([
-      list_tasks_for_directory(directory, {
-        limit: 1000,
-        sort: 'priority',
-        order: 'asc',
-      }),
-      list_tasks_for_directory(directory, {
-        status: 'completed',
-        limit,
-        sort: 'updatedAt',
-        order: 'desc',
-      }),
+      list_tasks_for_directory(
+        directory,
+        { limit: 1000, sort: 'priority', order: 'asc' },
+        options,
+      ),
+      list_tasks_for_directory(
+        directory,
+        { status: 'completed', limit, sort: 'updatedAt', order: 'desc' },
+        options,
+      ),
     ])
     const active = result.tasks.map(map_task)
     const ready = active.filter((task) => task.status === 'ready')

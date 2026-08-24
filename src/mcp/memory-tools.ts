@@ -1,12 +1,12 @@
 import { isAbsolute } from 'node:path'
-import { getDbClientByPath } from '../db/client'
+import { getDbClientByPath, getReadOnlyDbClientByPath } from '../db/client'
 import { consolidateMemory } from '../memory/application/consolidate'
 import { importCanonicalOpencodeRecall } from '../memory/application/recall-import'
 import { getRecallStatus } from '../memory/application/recall-status'
 import { makeConsolidationRepository } from '../memory/repository/consolidation-repository'
 import { makeJournalRepository } from '../memory/repository/journal-repository'
 import { makeRecallRepository } from '../memory/repository/recall-repository'
-import { resolveMcpWorkspace } from './tools'
+import { resolveMcpWorkspace, resolveReadOnlyMcpWorkspace } from './tools'
 import { runMcpEffect } from './result'
 
 export async function consolidateMcpMemory(input: {
@@ -52,8 +52,8 @@ export function getMcpRecallStatus(input: { workspace: string }): {
   rawMessages: number
   derivedSummaries: number
 } {
-  const context = resolveMcpWorkspace(input.workspace)
-  const status = getRecallStatus(getDbClientByPath(context.dbPath))
+  const context = resolveReadOnlyMcpWorkspace(input.workspace)
+  const status = getRecallStatus(getReadOnlyDbClientByPath(context.dbPath))
   return {
     workspace: context.workspaceRoot,
     sources: status.sources,

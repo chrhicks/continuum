@@ -1,4 +1,7 @@
-import { list_tasks_for_directory } from '../task/tasks.service'
+import {
+  list_tasks_for_directory,
+  type TaskReadOptions,
+} from '../task/tasks.service'
 import type {
   Task as SdkTask,
   TaskGraphQuery as SdkTaskGraphQuery,
@@ -6,14 +9,18 @@ import type {
 } from './types'
 import { map_task } from './mappers'
 
-async function list_all_tasks(directory: string): Promise<SdkTask[]> {
+async function list_all_tasks(
+  directory: string,
+  options: TaskReadOptions,
+): Promise<SdkTask[]> {
   const tasks: SdkTask[] = []
   let cursor: string | undefined
   do {
-    const result = await list_tasks_for_directory(directory, {
-      cursor,
-      limit: 1000,
-    })
+    const result = await list_tasks_for_directory(
+      directory,
+      { cursor, limit: 1000 },
+      options,
+    )
     tasks.push(...result.tasks.map(map_task))
     cursor = result.nextCursor
   } while (cursor)
@@ -56,16 +63,18 @@ export async function query_task_graph(
   directory: string,
   query: SdkTaskGraphQuery,
   taskId: string,
+  options: TaskReadOptions = {},
 ): Promise<SdkTaskGraphResult> {
   if (query === 'children') {
-    const result = await list_tasks_for_directory(directory, {
-      parent_id: taskId,
-      limit: 1000,
-    })
+    const result = await list_tasks_for_directory(
+      directory,
+      { parent_id: taskId, limit: 1000 },
+      options,
+    )
     return { taskIds: result.tasks.map((task) => task.id) }
   }
 
-  const tasks = await list_all_tasks(directory)
+  const tasks = await list_all_tasks(directory, options)
   if (query === 'ancestors') {
     return { taskIds: collect_ancestors(tasks, taskId) }
   }

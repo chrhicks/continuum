@@ -1,8 +1,13 @@
+export type CanonicalStorageErrorCode =
+  | 'STORAGE_MIGRATION_CONFLICT'
+  | 'STORAGE_MIGRATION_FAILED'
+  | 'STORAGE_READ_ONLY_UNAVAILABLE'
+
 export class CanonicalStorageError extends Error {
-  readonly code: 'STORAGE_MIGRATION_CONFLICT' | 'STORAGE_MIGRATION_FAILED'
+  readonly code: CanonicalStorageErrorCode
 
   constructor(
-    code: 'STORAGE_MIGRATION_CONFLICT' | 'STORAGE_MIGRATION_FAILED',
+    code: CanonicalStorageErrorCode,
     message: string,
     options?: ErrorOptions,
   ) {
@@ -44,6 +49,15 @@ export function migrationFailure(
   cause?: unknown,
 ): CanonicalStorageError {
   return new CanonicalStorageError('STORAGE_MIGRATION_FAILED', message, {
+    cause,
+  })
+}
+
+export function readOnlyUnavailable(
+  message: string,
+  cause?: unknown,
+): CanonicalStorageError {
+  return new CanonicalStorageError('STORAGE_READ_ONLY_UNAVAILABLE', message, {
     cause,
   })
 }

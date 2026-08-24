@@ -13,8 +13,14 @@ export type RuntimeContract = {
   database: string
 }
 
-export function resolveRuntimeContract(startDir?: string): RuntimeContract {
-  const context = resolveWorkspaceContext({ startDir })
+export function resolveRuntimeContract(
+  startDir?: string,
+  options: { readOnly?: boolean } = {},
+): RuntimeContract {
+  const context = resolveWorkspaceContext({
+    startDir,
+    access: options.readOnly ? 'read-only' : 'read-write',
+  })
   return {
     storageGeneration: CANONICAL_STORAGE_GENERATION,
     workspace: context.workspaceRoot,

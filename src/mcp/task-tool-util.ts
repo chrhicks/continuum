@@ -1,13 +1,17 @@
 import { map_task } from '../sdk/mappers'
 import type { Task } from '../sdk/types'
 import { ContinuumError } from '../task/error'
-import { get_task_for_directory } from '../task/tasks.service'
+import {
+  get_task_for_directory,
+  type TaskReadOptions,
+} from '../task/tasks.service'
 
 export async function requireTask(
   directory: string,
   id: string,
+  options: TaskReadOptions = {},
 ): Promise<Task> {
-  const task = await getMappedTask(directory, id)
+  const task = await getMappedTask(directory, id, options)
   if (!task) throw new ContinuumError('TASK_NOT_FOUND', 'Task not found')
   return task
 }
@@ -15,8 +19,9 @@ export async function requireTask(
 export async function getMappedTask(
   directory: string,
   id: string,
+  options: TaskReadOptions = {},
 ): Promise<Task | null> {
-  const task = await get_task_for_directory(directory, id)
+  const task = await get_task_for_directory(directory, id, options)
   return task ? map_task(task) : null
 }
 
