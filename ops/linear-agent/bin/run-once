@@ -35,6 +35,7 @@ required=(
   LINEAR_AGENT_THINKING
   LINEAR_AGENT_MCP_CONFIG
   LINEAR_AGENT_PROJECT
+  LINEAR_AGENT_GITHUB_REPO
   LINEAR_AGENT_ASSIGNEE
   LINEAR_AGENT_ROUTING_LABEL
   LINEAR_AGENT_SCOUT_LABEL
@@ -149,6 +150,7 @@ max_runtime=${LINEAR_AGENT_MAX_RUNTIME:-90m}
 - Worktree root: $worktree_root
 - Continuum validation helper: $repo/ops/linear-agent/bin/validate-continuum-worktree
 - Linear project: $LINEAR_AGENT_PROJECT
+- GitHub repository: $LINEAR_AGENT_GITHUB_REPO
 - Linear assignee: $LINEAR_AGENT_ASSIGNEE
 - Linear routing label: $LINEAR_AGENT_ROUTING_LABEL
 - Scout proposal label: $LINEAR_AGENT_SCOUT_LABEL

@@ -7,14 +7,15 @@ Process one bounded queue action, then stop.
 ## Responsibilities
 
 1. Read the configured Linear project, open pull requests, and relevant Continuum context.
-2. Follow this priority order:
-   - If a routed issue without the staged label has an open PR waiting in the configured review state, report `DISPATCH_REVIEWER` and stop.
+2. Before changing any Backlog issue, query GitHub for open PRs whose base is the active staging branch and query Linear for routed issues in the review state without the staged label.
+3. Follow this priority order:
+   - If any matching review PR exists, do not change the backlog. Report `DISPATCH_REVIEWER` and stop.
    - If a complete routed issue is already in the ready state, report `DISPATCH_WORKER` and stop.
    - Otherwise choose the highest-priority useful Backlog issue and prepare it for implementation.
    - If no issue needs preparation and the runtime envelope says an audit is due, report `DISPATCH_REVIEWER` and stop.
    - Otherwise report `SCOUT_NO_WORK`.
-3. When preparing an issue, inspect enough source and history to make the work actionable.
-4. Update the issue with:
+4. When preparing an issue, inspect enough source and history to make the work actionable.
+5. Update the issue with:
    - repository and the exact active staging branch;
    - intent and observable impact;
    - evidence or reproduction;
@@ -23,8 +24,8 @@ Process one bounded queue action, then stop.
    - validation commands;
    - dependencies, risks, and safety notes;
    - relevant source, PR, review, or Continuum links.
-5. Add the configured routing label and move the issue to the ready state only when that contract is complete and its blockers are done.
-6. Record durable discoveries or planning decisions in Continuum when they will help later runs.
+6. Add the configured routing label and move the issue to the ready state only when that contract is complete and its blockers are done.
+7. Record durable discoveries or planning decisions in Continuum when they will help later runs.
 
 ## Limits
 
