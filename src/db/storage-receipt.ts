@@ -7,25 +7,37 @@ import {
   unlinkSync,
 } from 'node:fs'
 import { dirname } from 'node:path'
+import { Schema } from 'effect'
 import { normalizedWorkspacePath, projectStorageId } from './paths'
 import { CanonicalStorageError, migrationFailure } from './storage-errors'
-import type { StorageFingerprint } from './storage-snapshot'
+import {
+  StorageFingerprintSchema,
+  type StorageFingerprint,
+} from './storage-snapshot'
 import { writeDurably } from './storage-snapshot'
 
 const RECEIPT_VERSION = 2
 const warnedSources = new Set<string>()
 
-export type MigrationReceipt = {
-  version: number
-  projectId: string
-  workspacePath: string
-  sourcePath: string
-  destinationPath: string
-  sourceFingerprint: StorageFingerprint
-  destinationFingerprint: StorageFingerprint
-  migratedAt: string
-  method: 'sqlite-serialize-snapshot'
-}
+const MigrationReceiptSchema = Schema.Struct({
+  version: Schema.Literals([1, RECEIPT_VERSION]),
+  projectId: Schema.NonEmptyString,
+  workspacePath: Schema.NonEmptyString,
+  sourcePath: Schema.NonEmptyString,
+  destinationPath: Schema.NonEmptyString,
+  sourceFingerprint: StorageFingerprintSchema,
+  destinationFingerprint: StorageFingerprintSchema,
+  migratedAt: Schema.String.check(
+    Schema.makeFilter((value) =>
+      Number.isFinite(Date.parse(value)) ? undefined : 'Expected a valid date',
+    ),
+  ),
+  method: Schema.Literal('sqlite-serialize-snapshot'),
+})
+
+export interface MigrationReceipt extends Schema.Schema.Type<
+  typeof MigrationReceiptSchema
+> {}
 
 export function createMigrationReceipt(
   workspaceRoot: string,
@@ -68,7 +80,8 @@ export function publishMigrationReceipt(
 
 export function readMigrationReceipt(path: string): MigrationReceipt {
   try {
-    return JSON.parse(readFileSync(path, 'utf8')) as MigrationReceipt
+    const value: unknown = JSON.parse(readFileSync(path, 'utf8'))
+    return Schema.decodeUnknownSync(MigrationReceiptSchema)(value)
   } catch (cause) {
     throw migrationFailure(`Migration receipt is unreadable: ${path}`, cause)
   }
@@ -99,11 +112,12 @@ export function verifyMigrationReceipt(
     receipt.sourceFingerprint.digest !== sourceFingerprint.digest ||
     receipt.sourceFingerprint.byteLength !== sourceFingerprint.byteLength
   ) {
-    throw new CanonicalStorageError(
-      'STORAGE_MIGRATION_CONFLICT',
-      `Legacy database changed since migration: ${sourcePath}. ` +
+    throw new CanonicalStorageError({
+      code: 'STORAGE_MIGRATION_CONFLICT',
+      message:
+        `Legacy database changed since migration: ${sourcePath}. ` +
         'Continuum will not claim it is removable or guess how to merge it.',
-    )
+    })
   }
 }
 

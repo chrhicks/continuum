@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { importCanonicalOpencodeRecall } from '../src/memory/application/recall-import'
 import { extractOpencodeSessions } from '../src/memory/opencode/extract'
-import { Effect } from 'effect'
+import { Effect, Redacted } from 'effect'
 
 const roots: string[] = []
 afterEach(() => {
@@ -45,7 +45,7 @@ describe('real OpenCode SQLite extraction', () => {
         dryRun: true,
         summaryConfig: {
           apiUrl: 'test',
-          apiKey: 'test',
+          apiKey: Redacted.make('test'),
           model: 'test',
           maxTokens: 1,
           timeoutMs: 1,

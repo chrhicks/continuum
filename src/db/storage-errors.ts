@@ -1,21 +1,21 @@
-export type CanonicalStorageErrorCode =
-  | 'STORAGE_MIGRATION_CONFLICT'
-  | 'STORAGE_MIGRATION_FAILED'
-  | 'STORAGE_READ_ONLY_UNAVAILABLE'
+import { Schema } from 'effect'
 
-export class CanonicalStorageError extends Error {
-  readonly code: CanonicalStorageErrorCode
+const CanonicalStorageErrorCode = Schema.Literals([
+  'STORAGE_MIGRATION_CONFLICT',
+  'STORAGE_MIGRATION_FAILED',
+  'STORAGE_READ_ONLY_UNAVAILABLE',
+])
 
-  constructor(
+type CanonicalStorageErrorCode = typeof CanonicalStorageErrorCode.Type
+
+export class CanonicalStorageError extends Schema.TaggedError<CanonicalStorageError>()(
+  'CanonicalStorageError',
+  {
     code: CanonicalStorageErrorCode,
-    message: string,
-    options?: ErrorOptions,
-  ) {
-    super(message, options)
-    this.code = code
-    Object.setPrototypeOf(this, new.target.prototype)
-  }
-}
+    message: Schema.String,
+    cause: Schema.optionalKey(Schema.Defect()),
+  },
+) {}
 
 export function isCanonicalStorageError(
   error: unknown,
@@ -27,29 +27,33 @@ export function migrationConflict(
   sourcePath: string,
   destinationPath: string,
 ): CanonicalStorageError {
-  return new CanonicalStorageError(
-    'STORAGE_MIGRATION_CONFLICT',
-    `Legacy and canonical databases are divergent (${sourcePath} vs ${destinationPath}). ` +
+  return new CanonicalStorageError({
+    code: 'STORAGE_MIGRATION_CONFLICT',
+    message:
+      `Legacy and canonical databases are divergent (${sourcePath} vs ${destinationPath}). ` +
       'Neither database was overwritten; reconcile them explicitly before retrying.',
-  )
+  })
 }
 
 export function sourceChangedDuringMigration(
   sourcePath: string,
 ): CanonicalStorageError {
-  return new CanonicalStorageError(
-    'STORAGE_MIGRATION_CONFLICT',
-    `Legacy database changed during migration: ${sourcePath}. ` +
+  return new CanonicalStorageError({
+    code: 'STORAGE_MIGRATION_CONFLICT',
+    message:
+      `Legacy database changed during migration: ${sourcePath}. ` +
       'No removal receipt was recorded; retry only after legacy writes stop.',
-  )
+  })
 }
 
 export function migrationFailure(
   message: string,
   cause?: unknown,
 ): CanonicalStorageError {
-  return new CanonicalStorageError('STORAGE_MIGRATION_FAILED', message, {
-    cause,
+  return new CanonicalStorageError({
+    code: 'STORAGE_MIGRATION_FAILED',
+    message,
+    ...(cause === undefined ? {} : { cause }),
   })
 }
 
@@ -57,7 +61,9 @@ export function readOnlyUnavailable(
   message: string,
   cause?: unknown,
 ): CanonicalStorageError {
-  return new CanonicalStorageError('STORAGE_READ_ONLY_UNAVAILABLE', message, {
-    cause,
+  return new CanonicalStorageError({
+    code: 'STORAGE_READ_ONLY_UNAVAILABLE',
+    message,
+    ...(cause === undefined ? {} : { cause }),
   })
 }

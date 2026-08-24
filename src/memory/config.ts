@@ -2,11 +2,12 @@ import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { Config, Effect, Option, Redacted } from 'effect'
 import { parse } from 'yaml'
+import { MemoryConfigFileError } from './domain/errors'
 import { memoryPath } from './paths'
 
 export type ConsolidationLlmConfig = {
   api_url: string
-  api_key: string
+  api_key: Redacted.Redacted<string>
   model: string
   max_tokens: number
   timeout_ms: number
@@ -25,10 +26,10 @@ export type MemoryConfig = {
 }
 
 type SummaryEnvironment = {
-  zenApiKey?: string
-  consolidationApiKey?: string
-  summaryApiKey?: string
-  openaiApiKey?: string
+  zenApiKey?: Redacted.Redacted<string>
+  consolidationApiKey?: Redacted.Redacted<string>
+  summaryApiKey?: Redacted.Redacted<string>
+  openaiApiKey?: Redacted.Redacted<string>
   summaryModel?: string
   consolidationModel?: string
   summaryApiUrl?: string
@@ -87,18 +88,30 @@ export const loadMemoryConfig = Effect.fn('MemoryConfig.load')(function* (
   const configPath = memoryDir
     ? join(memoryDir, 'config.yml')
     : memoryPath('config.yml')
-  const raw = readConfigFile(configPath)
+  const raw = yield* readConfigFile(configPath)
   return normalizeConfig(raw, environment)
 })
 
-function readConfigFile(path: string): Record<string, unknown> | null {
-  if (!existsSync(path)) return null
-  try {
-    const value: unknown = parse(readFileSync(path, 'utf8'))
-    return isRecord(value) ? value : null
-  } catch {
-    return null
-  }
+function readConfigFile(
+  path: string,
+): Effect.Effect<Record<string, unknown> | null, MemoryConfigFileError> {
+  if (!existsSync(path)) return Effect.succeed(null)
+  return Effect.try({
+    try: () => {
+      const value: unknown = parse(readFileSync(path, 'utf8'))
+      if (!isRecord(value)) {
+        throw new Error('expected a YAML object at the document root')
+      }
+      return value
+    },
+    catch: (cause) =>
+      new MemoryConfigFileError({
+        code: 'MEMORY_CONFIG_FILE_ERROR',
+        path,
+        message: `Memory configuration is unreadable or malformed: ${path}`,
+        cause,
+      }),
+  })
 }
 
 function normalizeConfig(
@@ -133,7 +146,7 @@ function resolveConsolidationConfig(
 ): ConsolidationLlmConfig | undefined {
   const record = isRecord(raw) ? raw : null
   const apiKey =
-    readNonEmptyString(record?.api_key) ??
+    readSecret(record?.api_key) ??
     environment.zenApiKey ??
     environment.summaryApiKey ??
     environment.consolidationApiKey ??
@@ -176,15 +189,18 @@ function resolveConsolidationConfig(
 }
 
 function optionRedacted(
-  value: Option.Option<Redacted.Redacted>,
-): string | undefined {
-  return Option.isSome(value)
-    ? (readNonEmptyString(Redacted.value(value.value)) ?? undefined)
-    : undefined
+  value: Option.Option<Redacted.Redacted<string>>,
+): Redacted.Redacted<string> | undefined {
+  return Option.getOrUndefined(value)
 }
 
 function optionString(value: Option.Option<string>): string | undefined {
   return readNonEmptyString(Option.getOrUndefined(value)) ?? undefined
+}
+
+function readSecret(value: unknown): Redacted.Redacted<string> | undefined {
+  const secret = readNonEmptyString(value)
+  return secret ? Redacted.make(secret) : undefined
 }
 
 function readNonEmptyString(value: unknown): string | null {

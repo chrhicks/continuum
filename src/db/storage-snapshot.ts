@@ -12,17 +12,22 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { dirname } from 'node:path'
+import { Schema } from 'effect'
 import {
   CanonicalStorageError,
   migrationConflict,
   migrationFailure,
 } from './storage-errors'
 
-export type StorageFingerprint = {
-  algorithm: 'sha256'
-  digest: string
-  byteLength: number
-}
+export const StorageFingerprintSchema = Schema.Struct({
+  algorithm: Schema.Literal('sha256'),
+  digest: Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/)),
+  byteLength: Schema.Natural,
+})
+
+export interface StorageFingerprint extends Schema.Schema.Type<
+  typeof StorageFingerprintSchema
+> {}
 
 export type DatabaseSnapshot = {
   bytes: Uint8Array

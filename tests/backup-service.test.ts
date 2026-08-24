@@ -3,6 +3,7 @@ import { Database } from 'bun:sqlite'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { Effect, Layer } from 'effect'
 import { configureBackup, readBackupConfig } from '../src/backup/config'
 import {
   databaseObjectKey,
@@ -12,7 +13,11 @@ import {
   manifestObjectKey,
   type BackupHead,
 } from '../src/backup/contracts'
-import type { BackupObjectStore } from '../src/backup/object-store'
+import { BackupRemoteError } from '../src/backup/errors'
+import {
+  BackupObjectStore,
+  type BackupObjectStoreService,
+} from '../src/backup/object-store'
 import { createBackup, listBackups, restoreBackup } from '../src/backup/service'
 import { prepareCanonicalDatabase } from '../src/db/storage'
 
@@ -33,7 +38,7 @@ describe('R2 backup service', () => {
     insertTask(firstConnection, 'tkt-first', 'first snapshot')
     expect(await tableExists(firstConnection, 'tasks')).toBe(true)
 
-    const first = createBackup(fixture.workspace, fixture.store, fixedDate(1))
+    const first = await runBackup(fixture, createBackup(fixture.workspace))
     firstConnection.close()
     expect(first.parentGeneration).toBeNull()
     expect(fixture.store.keys().some((key) => /(?:-wal|-shm)$/.test(key))).toBe(
@@ -46,10 +51,10 @@ describe('R2 backup service', () => {
     const secondConnection = new Database(fixture.dbPath)
     insertTask(secondConnection, 'tkt-second', 'second snapshot')
     secondConnection.close()
-    const second = createBackup(fixture.workspace, fixture.store, fixedDate(2))
+    const second = await runBackup(fixture, createBackup(fixture.workspace))
     expect(second.parentGeneration).toBe(first.generation)
 
-    const inventory = listBackups(fixture.workspace, fixture.store)
+    const inventory = await runBackup(fixture, listBackups(fixture.workspace))
     expect(inventory.map((item) => item.generation)).toEqual([
       second.generation,
       first.generation,
@@ -60,15 +65,15 @@ describe('R2 backup service', () => {
   test('leaves interrupted uploads unreferenced and reports a stale head', async () => {
     const fixture = await createFixture()
     fixture.store.failNextPut((key) => key.endsWith('/manifest.json'))
-    expect(() =>
-      createBackup(fixture.workspace, fixture.store, fixedDate(1)),
-    ).toThrow('simulated upload interruption')
+    await expect(
+      runBackup(fixture, createBackup(fixture.workspace)),
+    ).rejects.toThrow('simulated upload interruption')
     expect(fixture.store.get(headObjectKey(PROJECT_ID))).toBeNull()
     expect(fixture.store.keys().some((key) => key.endsWith('.sqlite'))).toBe(
       true,
     )
 
-    const first = createBackup(fixture.workspace, fixture.store, fixedDate(2))
+    const first = await runBackup(fixture, createBackup(fixture.workspace))
     const conflictingGeneration = generationFor(9)
     fixture.store.replaceOnHeadRead(2, {
       formatVersion: 1,
@@ -78,13 +83,13 @@ describe('R2 backup service', () => {
       writerId: WRITER_ID,
       updatedAt: fixedDate(9).toISOString(),
     })
-    expect(() =>
-      createBackup(fixture.workspace, fixture.store, fixedDate(3)),
-    ).toThrow('head changed during upload')
+    await expect(
+      runBackup(fixture, createBackup(fixture.workspace)),
+    ).rejects.toThrow('head changed during upload')
     expect(first.generation).not.toBe(conflictingGeneration)
-    expect(() => listBackups(fixture.workspace, fixture.store)).toThrow(
-      'manifest is missing',
-    )
+    await expect(
+      runBackup(fixture, listBackups(fixture.workspace)),
+    ).rejects.toThrow('manifest is missing')
   })
 
   test('rejects writer conflicts before uploading a generation', async () => {
@@ -98,14 +103,14 @@ describe('R2 backup service', () => {
       writerId: '33333333-3333-4333-8333-333333333333',
       updatedAt: fixedDate(1).toISOString(),
     }
-    fixture.store.put(
+    fixture.store.set(
       headObjectKey(PROJECT_ID),
       encodeJson(conflict),
       'application/json',
     )
-    expect(() =>
-      createBackup(fixture.workspace, fixture.store, fixedDate(2)),
-    ).toThrow('writer conflict')
+    await expect(
+      runBackup(fixture, createBackup(fixture.workspace)),
+    ).rejects.toThrow('writer conflict')
     expect(fixture.store.keys()).toHaveLength(1)
   })
 
@@ -114,48 +119,59 @@ describe('R2 backup service', () => {
     const sqlite = new Database(fixture.dbPath)
     insertTask(sqlite, 'tkt-restore', 'restore me')
     sqlite.close()
-    const backup = createBackup(fixture.workspace, fixture.store, fixedDate(1))
+    const backup = await runBackup(fixture, createBackup(fixture.workspace))
     const output = join(fixture.root, 'recovery', 'restored.sqlite')
 
-    const restored = restoreBackup(fixture.workspace, fixture.store, {
-      generation: backup.generation,
-      outputPath: output,
-    })
+    const restored = await runBackup(
+      fixture,
+      restoreBackup(fixture.workspace, {
+        generation: backup.generation,
+        outputPath: output,
+      }),
+    )
     expect(restored.outputPath).toBe(output)
     expect(readTaskIds(output)).toContain('tkt-restore')
     const divergent = new Database(output)
     insertTask(divergent, 'tkt-local', 'local divergence')
     divergent.close()
-    expect(() =>
-      restoreBackup(fixture.workspace, fixture.store, {
-        generation: backup.generation,
-        outputPath: output,
-      }),
-    ).toThrow('divergent')
+    await expect(
+      runBackup(
+        fixture,
+        restoreBackup(fixture.workspace, {
+          generation: backup.generation,
+          outputPath: output,
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'BACKUP_RESTORE_CONFLICT' })
     expect(readTaskIds(output)).toEqual(['tkt-local', 'tkt-restore'])
 
     const remoteKey = databaseObjectKey(PROJECT_ID, backup.generation)
-    fixture.store.put(
+    fixture.store.set(
       remoteKey,
       new Uint8Array([1, 2, 3]),
       'application/octet-stream',
     )
-    expect(() =>
-      restoreBackup(fixture.workspace, fixture.store, {
-        generation: backup.generation,
-        outputPath: join(fixture.root, 'corrupt.sqlite'),
-      }),
-    ).toThrow('checksum mismatch')
+    await expect(
+      runBackup(
+        fixture,
+        restoreBackup(fixture.workspace, {
+          generation: backup.generation,
+          outputPath: join(fixture.root, 'corrupt.sqlite'),
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'BACKUP_INTEGRITY_ERROR' })
   })
 
   test('restores a valid snapshot created by a different application version', async () => {
     const fixture = await createFixture()
-    const backup = createBackup(fixture.workspace, fixture.store, fixedDate(1))
+    const backup = await runBackup(fixture, createBackup(fixture.workspace))
     const manifestKey = manifestObjectKey(PROJECT_ID, backup.generation)
     const manifestBytes = fixture.store.get(manifestKey)
     if (!manifestBytes) throw new Error('missing test manifest')
-    const manifest = decodeBackupManifest(manifestBytes)
-    fixture.store.put(
+    const manifest = await Effect.runPromise(
+      decodeBackupManifest(manifestBytes),
+    )
+    fixture.store.set(
       manifestKey,
       encodeJson({
         ...manifest,
@@ -165,29 +181,37 @@ describe('R2 backup service', () => {
     )
     const output = join(fixture.root, 'recovery', 'historical.sqlite')
 
-    expect(
-      restoreBackup(fixture.workspace, fixture.store, {
+    const restored = await runBackup(
+      fixture,
+      restoreBackup(fixture.workspace, {
         generation: backup.generation,
         outputPath: output,
-      }).outputPath,
-    ).toBe(output)
+      }),
+    )
+    expect(restored.outputPath).toBe(output)
   })
 
   test('keeps portable identity explicit and configuration idempotent', async () => {
     const fixture = await createFixture()
-    const existing = configureBackup({
-      workspaceRoot: fixture.workspace,
-      bucket: 'continuum-test-backups',
-      projectId: PROJECT_ID,
-      writerId: WRITER_ID,
-    })
-    expect(existing).toEqual(readBackupConfig(fixture.workspace))
-    expect(() =>
+    const existing = await Effect.runPromise(
       configureBackup({
         workspaceRoot: fixture.workspace,
-        bucket: 'another-continuum-bucket',
+        bucket: 'continuum-test-backups',
+        projectId: PROJECT_ID,
+        writerId: WRITER_ID,
       }),
-    ).toThrow('already configured')
+    )
+    expect(existing).toEqual(
+      await Effect.runPromise(readBackupConfig(fixture.workspace)),
+    )
+    await expect(
+      Effect.runPromise(
+        configureBackup({
+          workspaceRoot: fixture.workspace,
+          bucket: 'another-continuum-bucket',
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'BACKUP_CONFIGURATION_ERROR' })
   })
 })
 
@@ -203,13 +227,14 @@ async function createFixture(): Promise<Fixture> {
   roots.push(root)
   const workspace = join(root, 'workspace')
   mkdirSync(join(workspace, '.git'), { recursive: true })
-  configureBackup({
-    workspaceRoot: workspace,
-    bucket: 'continuum-test-backups',
-    projectId: PROJECT_ID,
-    writerId: WRITER_ID,
-    now: fixedDate(0),
-  })
+  await Effect.runPromise(
+    configureBackup({
+      workspaceRoot: workspace,
+      bucket: 'continuum-test-backups',
+      projectId: PROJECT_ID,
+      writerId: WRITER_ID,
+    }),
+  )
   const dbPath = prepareCanonicalDatabase(workspace, {
     initialize: true,
     warn: false,
@@ -217,11 +242,31 @@ async function createFixture(): Promise<Fixture> {
   return { root, workspace, dbPath, store: new MemoryObjectStore() }
 }
 
-class MemoryObjectStore implements BackupObjectStore {
+class MemoryObjectStore {
   readonly #objects = new Map<string, Uint8Array>()
   #failure: ((key: string) => boolean) | null = null
   #headReads = 0
   #replaceRead: { count: number; head: BackupHead } | null = null
+  readonly layer: Layer.Layer<BackupObjectStore>
+
+  constructor() {
+    const service: BackupObjectStoreService = {
+      get: (key) => Effect.sync(() => this.get(key)),
+      put: (key, content, contentType) =>
+        Effect.try({
+          try: () => this.set(key, content, contentType),
+          catch: (cause) =>
+            new BackupRemoteError({
+              code: 'BACKUP_REMOTE_ERROR',
+              operation: 'test upload',
+              key,
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause,
+            }),
+        }),
+    }
+    this.layer = Layer.succeed(BackupObjectStore, BackupObjectStore.of(service))
+  }
 
   get(key: string): Uint8Array | null {
     if (key === headObjectKey(PROJECT_ID)) {
@@ -235,7 +280,7 @@ class MemoryObjectStore implements BackupObjectStore {
     return this.#objects.get(key)?.slice() ?? null
   }
 
-  put(key: string, content: Uint8Array): void {
+  set(key: string, content: Uint8Array, _contentType: string): void {
     if (this.#failure?.(key)) {
       this.#failure = null
       throw new Error('simulated upload interruption')
@@ -254,6 +299,13 @@ class MemoryObjectStore implements BackupObjectStore {
   replaceOnHeadRead(countFromNow: number, head: BackupHead): void {
     this.#replaceRead = { count: this.#headReads + countFromNow, head }
   }
+}
+
+function runBackup<A, E>(
+  fixture: Fixture,
+  effect: Effect.Effect<A, E, BackupObjectStore>,
+): Promise<A> {
+  return Effect.runPromise(effect.pipe(Effect.provide(fixture.store.layer)))
 }
 
 function fixedDate(index: number): Date {

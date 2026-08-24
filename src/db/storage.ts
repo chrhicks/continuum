@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs'
+import { Effect } from 'effect'
 import { ensureProjectStorageId, normalizedWorkspacePath } from './paths'
 import {
   adoptLineageDestination,
@@ -6,7 +7,7 @@ import {
   prepareWithoutLegacy,
   verifyRecordedMigration,
 } from './storage-canonical'
-import { migrationFailure } from './storage-errors'
+import { CanonicalStorageError, migrationFailure } from './storage-errors'
 import {
   resolvePathHashStoragePaths,
   resolveStoragePaths,
@@ -16,6 +17,24 @@ import { upgradePathHashStorage } from './storage-path-hash'
 import { readDatabaseSnapshot } from './storage-snapshot'
 
 export type { CanonicalDatabaseState } from './storage-model'
+
+export const prepareCanonicalDatabaseEffect = Effect.fn(
+  'CanonicalStorage.prepare',
+)(function* (
+  workspaceRoot: string,
+  options: { initialize?: boolean; warn?: boolean } = {},
+) {
+  return yield* Effect.try({
+    try: () => prepareCanonicalDatabase(workspaceRoot, options),
+    catch: (cause) =>
+      cause instanceof CanonicalStorageError
+        ? cause
+        : migrationFailure(
+            `Unable to prepare canonical storage for ${workspaceRoot}`,
+            cause,
+          ),
+  })
+})
 
 export function prepareCanonicalDatabase(
   workspaceRoot: string,

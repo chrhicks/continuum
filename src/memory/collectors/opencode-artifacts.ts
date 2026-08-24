@@ -1,3 +1,4 @@
+import type { Redacted } from 'effect'
 import { serializeFrontmatter } from '../../utils/frontmatter'
 import type { OpencodeSessionBundle } from '../opencode/extract'
 import {
@@ -24,7 +25,7 @@ export type NormalizedOpencodeMessage = {
 
 export type ResolvedSummaryConfig = {
   apiUrl: string
-  apiKey: string
+  apiKey: Redacted.Redacted<string>
   model: string
   maxTokens: number
   timeoutMs: number

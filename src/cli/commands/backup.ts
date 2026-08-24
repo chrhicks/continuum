@@ -1,6 +1,7 @@
 import { Command } from 'commander'
+import { Effect, Result } from 'effect'
 import { configureBackup, readBackupConfig } from '../../backup/config'
-import { WranglerR2ObjectStore } from '../../backup/object-store'
+import { wranglerObjectStoreLayer } from '../../backup/object-store'
 import { createBackup, listBackups, restoreBackup } from '../../backup/service'
 import { resolveWorkspaceContext } from '../../workspace/resolve'
 import { runCommand } from '../io'
@@ -31,7 +32,7 @@ function addConfigureCommand(command: Command): void {
         actionCommand,
         async () => {
           const workspaceRoot = resolveWorkspaceContext().workspaceRoot
-          return configureBackup({ workspaceRoot, ...options })
+          return runEffect(configureBackup({ workspaceRoot, ...options }))
         },
         (config) => {
           console.log(`Configured R2 backup bucket: ${config.bucket}`)
@@ -52,8 +53,17 @@ function addCreateCommand(command: Command): void {
         actionCommand,
         async () => {
           const workspaceRoot = resolveWorkspaceContext().workspaceRoot
-          const store = createStore(workspaceRoot, options.wrangler)
-          return createBackup(workspaceRoot, store)
+          const config = await runEffect(readBackupConfig(workspaceRoot))
+          return runEffect(
+            createBackup(workspaceRoot).pipe(
+              Effect.provide(
+                wranglerObjectStoreLayer({
+                  bucket: config.bucket,
+                  executable: options.wrangler,
+                }),
+              ),
+            ),
+          )
         },
         (result) => {
           console.log(`Created R2 backup: ${result.generation}`)
@@ -75,8 +85,17 @@ function addListCommand(command: Command): void {
         actionCommand,
         async () => {
           const workspaceRoot = resolveWorkspaceContext().workspaceRoot
-          const store = createStore(workspaceRoot, options.wrangler)
-          return listBackups(workspaceRoot, store, options.limit)
+          const config = await runEffect(readBackupConfig(workspaceRoot))
+          return runEffect(
+            listBackups(workspaceRoot, options.limit).pipe(
+              Effect.provide(
+                wranglerObjectStoreLayer({
+                  bucket: config.bucket,
+                  executable: options.wrangler,
+                }),
+              ),
+            ),
+          )
         },
         (manifests) => {
           if (manifests.length === 0) {
@@ -108,11 +127,20 @@ function addRestoreCommand(command: Command): void {
         actionCommand,
         async () => {
           const workspaceRoot = resolveWorkspaceContext().workspaceRoot
-          const store = createStore(workspaceRoot, options.wrangler)
-          return restoreBackup(workspaceRoot, store, {
-            generation: options.generation,
-            outputPath: options.output,
-          })
+          const config = await runEffect(readBackupConfig(workspaceRoot))
+          return runEffect(
+            restoreBackup(workspaceRoot, {
+              generation: options.generation,
+              outputPath: options.output,
+            }).pipe(
+              Effect.provide(
+                wranglerObjectStoreLayer({
+                  bucket: config.bucket,
+                  executable: options.wrangler,
+                }),
+              ),
+            ),
+          )
         },
         (result) => {
           console.log(`Restored R2 backup: ${result.generation}`)
@@ -123,12 +151,10 @@ function addRestoreCommand(command: Command): void {
     })
 }
 
-function createStore(
-  workspaceRoot: string,
-  executable?: string,
-): WranglerR2ObjectStore {
-  const config = readBackupConfig(workspaceRoot)
-  return new WranglerR2ObjectStore({ bucket: config.bucket, executable })
+async function runEffect<A, E>(effect: Effect.Effect<A, E>): Promise<A> {
+  const result = await Effect.runPromise(Effect.result(effect))
+  if (Result.isFailure(result)) throw result.failure
+  return result.success
 }
 
 function parseLimit(value: string): number {
