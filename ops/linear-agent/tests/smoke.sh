@@ -18,7 +18,7 @@ PATH="$tmp/home/bin:$PATH" \
 [[ $(stat -c '%a' "$tmp/config/linear-agent/continuum.env") == 600 ]]
 [[ -x $tmp/home/.local/libexec/linear-agent/run-once ]]
 
-mkdir -p "$tmp/run/bin" "$tmp/run/config/linear-agent"
+mkdir -p "$tmp/run/bin" "$tmp/run/config/linear-agent" "$tmp/run/config/mcp"
 git init -q "$tmp/run/repo"
 git -C "$tmp/run/repo" config user.email test@example.com
 git -C "$tmp/run/repo" config user.name Test
@@ -26,13 +26,15 @@ touch "$tmp/run/repo/README"
 git -C "$tmp/run/repo" add README
 git -C "$tmp/run/repo" commit -qm init
 git -C "$tmp/run/repo" remote add origin https://example.invalid/repo.git
-printf '#!/bin/sh\nexit 99\n' > "$tmp/run/bin/opencode"
-chmod +x "$tmp/run/bin/opencode"
+printf '#!/bin/sh\nexit 99\n' > "$tmp/run/bin/pi"
+chmod +x "$tmp/run/bin/pi"
 printf '# Test prompt\n' > "$tmp/run/prompt.md"
+printf '{"mcpServers":{}}\n' > "$tmp/run/config/mcp/mcp.json"
 cat > "$tmp/run/config/linear-agent/test.env" <<EOF
 LINEAR_AGENT_REPO=$tmp/run/repo
 LINEAR_AGENT_PROMPT=$tmp/run/prompt.md
-LINEAR_AGENT_OPENCODE_BIN=$tmp/run/bin/opencode
+LINEAR_AGENT_PI_BIN=$tmp/run/bin/pi
+LINEAR_AGENT_MCP_CONFIG=$tmp/run/config/mcp/mcp.json
 LINEAR_AGENT_AGENT=effect
 LINEAR_AGENT_PROJECT=Test
 LINEAR_AGENT_ASSIGNEE=me

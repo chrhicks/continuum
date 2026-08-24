@@ -30,6 +30,7 @@ required=(
   LINEAR_AGENT_REPO
   LINEAR_AGENT_PROMPT
   LINEAR_AGENT_AGENT
+  LINEAR_AGENT_MCP_CONFIG
   LINEAR_AGENT_PROJECT
   LINEAR_AGENT_ASSIGNEE
   LINEAR_AGENT_ROUTING_LABEL
@@ -67,10 +68,15 @@ if ! git -C "$repo" remote get-url origin >/dev/null 2>&1; then
   exit 78
 fi
 
-opencode_bin=${LINEAR_AGENT_OPENCODE_BIN:-$(command -v opencode || true)}
-if [[ -z $opencode_bin || ! -x $opencode_bin ]]; then
-  printf 'opencode executable not found\n' >&2
+pi_bin=${LINEAR_AGENT_PI_BIN:-$(command -v pi || true)}
+if [[ -z $pi_bin || ! -x $pi_bin ]]; then
+  printf 'pi executable not found\n' >&2
   exit 69
+fi
+mcp_config=$(realpath "$LINEAR_AGENT_MCP_CONFIG")
+if [[ ! -f $mcp_config ]]; then
+  printf 'Pi MCP config does not exist: %s\n' "$mcp_config" >&2
+  exit 78
 fi
 if ! command -v flock >/dev/null 2>&1 || ! command -v timeout >/dev/null 2>&1; then
   printf 'worker requires flock and timeout\n' >&2
@@ -79,8 +85,8 @@ fi
 
 state_root=${XDG_STATE_HOME:-$HOME/.local/state}/linear-agent/$profile
 worktree_root=${LINEAR_AGENT_WORKTREE_ROOT:-$repo/.linear-agent-worktrees}
-mkdir -p "$state_root/runs" "$worktree_root"
-chmod 700 "$state_root" "$state_root/runs" "$worktree_root"
+mkdir -p "$state_root/runs" "$state_root/sessions" "$worktree_root"
+chmod 700 "$state_root" "$state_root/runs" "$state_root/sessions" "$worktree_root"
 
 exclude=$repo/.git/info/exclude
 mkdir -p "$(dirname "$exclude")"
@@ -129,22 +135,24 @@ EOF
 } > "$run_prompt"
 
 args=(
-  run
-  --agent "$LINEAR_AGENT_AGENT"
-  --title "linear-worker:$profile:$run_id"
-  --dir "$repo"
+  --print
+  --mode text
+  --name "$LINEAR_AGENT_AGENT:$profile:$run_id"
+  --session-dir "$state_root/sessions"
+  --mcp-config "$mcp_config"
+  --approve
 )
 if [[ -n ${LINEAR_AGENT_MODEL:-} ]]; then
   args+=(--model "$LINEAR_AGENT_MODEL")
 fi
-if [[ -n ${LINEAR_AGENT_VARIANT:-} ]]; then
-  args+=(--variant "$LINEAR_AGENT_VARIANT")
+if [[ -n ${LINEAR_AGENT_THINKING:-} ]]; then
+  args+=(--thinking "$LINEAR_AGENT_THINKING")
 fi
 args+=("$(<"$run_prompt")")
 
 printf 'run_id=%s profile=%s repo=%s\n' "$run_id" "$profile" "$repo" | tee "$run_log"
 if [[ ${LINEAR_AGENT_DRY_RUN:-1} == 1 ]]; then
-  printf 'dry run: would execute %q' "$opencode_bin" | tee -a "$run_log"
+  printf 'dry run: would execute in %s: %q' "$repo" "$pi_bin" | tee -a "$run_log"
   printf ' %q' "${args[@]}" | tee -a "$run_log"
   printf '\nrendered prompt: %s\n' "$run_prompt" | tee -a "$run_log"
   exit 0
@@ -156,7 +164,10 @@ export LINEAR_AGENT_CONTROL_REPO=$repo
 export LINEAR_AGENT_WORKTREE_ROOT=$worktree_root
 
 set +e
-timeout --signal=INT --kill-after=5m "$max_runtime" "$opencode_bin" "${args[@]}" 2>&1 | tee -a "$run_log"
+(
+  cd "$repo"
+  timeout --signal=INT --kill-after=5m "$max_runtime" "$pi_bin" "${args[@]}"
+) 2>&1 | tee -a "$run_log"
 status=${PIPESTATUS[0]}
 set -e
 printf 'run_id=%s exit_status=%s\n' "$run_id" "$status" | tee -a "$run_log"
