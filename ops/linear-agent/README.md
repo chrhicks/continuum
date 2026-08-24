@@ -1,6 +1,6 @@
 # Linear-coordinated agent worker
 
-This kit runs one bounded OpenCode issue per invocation. Linear coordinates assignment, Continuum records execution context, and GitHub owns review and merge.
+This kit runs one bounded Pi session per invocation. Linear coordinates assignment, Continuum records execution context, and GitHub owns review and merge.
 
 Read [the coordination contract](COORDINATION.md) before enabling the timer.
 
@@ -9,8 +9,8 @@ Read [the coordination contract](COORDINATION.md) before enabling the timer.
 ```text
 systemd timer
   -> run-once lock and preflight
-  -> OpenCode agent `effect`
-  -> Linear MCP: select, claim, heartbeat, handoff
+  -> Pi session named `effect:<profile>:<run-id>`
+  -> Executor MCP: select, claim, heartbeat, handoff
   -> Continuum: task, plan, discoveries, outcome
   -> ignored Git worktree: edit, test, commit, push
   -> GitHub PR, never merge
@@ -21,8 +21,8 @@ The wrapper defaults to dry-run mode, rejects group-readable configuration, refu
 
 ## Prerequisites
 
-- OpenCode with an `effect` agent
-- Linear MCP available to that agent
+- Pi with `pi-mcp-adapter`
+- An Executor MCP configuration that exposes Linear to Pi
 - `continuum`, `git`, `gh`, `flock`, and `timeout`
 - A dedicated clean checkout with push access
 - The Linear project, stock team statuses, and routing labels from [the contract](COORDINATION.md)
@@ -62,7 +62,7 @@ The example configuration starts with:
 LINEAR_AGENT_DRY_RUN=1
 ```
 
-Keep it enabled until paths, stock status names, project, assignee, routing label, allowed branches, OpenCode agent, and MCP access are verified.
+Keep it enabled until paths, stock status names, project, assignee, routing label, allowed branches, Pi model, and MCP access are verified.
 
 ## Dry run
 
@@ -71,7 +71,7 @@ systemctl --user start linear-agent-worker@continuum.service
 journalctl --user -u linear-agent-worker@continuum.service -n 100 --no-pager
 ```
 
-The dry run validates the control checkout and renders the exact worker prompt without calling OpenCode.
+The dry run validates the control checkout and renders the exact worker prompt without calling Pi.
 
 Verify Linear MCP separately with a read-only agent request. It should list the configured project without changing any issue.
 
