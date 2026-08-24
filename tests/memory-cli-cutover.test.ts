@@ -175,6 +175,11 @@ function cli(root: string, args: string[]): ReturnType<typeof spawnSync> {
   return spawnSync('bun', ['run', 'bin/continuum', '--cwd', root, ...args], {
     cwd: originalCwd,
     encoding: 'utf8',
+    env: {
+      ...process.env,
+      HOME: join(root, 'home'),
+      XDG_DATA_HOME: join(root, 'xdg-data'),
+    },
   })
 }
 

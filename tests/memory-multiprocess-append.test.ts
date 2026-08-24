@@ -18,25 +18,34 @@ describe('multi-process memory append', () => {
     const root = mkdtempSync(join(tmpdir(), 'continuum-process-append-'))
     roots.push(root)
     const cli = join(import.meta.dir, '..', 'bin', 'continuum')
-    expect(spawnSync('bun', ['run', cli, '--cwd', root, 'init']).status).toBe(0)
+    const environment = isolatedEnvironment(root)
+    expect(
+      spawnSync('bun', ['run', cli, '--cwd', root, 'init'], {
+        env: environment,
+      }).status,
+    ).toBe(0)
 
     const results = await Promise.all(
       Array.from({ length: 12 }, (_, index) =>
-        run('bun', [
-          'run',
-          cli,
-          '--cwd',
-          root,
-          'memory',
-          'append',
-          'agent',
-          `process-${index}`,
-        ]),
+        run(
+          'bun',
+          [
+            'run',
+            cli,
+            '--cwd',
+            root,
+            'memory',
+            'append',
+            'agent',
+            `process-${index}`,
+          ],
+          environment,
+        ),
       ),
     )
     expect(results.every((result) => result.code === 0)).toBe(true)
 
-    const sqlite = new Database(canonicalDbFilePath(root))
+    const sqlite = new Database(testDatabasePath(root))
     const rows = sqlite
       .query(
         'SELECT sequence, content FROM memory_journal_entries ORDER BY sequence',
@@ -60,26 +69,31 @@ describe('multi-process memory append', () => {
     roots.push(root)
     const cli = join(import.meta.dir, '..', 'bin', 'continuum')
     const base = ['run', cli, '--cwd', root]
-    expect(spawnSync('bun', [...base, 'init']).status).toBe(0)
+    const environment = isolatedEnvironment(root)
     expect(
-      spawnSync('bun', [
-        ...base,
-        'memory',
-        'append',
-        'agent',
-        'consolidation-seed',
-      ]).status,
+      spawnSync('bun', [...base, 'init'], { env: environment }).status,
+    ).toBe(0)
+    expect(
+      spawnSync(
+        'bun',
+        [...base, 'memory', 'append', 'agent', 'consolidation-seed'],
+        { env: environment },
+      ).status,
     ).toBe(0)
 
     const results = await Promise.all([
-      run('bun', [...base, 'memory', 'consolidate']),
+      run('bun', [...base, 'memory', 'consolidate'], environment),
       ...Array.from({ length: 8 }, (_, index) =>
-        run('bun', [...base, 'memory', 'append', 'agent', `raced-${index}`]),
+        run(
+          'bun',
+          [...base, 'memory', 'append', 'agent', `raced-${index}`],
+          environment,
+        ),
       ),
     ])
     expect(results.every((result) => result.code === 0)).toBe(true)
 
-    const sqlite = new Database(canonicalDbFilePath(root))
+    const sqlite = new Database(testDatabasePath(root))
     const boundary = (
       sqlite
         .query(
@@ -107,12 +121,28 @@ describe('multi-process memory append', () => {
   })
 })
 
+function testDatabasePath(root: string): string {
+  return canonicalDbFilePath(root, { dataHome: join(root, 'xdg-data') })
+}
+
+function isolatedEnvironment(root: string): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    HOME: join(root, 'home'),
+    XDG_DATA_HOME: join(root, 'xdg-data'),
+  }
+}
+
 function run(
   command: string,
   args: string[],
+  environment: NodeJS.ProcessEnv,
 ): Promise<{ code: number | null }> {
   return new Promise((resolve) => {
-    const child = spawn(command, args, { stdio: 'ignore' })
+    const child = spawn(command, args, {
+      stdio: 'ignore',
+      env: environment,
+    })
     child.on('exit', (code) => resolve({ code }))
   })
 }
