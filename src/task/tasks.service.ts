@@ -1,5 +1,7 @@
-import { getDbClient, getReadOnlyDbClientByPath } from '../db/client'
-import { readOnlyCanonicalDbFilePath } from '../db/paths'
+import {
+  getDbClientForAuthority,
+  getReadOnlyDbClientByPath,
+} from '../db/client'
 import { ContinuumError } from './error'
 import { init_status } from './util'
 import type {
@@ -54,9 +56,22 @@ async function get_task_db(directory: string, options: TaskReadOptions = {}) {
   }
 
   const handle = options.readOnly
-    ? getReadOnlyDbClientByPath(readOnlyCanonicalDbFilePath(directory))
-    : await getDbClient(directory)
+    ? getReadOnlyDbClientByPath(status.storageAuthority.dbPath)
+    : getWritableTaskClient(status.storageAuthority)
   return handle.db
+}
+
+function getWritableTaskClient(
+  authority: Awaited<ReturnType<typeof init_status>>['storageAuthority'],
+) {
+  if (authority.mode !== 'claimed') {
+    throw new ContinuumError(
+      'NOT_INITIALIZED',
+      'Continuum storage authority is not claimed',
+      ['Run `continuum_init()` to initialize continuum in this directory'],
+    )
+  }
+  return getDbClientForAuthority(authority)
 }
 
 export async function list_tasks_for_directory(

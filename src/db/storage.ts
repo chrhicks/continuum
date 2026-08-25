@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs'
 import { Effect } from 'effect'
-import { ensureProjectStorageId, normalizedWorkspacePath } from './paths'
+import type { ClaimedStorageAuthority } from './storage-authority'
 import {
   adoptLineageDestination,
   migrateLegacyDatabase,
@@ -21,44 +21,39 @@ export type { CanonicalDatabaseState } from './storage-model'
 export const prepareCanonicalDatabaseEffect = Effect.fn(
   'CanonicalStorage.prepare',
 )(function* (
-  workspaceRoot: string,
+  authority: ClaimedStorageAuthority,
   options: { initialize?: boolean; warn?: boolean } = {},
 ) {
   return yield* Effect.try({
-    try: () => prepareCanonicalDatabase(workspaceRoot, options),
+    try: () => prepareCanonicalDatabase(authority, options),
     catch: (cause) =>
       cause instanceof CanonicalStorageError
         ? cause
         : migrationFailure(
-            `Unable to prepare canonical storage for ${workspaceRoot}`,
+            `Unable to prepare canonical storage for ${authority.workspacePath}`,
             cause,
           ),
   })
 })
 
 export function prepareCanonicalDatabase(
-  workspaceRoot: string,
+  authority: ClaimedStorageAuthority,
   options: { initialize?: boolean; warn?: boolean } = {},
 ): CanonicalDatabaseState {
-  const identityRoot = normalizedWorkspacePath(workspaceRoot)
   const initialize = options.initialize === true
-  const pathHashPaths = resolvePathHashStoragePaths(identityRoot)
+  const pathHashPaths = resolvePathHashStoragePaths(authority)
   const legacyExists = existsSync(pathHashPaths.sourcePath)
   const pathHashDatabaseExists = existsSync(pathHashPaths.dbPath)
+  const paths = resolveStoragePaths(authority)
 
-  if (initialize || legacyExists || pathHashDatabaseExists) {
-    ensureProjectStorageId(identityRoot)
-  }
-
-  const paths = resolveStoragePaths(identityRoot)
   if (pathHashPaths.dbPath !== paths.dbPath && pathHashDatabaseExists) {
-    upgradePathHashStorage(identityRoot, pathHashPaths, paths)
+    upgradePathHashStorage(authority, pathHashPaths, paths)
   }
 
   const destinationExisted = existsSync(paths.dbPath)
-  if (!existsSync(paths.sourcePath)) {
+  if (!legacyExists) {
     return prepareWithoutLegacy(
-      identityRoot,
+      authority,
       paths,
       initialize,
       destinationExisted,
@@ -67,10 +62,10 @@ export function prepareCanonicalDatabase(
 
   const source = readDatabaseSnapshot(paths.sourcePath)
   if (existsSync(paths.receiptPath)) {
-    return verifyRecordedMigration(identityRoot, paths, source, options.warn)
+    return verifyRecordedMigration(authority, paths, source, options.warn)
   }
   if (destinationExisted) {
-    return adoptLineageDestination(identityRoot, paths, source, options.warn)
+    return adoptLineageDestination(authority, paths, source, options.warn)
   }
   if (!initialize) {
     throw migrationFailure(
@@ -78,5 +73,5 @@ export function prepareCanonicalDatabase(
         'Run `continuum init` before using this workspace.',
     )
   }
-  return migrateLegacyDatabase(identityRoot, paths, source, options.warn)
+  return migrateLegacyDatabase(authority, paths, source, options.warn)
 }

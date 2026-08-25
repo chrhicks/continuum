@@ -1,17 +1,7 @@
 import { createHash } from 'node:crypto'
-import { existsSync, realpathSync } from 'node:fs'
+import { realpathSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
-import {
-  ensureWorkspaceIdentity,
-  readWorkspaceIdentity,
-} from './workspace-identity'
-import {
-  assertWorkspaceClaim,
-  claimWorkspaceIdentity,
-} from './workspace-registry'
-
-export { workspaceIdentityPath } from './workspace-identity'
 
 export const CANONICAL_STORAGE_GENERATION = 'xdg-project-sha256-v1'
 
@@ -19,8 +9,15 @@ const CONTINUUM_DATA_DIR = 'continuum'
 const PROJECTS_DIR = 'projects'
 const DB_FILE = 'continuum.db'
 const RECEIPT_FILE = 'legacy-migration-receipt.json'
+
 export type CanonicalPathOptions = {
   dataHome?: string
+}
+
+export type CanonicalStoragePaths = {
+  projectDir: string
+  dbPath: string
+  receiptPath: string
 }
 
 export function continuumDir(directory: string): string {
@@ -52,136 +49,35 @@ export function pathHashProjectStorageId(directory: string): string {
     .digest('hex')
 }
 
-export function unclaimedProjectStorageId(directory: string): string {
-  return resolveProjectStorageIdentity(directory).id
-}
-
-export function projectStorageId(
-  directory: string,
-  options: CanonicalPathOptions = {},
-): string {
-  const workspacePath = normalizedWorkspacePath(directory)
-  const identity = resolveProjectStorageIdentity(workspacePath)
-  if (!identity.stable) return identity.id
-  assertWorkspaceClaim(identity.id, workspacePath, canonicalDataHome(options))
-  return identity.id
-}
-
-export function ensureProjectStorageId(
-  directory: string,
-  options: CanonicalPathOptions = {},
-): string {
-  const workspacePath = normalizedWorkspacePath(directory)
-  const identity = ensureWorkspaceIdentity(workspacePath)
-  claimWorkspaceIdentity(identity.id, workspacePath, canonicalDataHome(options))
-  return identity.id
+export function canonicalStoragePaths(
+  projectId: string,
+  dataHome: string,
+): CanonicalStoragePaths {
+  const projectDir = canonicalProjectDir(projectId, dataHome)
+  return {
+    projectDir,
+    dbPath: canonicalDbFilePath(projectId, dataHome),
+    receiptPath: migrationReceiptPath(projectId, dataHome),
+  }
 }
 
 export function canonicalProjectDir(
-  directory: string,
-  options: CanonicalPathOptions = {},
+  projectId: string,
+  dataHome: string,
 ): string {
-  const projectId = existsSync(continuumDir(directory))
-    ? ensureProjectStorageId(directory, options)
-    : projectStorageId(directory, options)
-  return canonicalProjectDirForStorageId(projectId, options)
-}
-
-export function readOnlyCanonicalProjectDir(
-  directory: string,
-  options: CanonicalPathOptions = {},
-): string {
-  return canonicalProjectDirForStorageId(
-    projectStorageId(directory, options),
-    options,
-  )
-}
-
-export function pathHashCanonicalProjectDir(
-  directory: string,
-  options: CanonicalPathOptions = {},
-): string {
-  return canonicalProjectDirForStorageId(
-    pathHashProjectStorageId(directory),
-    options,
-  )
+  return join(dataHome, CONTINUUM_DATA_DIR, PROJECTS_DIR, projectId)
 }
 
 export function canonicalDbFilePath(
-  directory: string,
-  options: CanonicalPathOptions = {},
-): string {
-  return join(canonicalProjectDir(directory, options), DB_FILE)
-}
-
-export function unclaimedCanonicalDbFilePath(
-  directory: string,
-  options: CanonicalPathOptions = {},
-): string {
-  return canonicalDbFilePathForStorageId(
-    unclaimedProjectStorageId(directory),
-    options,
-  )
-}
-
-export function canonicalDbFilePathForStorageId(
   projectId: string,
-  options: CanonicalPathOptions = {},
+  dataHome: string,
 ): string {
-  return join(canonicalProjectDirForStorageId(projectId, options), DB_FILE)
-}
-
-export function readOnlyCanonicalDbFilePath(
-  directory: string,
-  options: CanonicalPathOptions = {},
-): string {
-  return join(readOnlyCanonicalProjectDir(directory, options), DB_FILE)
-}
-
-export function pathHashCanonicalDbFilePath(
-  directory: string,
-  options: CanonicalPathOptions = {},
-): string {
-  return join(pathHashCanonicalProjectDir(directory, options), DB_FILE)
+  return join(canonicalProjectDir(projectId, dataHome), DB_FILE)
 }
 
 export function migrationReceiptPath(
-  directory: string,
-  options: CanonicalPathOptions = {},
-): string {
-  return join(canonicalProjectDir(directory, options), RECEIPT_FILE)
-}
-
-export function pathHashMigrationReceiptPath(
-  directory: string,
-  options: CanonicalPathOptions = {},
-): string {
-  return join(pathHashCanonicalProjectDir(directory, options), RECEIPT_FILE)
-}
-
-export function dbFilePath(directory: string): string {
-  return canonicalDbFilePath(directory)
-}
-
-export function canonicalProjectDirForStorageId(
   projectId: string,
-  options: CanonicalPathOptions = {},
+  dataHome: string,
 ): string {
-  return join(
-    canonicalDataHome(options),
-    CONTINUUM_DATA_DIR,
-    PROJECTS_DIR,
-    projectId,
-  )
-}
-
-function resolveProjectStorageIdentity(directory: string): {
-  id: string
-  stable: boolean
-} {
-  const workspacePath = normalizedWorkspacePath(directory)
-  const identity = readWorkspaceIdentity(workspacePath)
-  return identity
-    ? { id: identity.id, stable: true }
-    : { id: pathHashProjectStorageId(workspacePath), stable: false }
+  return join(canonicalProjectDir(projectId, dataHome), RECEIPT_FILE)
 }

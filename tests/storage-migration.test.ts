@@ -18,7 +18,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { spawn, spawnSync } from 'node:child_process'
 import { migrateDb } from '../src/db/migrate'
-import { canonicalDbFilePath } from '../src/db/paths'
+import { resolveStorageAuthority } from '../src/db/storage-authority'
 import { workspaceClaimPath } from '../src/db/workspace-registry'
 import { prepareInitializedSnapshot } from '../src/db/storage-lineage'
 import type { StoragePublicationOperations } from '../src/db/storage-publication'
@@ -30,6 +30,13 @@ import {
 const repoRoot = process.cwd()
 const cliPath = join(repoRoot, 'bin', 'continuum')
 const roots: string[] = []
+
+function canonicalDbFilePath(
+  workspace: string,
+  options: { dataHome?: string } = {},
+): string {
+  return resolveStorageAuthority(workspace, 'read-write', options).dbPath
+}
 
 afterEach(() => {
   for (const root of roots.splice(0)) {

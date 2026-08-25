@@ -8,7 +8,7 @@ import {
 } from '../memory/runtime/memory-runtime'
 import { getActiveWorkspaceContext } from '../workspace/context'
 import { resolveWorkspaceContext } from '../workspace/resolve'
-import { canonicalDbFilePath } from '../db/paths'
+import { claimStorageAuthority } from '../db/storage-authority'
 import { prepareCanonicalDatabase } from '../db/storage'
 import { isCanonicalStorageError } from '../db/storage-errors'
 
@@ -158,14 +158,15 @@ export async function runMemoryCommand<T, E>(
   await runCommand(
     command,
     async () => {
-      prepareCanonicalDatabase(context.workspaceRoot)
+      const authority = claimStorageAuthority(context.workspaceRoot)
+      prepareCanonicalDatabase(authority)
       const program = Effect.scoped(
         effect.pipe(
           Effect.provide(
             memoryRuntimeLayer({
               workspaceRoot: context.workspaceRoot,
               memoryDir: context.memoryDir,
-              dbPath: canonicalDbFilePath(context.workspaceRoot),
+              dbPath: authority.dbPath,
             }),
           ),
         ),

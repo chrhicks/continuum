@@ -2,13 +2,10 @@ import { existsSync, statSync } from 'node:fs'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { homedir } from 'node:os'
 import {
-  canonicalDbFilePath,
-  ensureProjectStorageId,
-  legacyDbFilePath,
-  pathHashCanonicalDbFilePath,
-  readOnlyCanonicalDbFilePath,
-  unclaimedCanonicalDbFilePath,
-} from '../db/paths'
+  resolveStorageAuthority,
+  type StorageAccess,
+  type StorageAuthority,
+} from '../db/storage-authority'
 
 export type WorkspaceContext = {
   invocationCwd: string
@@ -17,6 +14,7 @@ export type WorkspaceContext = {
   continuumDir: string
   memoryDir: string
   recallDir: string
+  storageAuthority: StorageAuthority
   continuumDbPath: string
   opencodeDbPath: string
 }
@@ -24,7 +22,7 @@ export type WorkspaceContext = {
 export type WorkspaceResolveOptions = {
   cwd?: string | null
   startDir?: string | null
-  access?: 'read-write' | 'read-only' | 'deferred'
+  access?: StorageAccess
 }
 
 const CONTINUUM_DIR_NAME = '.continuum'
@@ -36,12 +34,13 @@ export function resolveWorkspaceContext(
 ): WorkspaceContext {
   const { invocationCwd, requestedCwd, workspaceRoot } =
     resolveWorkspaceRequest(options)
-  const readOnly = options.access === 'read-only'
-  const deferred = options.access === 'deferred'
-  if (!readOnly && !deferred) ensureExistingStorageIdentity(workspaceRoot)
   const continuumDir = join(workspaceRoot, CONTINUUM_DIR_NAME)
   const memoryDir = join(continuumDir, MEMORY_DIR_NAME)
   const recallDir = join(continuumDir, ...RECALL_DIR_PARTS)
+  const storageAuthority = resolveStorageAuthority(
+    workspaceRoot,
+    options.access ?? 'read-write',
+  )
 
   return {
     invocationCwd,
@@ -50,11 +49,8 @@ export function resolveWorkspaceContext(
     continuumDir,
     memoryDir,
     recallDir,
-    continuumDbPath: deferred
-      ? unclaimedCanonicalDbFilePath(workspaceRoot)
-      : readOnly
-        ? readOnlyCanonicalDbFilePath(workspaceRoot)
-        : canonicalDbFilePath(workspaceRoot),
+    storageAuthority,
+    continuumDbPath: storageAuthority.dbPath,
     opencodeDbPath: resolveDefaultOpencodeDbPath(),
   }
 }
@@ -122,15 +118,6 @@ function hasDirectory(path: string): boolean {
     return statSync(path).isDirectory()
   } catch {
     return false
-  }
-}
-
-function ensureExistingStorageIdentity(workspaceRoot: string): void {
-  if (
-    existsSync(legacyDbFilePath(workspaceRoot)) ||
-    existsSync(pathHashCanonicalDbFilePath(workspaceRoot))
-  ) {
-    ensureProjectStorageId(workspaceRoot)
   }
 }
 

@@ -9,11 +9,18 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
-import { canonicalDbFilePath } from '../src/db/paths'
+import { resolveStorageAuthority } from '../src/db/storage-authority'
 
 const repoRoot = process.cwd()
 const cliPath = realpathSync(join(repoRoot, 'bin', 'continuum'))
 const roots: string[] = []
+
+function canonicalDbFilePath(
+  workspace: string,
+  options: { dataHome?: string } = {},
+): string {
+  return resolveStorageAuthority(workspace, 'deferred', options).dbPath
+}
 
 afterEach(() => {
   for (const root of roots.splice(0)) {

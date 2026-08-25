@@ -29,6 +29,7 @@ import {
   BACKUP_FRESHNESS_THRESHOLD_SECONDS,
   getBackupStatus,
 } from '../src/backup/status'
+import { claimStorageAuthority } from '../src/db/storage-authority'
 import { prepareCanonicalDatabase } from '../src/db/storage'
 
 const PROJECT_ID = '11111111-1111-4111-8111-111111111111'
@@ -414,7 +415,7 @@ async function createFixture(projectId = PROJECT_ID): Promise<Fixture> {
       writerId: WRITER_ID,
     }),
   )
-  const dbPath = prepareCanonicalDatabase(workspace, {
+  const dbPath = prepareCanonicalDatabase(claimStorageAuthority(workspace), {
     initialize: true,
     warn: false,
   }).dbPath

@@ -3,7 +3,10 @@ import { existsSync, mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { drizzle } from 'drizzle-orm/bun-sqlite'
 import * as schema from './schema'
-import { canonicalDbFilePath } from './paths'
+import {
+  claimStorageAuthority,
+  type ClaimedStorageAuthority,
+} from './storage-authority'
 import { prepareCanonicalDatabase } from './storage'
 import { hasCurrentMigrationState, runMigrations } from './migrate'
 import { configureSqlite } from './sqlite'
@@ -81,11 +84,17 @@ export function getDbClientByPath(
   return client
 }
 
+export function getDbClientForAuthority(
+  authority: ClaimedStorageAuthority,
+  options: { migrate?: boolean } = {},
+): DbHandle {
+  prepareCanonicalDatabase(authority)
+  return getDbClientByPath(authority.dbPath, options)
+}
+
 export async function getDbClient(
   directory: string,
   options: { migrate?: boolean } = {},
 ): Promise<DbHandle> {
-  await prepareCanonicalDatabase(directory)
-  const dbPath = canonicalDbFilePath(directory)
-  return getDbClientByPath(dbPath, options)
+  return getDbClientForAuthority(claimStorageAuthority(directory), options)
 }

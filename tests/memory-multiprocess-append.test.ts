@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawn, spawnSync } from 'node:child_process'
-import { canonicalDbFilePath } from '../src/db/paths'
+import { resolveStorageAuthority } from '../src/db/storage-authority'
 
 const roots: string[] = []
 
@@ -122,7 +122,9 @@ describe('multi-process memory append', () => {
 })
 
 function testDatabasePath(root: string): string {
-  return canonicalDbFilePath(root, { dataHome: join(root, 'xdg-data') })
+  return resolveStorageAuthority(root, 'read-write', {
+    dataHome: join(root, 'xdg-data'),
+  }).dbPath
 }
 
 function isolatedEnvironment(root: string): NodeJS.ProcessEnv {

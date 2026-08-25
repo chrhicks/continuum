@@ -7,7 +7,8 @@ import {
   type MemoryEvidence,
 } from '../memory/application/query'
 import { getDbClientByPath, getReadOnlyDbClientByPath } from '../db/client'
-import { continuumDir, workspaceIdentityPath } from '../db/paths'
+import { continuumDir } from '../db/paths'
+import { workspaceIdentityPath } from '../db/workspace-identity'
 import { prepareCanonicalDatabase } from '../db/storage'
 import { readOnlyUnavailable } from '../db/storage-errors'
 import { renderMemorySummary } from '../cli/commands/summary-memory'
@@ -104,8 +105,13 @@ export async function searchMcpMemory(input: {
 export function resolveMcpWorkspace(workspace: string): McpWorkspace {
   validateWorkspaceInput(workspace)
   const resolved = resolveWorkspaceContext({ startDir: workspace })
-  prepareCanonicalDatabase(resolved.workspaceRoot)
-  if (!existsSync(resolved.continuumDbPath)) {
+  if (resolved.storageAuthority.mode !== 'claimed') {
+    throw new Error(
+      `Continuum is not initialized in workspace: ${resolved.workspaceRoot}`,
+    )
+  }
+  prepareCanonicalDatabase(resolved.storageAuthority)
+  if (!existsSync(resolved.storageAuthority.dbPath)) {
     throw new Error(
       `Continuum is not initialized in workspace: ${resolved.workspaceRoot}`,
     )
@@ -129,9 +135,9 @@ export function resolveReadOnlyMcpWorkspace(workspace: string): McpWorkspace {
       `Continuum workspace storage metadata requires initialization: ${resolved.workspaceRoot}. Run \`continuum init\` with write approval.`,
     )
   }
-  if (!existsSync(resolved.continuumDbPath)) {
+  if (!existsSync(resolved.storageAuthority.dbPath)) {
     throw readOnlyUnavailable(
-      `Continuum database is missing: ${resolved.continuumDbPath}. Run \`continuum init\` with write approval.`,
+      `Continuum database is missing: ${resolved.storageAuthority.dbPath}. Run \`continuum init\` with write approval.`,
     )
   }
   return toMcpWorkspace(resolved)

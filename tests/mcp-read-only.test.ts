@@ -15,12 +15,19 @@ import { join, relative } from 'node:path'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { readMigrationFiles } from 'drizzle-orm/migrator'
-import { canonicalDbFilePath } from '../src/db/paths'
+import { resolveStorageAuthority } from '../src/db/storage-authority'
 
 const repoRoot = process.cwd()
 const continuumBin = join(repoRoot, 'bin', 'continuum')
 const migrationsFolder = join(repoRoot, 'drizzle')
 const roots: string[] = []
+
+function canonicalDbFilePath(
+  workspace: string,
+  options: { dataHome?: string } = {},
+): string {
+  return resolveStorageAuthority(workspace, 'read-only', options).dbPath
+}
 
 const readToolNames = [
   'continuum_memory_search',
