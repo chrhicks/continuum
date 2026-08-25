@@ -6,8 +6,7 @@ import {
   MemoryRuntime,
   memoryRuntimeLayer,
 } from '../memory/runtime/memory-runtime'
-import { getActiveWorkspaceContext } from '../workspace/context'
-import { resolveWorkspaceContext } from '../workspace/resolve'
+import type { CliMemoryAccess } from './memory-access'
 import { claimStorageAuthority } from '../db/storage-authority'
 import { prepareCanonicalDatabase } from '../db/storage'
 import { isCanonicalStorageError } from '../db/storage-errors'
@@ -30,13 +29,19 @@ type JsonError = {
   meta: { cwd: string; durationMs: number }
 }
 
-export function getGlobalOptions(command: Command): GlobalCliOptions {
-  const activeWorkspace = getActiveWorkspaceContext()
+type CommandResource = {
+  cwd: string
+}
+
+export function getGlobalOptions(
+  command: Command,
+  resource?: CommandResource,
+): GlobalCliOptions {
   if (!command || typeof (command as Command).opts !== 'function') {
     return {
       json: false,
       quiet: false,
-      cwd: activeWorkspace?.workspaceRoot ?? process.cwd(),
+      cwd: resource?.cwd ?? process.cwd(),
     }
   }
 
@@ -48,7 +53,7 @@ export function getGlobalOptions(command: Command): GlobalCliOptions {
     return {
       json: false,
       quiet: false,
-      cwd: activeWorkspace?.workspaceRoot ?? process.cwd(),
+      cwd: resource?.cwd ?? process.cwd(),
     }
   }
 
@@ -56,7 +61,7 @@ export function getGlobalOptions(command: Command): GlobalCliOptions {
   return {
     json: Boolean(options.json),
     quiet: Boolean(options.quiet),
-    cwd: activeWorkspace?.workspaceRoot ?? options.cwd ?? process.cwd(),
+    cwd: resource?.cwd ?? options.cwd ?? process.cwd(),
   }
 }
 
@@ -113,8 +118,9 @@ export async function runCommand<T>(
   command: Command,
   executor: () => Promise<T>,
   render: (data: T) => void,
+  resource?: CommandResource,
 ): Promise<void> {
-  const options = getGlobalOptions(command)
+  const options = getGlobalOptions(command, resource)
   const startedAt = Date.now()
   try {
     const data = await executor()
@@ -149,12 +155,11 @@ export async function runCommand<T>(
 
 export async function runMemoryCommand<T, E>(
   command: Command,
+  access: CliMemoryAccess<'claim-migrate-scoped'>,
   effect: Effect.Effect<T, E, MemoryRuntime>,
   render: (data: T) => void,
 ): Promise<void> {
-  const context =
-    getActiveWorkspaceContext() ??
-    resolveWorkspaceContext({ startDir: process.cwd(), access: 'deferred' })
+  const context = access.workspace
   await runCommand(
     command,
     async () => {
@@ -176,6 +181,7 @@ export async function runMemoryCommand<T, E>(
       return result.success
     },
     render,
+    { cwd: context.workspaceRoot },
   )
 }
 
