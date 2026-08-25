@@ -58,6 +58,39 @@ describe('canonical memory CLI', () => {
       expect(output).not.toContain(`  ${removed}`)
   })
 
+  test('explicit --cwd memory access does not consult ambient cwd', async () => {
+    const target = mkdtempSync(join(tmpdir(), 'continuum-explicit-access-'))
+    const ambient = mkdtempSync(join(tmpdir(), 'continuum-ambient-cwd-'))
+    roots.push(target, ambient)
+    expect(cli(target, ['init']).status).toBe(0)
+    const previousDataHome = process.env.XDG_DATA_HOME
+    process.env.XDG_DATA_HOME = join(target, 'xdg-data')
+    process.chdir(ambient)
+
+    try {
+      expect(
+        await capture([
+          '--cwd',
+          target,
+          'memory',
+          'append',
+          'agent',
+          'explicit resource',
+        ]),
+      ).toContain('Appended agent entry')
+      expect(process.cwd()).toBe(ambient)
+      const summary = await capture(['--cwd', target, 'summary'])
+      expect(summary).toContain(`Workspace: ${target}`)
+      expect(summary).toContain('active: 0 total')
+      expect(summary).toContain('explicit resource')
+      expect(process.cwd()).toBe(ambient)
+      expect(existsSync(join(ambient, '.continuum'))).toBe(false)
+    } finally {
+      if (previousDataHome === undefined) delete process.env.XDG_DATA_HOME
+      else process.env.XDG_DATA_HOME = previousDataHome
+    }
+  })
+
   test('summary and search work without Markdown projections', async () => {
     const root = mkdtempSync(join(tmpdir(), 'continuum-cutover-'))
     roots.push(root)

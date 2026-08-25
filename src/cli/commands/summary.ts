@@ -5,6 +5,7 @@ import type { TaskSummary } from './summary-tasks'
 import { renderMemorySummary } from './summary-memory'
 import { Effect } from 'effect'
 import { runMemoryCommand } from '../io'
+import { resolveCliMemoryAccess, type CliInvocation } from '../memory-access'
 import { MemoryRuntime } from '../../memory/runtime/memory-runtime'
 import { listMemoryEvidence } from '../../memory/application/query'
 
@@ -18,7 +19,7 @@ type SummaryOptions = {
 const DEFAULT_LIMIT = 5
 const DEFAULT_MEMORY_LINES = 3
 
-export function createSummaryCommand(): Command {
+export function createSummaryCommand(invocation: CliInvocation): Command {
   return new Command('summary')
     .description('Show an agent-oriented briefing from tasks and memory')
     .option('--limit <n>', 'Max tasks per bucket', String(DEFAULT_LIMIT))
@@ -40,8 +41,14 @@ export function createSummaryCommand(): Command {
         DEFAULT_MEMORY_LINES,
         'Memory lines must be a positive integer.',
       )
+      const access = resolveCliMemoryAccess(
+        command,
+        invocation,
+        'claim-migrate-scoped',
+      )
       await runMemoryCommand(
         command,
+        access,
         renderSummary(options, limit, memoryLines),
         ({ output }) => console.log(output),
       )
@@ -63,7 +70,9 @@ function renderSummary(
     const taskSummary =
       options.tasks === false
         ? null
-        : yield* Effect.tryPromise(() => loadTaskSummary(limit))
+        : yield* Effect.tryPromise(() =>
+            loadTaskSummary(limit, context.workspaceRoot),
+          )
 
     if (taskSummary) {
       sections.push('', renderTaskSummary(taskSummary, limit))

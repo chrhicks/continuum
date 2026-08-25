@@ -9,14 +9,9 @@ import { createBackupCommand } from './cli/commands/backup'
 import { createRuntimeCommand } from './cli/commands/runtime'
 import { createWorkspaceCommand } from './cli/commands/workspace'
 import { runCommand } from './cli/io'
+import type { CliInvocation } from './cli/memory-access'
 import continuum from './sdk'
-import {
-  setActiveWorkspaceContext,
-  clearActiveWorkspaceContext,
-} from './workspace/context'
-import { resolveWorkspaceContext } from './workspace/resolve'
-
-const PREVIOUS_WORKSPACE_CONTEXT = Symbol('previous-workspace-context')
+import { resolveFrom, resolveWorkspaceContext } from './workspace/resolve'
 
 type MainOptions = {
   preserveProcessExitCode?: boolean
@@ -25,7 +20,8 @@ type MainOptions = {
 export async function main(options: MainOptions = {}): Promise<void> {
   const previousExitCode = process.exitCode
   process.exitCode = undefined
-  const program = createProgram()
+  const invocation = { cwd: process.cwd() }
+  const program = createProgram(invocation)
 
   try {
     await parseProgram(program)
@@ -36,14 +32,13 @@ export async function main(options: MainOptions = {}): Promise<void> {
     }
     throw error
   } finally {
-    clearActiveWorkspaceContext()
     if (!options.preserveProcessExitCode) {
       process.exitCode = previousExitCode
     }
   }
 }
 
-function createProgram(): Command {
+function createProgram(invocation: CliInvocation): Command {
   const program = new Command()
   program
     .name('continuum')
@@ -62,15 +57,15 @@ function createProgram(): Command {
   addInitCommand(program)
   program.addCommand(createSetupCommand())
   program.addCommand(createGuideCommand())
-  program.addCommand(createSummaryCommand())
+  program.addCommand(createSummaryCommand(invocation))
   program.addCommand(createMcpCommand())
   program.addCommand(createBackupCommand())
   program.addCommand(createRuntimeCommand())
   program.addCommand(createWorkspaceCommand())
-  program.addCommand(createMemoryCommand())
+  program.addCommand(createMemoryCommand(invocation))
   program.addCommand(createTaskCommand())
   program.exitOverride()
-  registerWorkspaceHooks(program)
+  registerWorkspaceHooks(program, invocation)
 
   return program
 }
@@ -107,49 +102,17 @@ function addInitCommand(program: Command): void {
     })
 }
 
-function registerWorkspaceHooks(program: Command): void {
+function registerWorkspaceHooks(
+  program: Command,
+  invocation: CliInvocation,
+): void {
   program.hook('preAction', (_thisCommand, actionCommand) => {
     let root = actionCommand as Command
-    while (root.parent) {
-      root = root.parent
-    }
+    while (root.parent) root = root.parent
     const options = root.opts<{ cwd?: string }>()
-    if (options.cwd) {
-      process.chdir(options.cwd)
+    if (options.cwd && !usesExplicitMemoryAccess(actionCommand)) {
+      process.chdir(resolveFrom(invocation.cwd, options.cwd))
     }
-
-    if (!isMemoryCommand(actionCommand)) {
-      return
-    }
-
-    const previous = setActiveWorkspaceContext(
-      resolveWorkspaceContext({
-        startDir: process.cwd(),
-        access: 'deferred',
-      }),
-    )
-    ;(actionCommand as Command & { [PREVIOUS_WORKSPACE_CONTEXT]?: unknown })[
-      PREVIOUS_WORKSPACE_CONTEXT
-    ] = previous
-  })
-
-  program.hook('postAction', (_thisCommand, actionCommand) => {
-    if (!isMemoryCommand(actionCommand)) {
-      return
-    }
-
-    const command = actionCommand as Command & {
-      [PREVIOUS_WORKSPACE_CONTEXT]?: ReturnType<
-        typeof setActiveWorkspaceContext
-      >
-    }
-    const previous = command[PREVIOUS_WORKSPACE_CONTEXT] ?? null
-    if (previous) {
-      setActiveWorkspaceContext(previous)
-    } else {
-      clearActiveWorkspaceContext()
-    }
-    delete command[PREVIOUS_WORKSPACE_CONTEXT]
   })
 }
 
@@ -162,12 +125,10 @@ async function parseProgram(program: Command): Promise<void> {
   await program.parseAsync(process.argv)
 }
 
-function isMemoryCommand(command: Command): boolean {
+function usesExplicitMemoryAccess(command: Command): boolean {
   let current: Command | null = command
   while (current) {
-    if (current.name() === 'memory') {
-      return true
-    }
+    if (current.name() === 'memory' || current.name() === 'summary') return true
     current = current.parent ?? null
   }
   return false

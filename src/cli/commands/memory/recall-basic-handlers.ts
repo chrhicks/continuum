@@ -4,13 +4,24 @@ import type { RecallImportOptions } from './recall-subcommands'
 import type { Command } from 'commander'
 import { Effect } from 'effect'
 import { runMemoryCommand } from '../../io'
+import { resolveCliMemoryAccess, type CliInvocation } from '../../memory-access'
+import { resolveFrom } from '../../../workspace/resolve'
 import { MemoryRuntime } from '../../../memory/runtime/memory-runtime'
 import { makeRecallRepository } from '../../../memory/repository/recall-repository'
 import { getRecallStatus } from '../../../memory/application/recall-status'
 
-export async function handleRecallStatus(command: Command): Promise<void> {
+export async function handleRecallStatus(
+  command: Command,
+  invocation: CliInvocation,
+): Promise<void> {
+  const access = resolveCliMemoryAccess(
+    command,
+    invocation,
+    'claim-migrate-scoped',
+  )
   await runMemoryCommand(
     command,
+    access,
     Effect.gen(function* () {
       const runtime = yield* MemoryRuntime
       return getRecallStatus(runtime.handle)
@@ -27,15 +38,24 @@ export async function handleRecallStatus(command: Command): Promise<void> {
 export async function handleRecallImport(
   options: RecallImportOptions,
   command: Command,
+  invocation: CliInvocation,
 ): Promise<void> {
+  const access = resolveCliMemoryAccess(
+    command,
+    invocation,
+    'claim-migrate-scoped',
+  )
   await runMemoryCommand(
     command,
+    access,
     Effect.gen(function* () {
       const runtime = yield* MemoryRuntime
       return yield* importCanonicalOpencodeRecall({
         continuumDbPath: runtime.dbPath,
         memoryDir: runtime.memoryDir,
-        dbPath: options.db,
+        dbPath: options.db
+          ? resolveFrom(access.executionCwd, options.db)
+          : undefined,
         repoPath: runtime.workspaceRoot,
         projectId: options.project,
         sessionId: options.session,

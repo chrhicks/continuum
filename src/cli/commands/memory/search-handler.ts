@@ -2,10 +2,10 @@ import {
   searchMemoryEvidence,
   type MemoryQueryOptions,
 } from '../../../memory/application/query'
-import { getWorkspaceContext } from '../../../memory/paths'
 import type { Command } from 'commander'
 import { Effect } from 'effect'
 import { runMemoryCommand } from '../../io'
+import { resolveCliMemoryAccess, type CliInvocation } from '../../memory-access'
 import { MemoryRuntime } from '../../../memory/runtime/memory-runtime'
 
 type HandleSearchInput = MemoryQueryOptions & { query: string }
@@ -13,9 +13,16 @@ type HandleSearchInput = MemoryQueryOptions & { query: string }
 export async function handleSearch(
   input: HandleSearchInput,
   command: Command,
+  invocation: CliInvocation,
 ): Promise<void> {
+  const access = resolveCliMemoryAccess(
+    command,
+    invocation,
+    'claim-migrate-scoped',
+  )
   await runMemoryCommand(
     command,
+    access,
     Effect.gen(function* () {
       const runtime = yield* MemoryRuntime
       return yield* searchMemoryEvidence(

@@ -2,7 +2,6 @@ import { join } from 'node:path'
 import { appendMemory } from '../../../memory/application/append'
 import { consolidateMemory } from '../../../memory/application/consolidate'
 import { migrateLegacyMemory } from '../../../memory/application/legacy-migrate'
-import { getWorkspaceContext } from '../../../memory/paths'
 import {
   parseAfterDate,
   parseSearchLimit,
@@ -15,15 +14,21 @@ import { handleSearch } from './search-handler'
 import type { Command } from 'commander'
 import { Effect } from 'effect'
 import { runCommand, runMemoryCommand } from '../../io'
+import { resolveCliMemoryAccess, type CliInvocation } from '../../memory-access'
 import { MemoryRuntime } from '../../../memory/runtime/memory-runtime'
 import { makeJournalRepository } from '../../../memory/repository/journal-repository'
 import { makeConsolidationRepository } from '../../../memory/repository/consolidation-repository'
 
-export function registerMemoryHandlers(memory: Command): void {
+export function registerMemoryHandlers(
+  memory: Command,
+  invocation: CliInvocation,
+): void {
   registerMemorySubcommands(memory, {
-    onAppend: handleAppend,
-    onConsolidate: handleConsolidate,
-    onMigrate: handleMigrate,
+    onAppend: (kind, parts, command) =>
+      handleAppend(kind, parts, command, invocation),
+    onConsolidate: (dryRun, command) =>
+      handleConsolidate(dryRun, command, invocation),
+    onMigrate: (dryRun, command) => handleMigrate(dryRun, command, invocation),
     onSearch: (query, options, command) =>
       handleSearch(
         {
@@ -35,13 +40,19 @@ export function registerMemoryHandlers(memory: Command): void {
           limit: options.limit ? parseSearchLimit(options.limit) : undefined,
         },
         command,
+        invocation,
       ),
   })
 }
 
-async function handleMigrate(dryRun: boolean, command: Command): Promise<void> {
+async function handleMigrate(
+  dryRun: boolean,
+  command: Command,
+  invocation: CliInvocation,
+): Promise<void> {
   if (dryRun) {
-    const context = getWorkspaceContext()
+    const access = resolveCliMemoryAccess(command, invocation, 'inspect')
+    const context = access.workspace
     await runCommand(
       command,
       async () =>
@@ -52,11 +63,18 @@ async function handleMigrate(dryRun: boolean, command: Command): Promise<void> {
           dryRun: true,
         }),
       renderMigration,
+      { cwd: context.workspaceRoot },
     )
     return
   }
+  const access = resolveCliMemoryAccess(
+    command,
+    invocation,
+    'claim-migrate-scoped',
+  )
   await runMemoryCommand(
     command,
+    access,
     Effect.gen(function* () {
       const runtime = yield* MemoryRuntime
       return yield* Effect.try(() =>
@@ -93,9 +111,16 @@ function renderMigration(result: ReturnType<typeof migrateLegacyMemory>): void {
 async function handleConsolidate(
   dryRun: boolean,
   command: Command,
+  invocation: CliInvocation,
 ): Promise<void> {
+  const access = resolveCliMemoryAccess(
+    command,
+    invocation,
+    'claim-migrate-scoped',
+  )
   await runMemoryCommand(
     command,
+    access,
     Effect.gen(function* () {
       const runtime = yield* MemoryRuntime
       return yield* consolidateMemory({
@@ -134,9 +159,16 @@ async function handleAppend(
   kind: string,
   parts: string[],
   command: Command,
+  invocation: CliInvocation,
 ): Promise<void> {
+  const access = resolveCliMemoryAccess(
+    command,
+    invocation,
+    'claim-migrate-scoped',
+  )
   await runMemoryCommand(
     command,
+    access,
     Effect.gen(function* () {
       const runtime = yield* MemoryRuntime
       return yield* appendMemory({
