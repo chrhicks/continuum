@@ -8,7 +8,7 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { Effect } from 'effect'
+import { Context, Effect, Layer } from 'effect'
 import { currentDate, randomUuid } from './authority'
 import { decodeBackupConfig, encodeJson, type BackupConfig } from './contracts'
 import { BackupConfigurationError, causeMessage } from './errors'
@@ -20,6 +20,17 @@ export type ConfigureBackupInput = {
   bucket: string
   projectId?: string
   writerId?: string
+}
+
+export class BackupConfiguration extends Context.Service<
+  BackupConfiguration,
+  BackupConfig
+>()('continuum/BackupConfiguration') {}
+
+export function backupConfigurationLayer(
+  config: BackupConfig,
+): Layer.Layer<BackupConfiguration> {
+  return Layer.succeed(BackupConfiguration, BackupConfiguration.of(config))
 }
 
 export const configureBackup = Effect.fn('Backup.configure')(function* (

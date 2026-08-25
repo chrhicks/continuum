@@ -12,7 +12,7 @@ import {
 } from '../db/storage-snapshot'
 import { currentDate } from './authority'
 import type { BackupManifest } from './contracts'
-import { readBackupConfig } from './config'
+import { BackupConfiguration } from './config'
 import { readHead, readManifest } from './remote'
 
 export const BACKUP_FRESHNESS_THRESHOLD_SECONDS = 24 * 60 * 60
@@ -45,7 +45,7 @@ export type BackupStatus = {
 export const getBackupStatus = Effect.fn('Backup.status')(function* (
   workspaceRoot: string,
 ) {
-  const config = yield* readBackupConfig(workspaceRoot)
+  const config = yield* BackupConfiguration
   const snapshot = yield* readLocalSnapshot(workspaceRoot)
   const now = yield* currentDate
   const checkedAt = now.toISOString()

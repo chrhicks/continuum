@@ -5,7 +5,12 @@ import { hostname, tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { Deferred, Effect, Fiber, Layer } from 'effect'
 import { TestClock } from 'effect/testing'
-import { configureBackup, readBackupConfig } from '../src/backup/config'
+import {
+  BackupConfiguration,
+  backupConfigurationLayer,
+  configureBackup,
+  readBackupConfig,
+} from '../src/backup/config'
 import {
   databaseObjectKey,
   decodeBackupManifest,
@@ -91,7 +96,7 @@ describe('R2 backup service', () => {
         const inventory = yield* listBackups(fixture.workspace)
         return { winner, inventory }
       }),
-    ).pipe(Effect.provide(fixture.store.layer))
+    ).pipe(Effect.provide(fixture.layer))
 
     const result = await Effect.runPromise(program)
     expect(result.inventory.map((manifest) => manifest.generation)).toEqual([
@@ -108,12 +113,12 @@ describe('R2 backup service', () => {
     const program = Effect.scoped(
       Effect.gen(function* () {
         const firstFiber = yield* createBackup(first.workspace).pipe(
-          Effect.provide(first.store.layer),
+          Effect.provide(first.layer),
           Effect.forkScoped,
         )
         yield* Deferred.await(gate.entered)
         const secondResult = yield* createBackup(second.workspace).pipe(
-          Effect.provide(second.store.layer),
+          Effect.provide(second.layer),
         )
         yield* Deferred.succeed(gate.release, undefined)
         const firstResult = yield* Fiber.join(firstFiber)
@@ -292,6 +297,28 @@ describe('R2 backup service', () => {
     ).rejects.toMatchObject({ code: 'BACKUP_CONFIGURATION_ERROR' })
   })
 
+  test('does not reread workspace config after a runtime is supplied', async () => {
+    const fixture = await createFixture()
+    rmSync(join(fixture.workspace, '.continuum', 'r2-backup.json'))
+
+    const backup = await runBackup(fixture, createBackup(fixture.workspace))
+    const inventory = await runBackup(fixture, listBackups(fixture.workspace))
+    const status = await runBackup(fixture, getBackupStatus(fixture.workspace))
+    const restored = await runBackup(
+      fixture,
+      restoreBackup(fixture.workspace, {
+        generation: backup.generation,
+        outputPath: join(fixture.root, 'runtime-restored.sqlite'),
+      }),
+    )
+
+    expect(inventory.map((manifest) => manifest.generation)).toEqual([
+      backup.generation,
+    ])
+    expect(status.state).toBe('fresh')
+    expect(restored.generation).toBe(backup.generation)
+  })
+
   test('classifies backup status with an injected deterministic clock', async () => {
     const fixture = await createFixture()
     const start = Date.parse('2026-01-01T00:00:00.000Z')
@@ -335,10 +362,7 @@ describe('R2 backup service', () => {
         backupRemoteKeys,
         finalRemoteKeys: fixture.store.keys(),
       }
-    }).pipe(
-      Effect.provide(fixture.store.layer),
-      Effect.provide(TestClock.layer()),
-    )
+    }).pipe(Effect.provide(fixture.layer), Effect.provide(TestClock.layer()))
 
     const states = await Effect.runPromise(program)
     expect(states.missing.state).toBe('missing')
@@ -374,6 +398,7 @@ type Fixture = {
   dbPath: string
   projectId: string
   store: MemoryObjectStore
+  layer: Layer.Layer<BackupConfiguration | BackupObjectStore>
 }
 
 async function createFixture(projectId = PROJECT_ID): Promise<Fixture> {
@@ -381,7 +406,7 @@ async function createFixture(projectId = PROJECT_ID): Promise<Fixture> {
   roots.push(root)
   const workspace = join(root, 'workspace')
   mkdirSync(join(workspace, '.git'), { recursive: true })
-  await Effect.runPromise(
+  const config = await Effect.runPromise(
     configureBackup({
       workspaceRoot: workspace,
       bucket: 'continuum-test-backups',
@@ -393,12 +418,14 @@ async function createFixture(projectId = PROJECT_ID): Promise<Fixture> {
     initialize: true,
     warn: false,
   }).dbPath
+  const store = new MemoryObjectStore(projectId)
   return {
     root,
     workspace,
     dbPath,
     projectId,
-    store: new MemoryObjectStore(projectId),
+    store,
+    layer: Layer.mergeAll(store.layer, backupConfigurationLayer(config)),
   }
 }
 
@@ -514,9 +541,9 @@ class MemoryObjectStore {
 
 function runBackup<A, E>(
   fixture: Fixture,
-  effect: Effect.Effect<A, E, BackupObjectStore>,
+  effect: Effect.Effect<A, E, BackupConfiguration | BackupObjectStore>,
 ): Promise<A> {
-  return Effect.runPromise(effect.pipe(Effect.provide(fixture.store.layer)))
+  return Effect.runPromise(effect.pipe(Effect.provide(fixture.layer)))
 }
 
 function fixedDate(index: number): Date {

@@ -9,7 +9,7 @@ import {
   type DatabaseSnapshot,
 } from '../db/storage-snapshot'
 import { currentDate, randomUuid } from './authority'
-import { readBackupConfig } from './config'
+import { BackupConfiguration } from './config'
 import { withBackupCreationLock } from './creation-lock'
 import {
   bytesDigest,
@@ -53,7 +53,7 @@ export type RestoreResult = BackupResult & { outputPath: string }
 export const createBackup = Effect.fn('Backup.create')(function* (
   workspaceRoot: string,
 ) {
-  const config = yield* readBackupConfig(workspaceRoot)
+  const config = yield* BackupConfiguration
   return yield* withBackupCreationLock(
     config.projectId,
     createLockedBackup(workspaceRoot, config),
@@ -104,7 +104,7 @@ export const listBackups = Effect.fn('Backup.list')(function* (
       }),
     )
   }
-  const config = yield* readBackupConfig(workspaceRoot)
+  const config = yield* BackupConfiguration
   const head = yield* readHead(config)
   if (!head) return []
 
@@ -133,7 +133,7 @@ export const restoreBackup = Effect.fn('Backup.restore')(function* (
   options: { generation?: string; outputPath?: string } = {},
 ) {
   const store = yield* BackupObjectStore
-  const config = yield* readBackupConfig(workspaceRoot)
+  const config = yield* BackupConfiguration
   const generation =
     options.generation ?? (yield* requireHead(config)).generation
   yield* validateGenerationInput(generation)
