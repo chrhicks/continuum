@@ -7,6 +7,7 @@ import {
   legacyDbFilePath,
   pathHashCanonicalDbFilePath,
   readOnlyCanonicalDbFilePath,
+  unclaimedCanonicalDbFilePath,
 } from '../db/paths'
 
 export type WorkspaceContext = {
@@ -23,7 +24,7 @@ export type WorkspaceContext = {
 export type WorkspaceResolveOptions = {
   cwd?: string | null
   startDir?: string | null
-  access?: 'read-write' | 'read-only'
+  access?: 'read-write' | 'read-only' | 'deferred'
 }
 
 const CONTINUUM_DIR_NAME = '.continuum'
@@ -33,14 +34,11 @@ const RECALL_DIR_PARTS = ['recall', 'opencode'] as const
 export function resolveWorkspaceContext(
   options: WorkspaceResolveOptions = {},
 ): WorkspaceContext {
-  const invocationCwd = resolve(options.startDir ?? process.cwd())
-  const requestedCwd = options.cwd
-    ? resolveFrom(invocationCwd, options.cwd)
-    : null
-  const rootCandidate = requestedCwd ?? invocationCwd
-  const workspaceRoot = findWorkspaceRoot(rootCandidate)
+  const { invocationCwd, requestedCwd, workspaceRoot } =
+    resolveWorkspaceRequest(options)
   const readOnly = options.access === 'read-only'
-  if (!readOnly) ensureExistingStorageIdentity(workspaceRoot)
+  const deferred = options.access === 'deferred'
+  if (!readOnly && !deferred) ensureExistingStorageIdentity(workspaceRoot)
   const continuumDir = join(workspaceRoot, CONTINUUM_DIR_NAME)
   const memoryDir = join(continuumDir, MEMORY_DIR_NAME)
   const recallDir = join(continuumDir, ...RECALL_DIR_PARTS)
@@ -52,9 +50,11 @@ export function resolveWorkspaceContext(
     continuumDir,
     memoryDir,
     recallDir,
-    continuumDbPath: readOnly
-      ? readOnlyCanonicalDbFilePath(workspaceRoot)
-      : canonicalDbFilePath(workspaceRoot),
+    continuumDbPath: deferred
+      ? unclaimedCanonicalDbFilePath(workspaceRoot)
+      : readOnly
+        ? readOnlyCanonicalDbFilePath(workspaceRoot)
+        : canonicalDbFilePath(workspaceRoot),
     opencodeDbPath: resolveDefaultOpencodeDbPath(),
   }
 }
@@ -62,7 +62,7 @@ export function resolveWorkspaceContext(
 export function resolveWorkspaceRoot(
   options: WorkspaceResolveOptions = {},
 ): string {
-  return resolveWorkspaceContext(options).workspaceRoot
+  return resolveWorkspaceRequest(options).workspaceRoot
 }
 
 export function resolveFrom(baseDir: string, value: string): string {
@@ -70,6 +70,22 @@ export function resolveFrom(baseDir: string, value: string): string {
     return value
   }
   return resolve(baseDir, value)
+}
+
+function resolveWorkspaceRequest(options: WorkspaceResolveOptions): {
+  invocationCwd: string
+  requestedCwd: string | null
+  workspaceRoot: string
+} {
+  const invocationCwd = resolve(options.startDir ?? process.cwd())
+  const requestedCwd = options.cwd
+    ? resolveFrom(invocationCwd, options.cwd)
+    : null
+  return {
+    invocationCwd,
+    requestedCwd,
+    workspaceRoot: findWorkspaceRoot(requestedCwd ?? invocationCwd),
+  }
 }
 
 function findWorkspaceRoot(startDir: string): string {

@@ -4,6 +4,7 @@ const CanonicalStorageErrorCode = Schema.Literals([
   'STORAGE_MIGRATION_CONFLICT',
   'STORAGE_MIGRATION_FAILED',
   'STORAGE_READ_ONLY_UNAVAILABLE',
+  'STORAGE_WORKSPACE_COLLISION',
 ])
 
 type CanonicalStorageErrorCode = typeof CanonicalStorageErrorCode.Type
@@ -43,6 +44,18 @@ export function sourceChangedDuringMigration(
     message:
       `Legacy database changed during migration: ${sourcePath}. ` +
       'No removal receipt was recorded; retry only after legacy writes stop.',
+  })
+}
+
+export function workspaceCollision(
+  registeredPath: string,
+  requestedPath: string,
+): CanonicalStorageError {
+  return new CanonicalStorageError({
+    code: 'STORAGE_WORKSPACE_COLLISION',
+    message:
+      `Workspace identity is already active at ${registeredPath}; refusing to open it from ${requestedPath}. ` +
+      'Run `continuum workspace fork` from the copied workspace to create an independent identity and database.',
   })
 }
 

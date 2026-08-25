@@ -2,12 +2,13 @@ import { readFile } from 'node:fs/promises'
 import type { Command } from 'commander'
 import { isContinuumError } from '../sdk'
 import { Effect, Result } from 'effect'
-import { getWorkspaceContext } from '../memory/paths'
 import {
   MemoryRuntime,
   memoryRuntimeLayer,
 } from '../memory/runtime/memory-runtime'
 import { getActiveWorkspaceContext } from '../workspace/context'
+import { resolveWorkspaceContext } from '../workspace/resolve'
+import { canonicalDbFilePath } from '../db/paths'
 import { prepareCanonicalDatabase } from '../db/storage'
 import { isCanonicalStorageError } from '../db/storage-errors'
 
@@ -151,22 +152,24 @@ export async function runMemoryCommand<T, E>(
   effect: Effect.Effect<T, E, MemoryRuntime>,
   render: (data: T) => void,
 ): Promise<void> {
-  const context = getWorkspaceContext()
-  const program = Effect.scoped(
-    effect.pipe(
-      Effect.provide(
-        memoryRuntimeLayer({
-          workspaceRoot: context.workspaceRoot,
-          memoryDir: context.memoryDir,
-          dbPath: context.continuumDbPath,
-        }),
-      ),
-    ),
-  )
+  const context =
+    getActiveWorkspaceContext() ??
+    resolveWorkspaceContext({ startDir: process.cwd(), access: 'deferred' })
   await runCommand(
     command,
     async () => {
       prepareCanonicalDatabase(context.workspaceRoot)
+      const program = Effect.scoped(
+        effect.pipe(
+          Effect.provide(
+            memoryRuntimeLayer({
+              workspaceRoot: context.workspaceRoot,
+              memoryDir: context.memoryDir,
+              dbPath: canonicalDbFilePath(context.workspaceRoot),
+            }),
+          ),
+        ),
+      )
       const result = await Effect.runPromise(Effect.result(program))
       if (Result.isFailure(result)) throw result.failure
       return result.success
