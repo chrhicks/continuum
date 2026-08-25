@@ -1,0 +1,255 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+usage: linear-agent-status [group] [--local] [--follow]
+
+Show one read-only snapshot of the Linear agent timer, roles, control checkout,
+recent result markers, GitHub staging PRs, and Linear queue. --local skips the
+GitHub and Linear queries. --follow prints the snapshot and follows role logs.
+EOF
+}
+
+group=continuum
+local_only=0
+follow=0
+for arg in "$@"; do
+  case "$arg" in
+    --local) local_only=1 ;;
+    --follow) follow=1 ;;
+    --help|-h) usage; exit 0 ;;
+    -*) usage >&2; exit 64 ;;
+    *) group=$arg ;;
+  esac
+done
+if [[ ! $group =~ ^[a-zA-Z0-9._-]+$ ]]; then
+  printf 'invalid agent group: %s\n' "$group" >&2
+  exit 64
+fi
+
+config_home=${XDG_CONFIG_HOME:-$HOME/.config}
+state_home=${XDG_STATE_HOME:-$HOME/.local/state}
+data_home=${XDG_DATA_HOME:-$HOME/.local/share}
+config=$config_home/linear-agent/$group-scout.env
+if [[ ! -f $config ]]; then
+  printf 'missing Scout config: %s\n' "$config" >&2
+  exit 78
+fi
+
+set -a
+# shellcheck source=/dev/null
+source "$config"
+set +a
+
+repo=${LINEAR_AGENT_REPO:?missing LINEAR_AGENT_REPO}
+github_repo=${LINEAR_AGENT_GITHUB_REPO:-}
+project=${LINEAR_AGENT_PROJECT:-}
+assignee=${LINEAR_AGENT_ASSIGNEE:-me}
+staging=${LINEAR_AGENT_ACTIVE_STAGING:-}
+routing_label=${LINEAR_AGENT_ROUTING_LABEL:-}
+ready_status=${LINEAR_AGENT_READY_STATUS:-Todo}
+review_status=${LINEAR_AGENT_IN_REVIEW_STATUS:-In Review}
+staged_label=${LINEAR_AGENT_STAGED_LABEL:-integration:staged}
+human_label=${LINEAR_AGENT_HUMAN_LABEL:-source:human}
+inquiry_label=${LINEAR_AGENT_INQUIRY_LABEL:-workflow:inquiry}
+campaign_label=${LINEAR_AGENT_CAMPAIGN_LABEL:-workflow:campaign}
+timer=linear-agent-worker@$group-scout.timer
+roles=(scout worker reviewer)
+
+age() {
+  local seconds=$1
+  if (( seconds < 60 )); then printf '%ss' "$seconds"
+  elif (( seconds < 3600 )); then printf '%sm%02ss' "$((seconds / 60))" "$((seconds % 60))"
+  else printf '%sh%02sm' "$((seconds / 3600))" "$(((seconds % 3600) / 60))"
+  fi
+}
+
+latest_log() {
+  local profile=$1 directory=$state_home/linear-agent/$profile/runs
+  [[ -d $directory ]] || return 0
+  find "$directory" -maxdepth 1 -type f -name '*.log' -printf '%T@ %p\n' 2>/dev/null |
+    sort -nr | awk 'NR == 1 { sub(/^[^ ]+ /, ""); print }'
+}
+
+latest_marker() {
+  local log=$1
+  [[ -f $log ]] || return 0
+  grep -E '^(SCOUT_|WORK_|REVIEW_|INQUIRY_|AUDIT_|DISPATCH_)' "$log" 2>/dev/null | tail -1 || true
+}
+
+printf 'Linear agent status: %s\n' "$group"
+printf 'time=%s\n' "$(date --iso-8601=seconds)"
+
+printf '\nTimer\n'
+printf '  enabled=%s active=%s\n' \
+  "$(systemctl --user is-enabled "$timer" 2>/dev/null || printf unknown)" \
+  "$(systemctl --user is-active "$timer" 2>/dev/null || true)"
+timer_line=$(systemctl --user list-timers "$timer" --all --no-legend --no-pager 2>/dev/null || true)
+[[ -n $timer_line ]] && printf '  schedule=%s\n' "$(tr -s ' ' <<<"$timer_line")"
+
+printf '\nRoles\n'
+active_count=0
+latest_failure=
+for role in "${roles[@]}"; do
+  profile=$group-$role
+  unit=linear-agent-worker@$profile.service
+  active=$(systemctl --user show "$unit" -p ActiveState --value 2>/dev/null || printf unknown)
+  result=$(systemctl --user show "$unit" -p Result --value 2>/dev/null || printf unknown)
+  status=$(systemctl --user show "$unit" -p ExecMainStatus --value 2>/dev/null || printf unknown)
+  started=$(systemctl --user show "$unit" -p ExecMainStartTimestamp --value 2>/dev/null || true)
+  [[ $active == active || $active == activating ]] && active_count=$((active_count + 1))
+  log=$(latest_log "$profile")
+  marker=$(latest_marker "$log")
+  if [[ -n $log ]]; then
+    seconds=$(( $(date +%s) - $(stat -c %Y "$log") ))
+    log_age=$(age "$seconds")
+    exit_status=$(grep -Eo 'exit_status=[0-9]+' "$log" 2>/dev/null | tail -1 | cut -d= -f2 || true)
+  else
+    log_age=none
+    exit_status=
+  fi
+  if [[ $active == active || $active == activating ]]; then
+    display_exit=running
+  else
+    display_exit=${exit_status:-${status:-unknown}}
+  fi
+  if [[ $active == failed || ( -n $exit_status && $exit_status != 0 ) ]]; then
+    latest_failure="$profile state=$active result=$result exit=$display_exit"
+  fi
+  printf '  %-8s state=%-10s result=%-9s exit=%-7s log_age=%s\n' "$role" "$active" "$result" "$display_exit" "$log_age"
+  [[ -n $started ]] && printf '           started=%s\n' "$started"
+  [[ -n $marker ]] && printf '           marker=%s\n' "$marker"
+done
+
+printf '\nControl\n'
+if [[ -d $repo/.git ]]; then
+  branch=$(git -C "$repo" branch --show-current 2>/dev/null || true)
+  head=$(git -C "$repo" rev-parse --short HEAD 2>/dev/null || true)
+  dirty=no
+  [[ -n $(git -C "$repo" status --porcelain=v1 --untracked-files=normal 2>/dev/null) ]] && dirty=yes
+  tracking=$(git -C "$repo" rev-list --left-right --count 'HEAD...@{upstream}' 2>/dev/null || printf 'unknown')
+  printf '  repo=%s\n  branch=%s head=%s dirty=%s tracking=%s\n' "$repo" "$branch" "$head" "$dirty" "$tracking"
+else
+  dirty=unknown
+  printf '  repo=%s missing\n' "$repo"
+fi
+runner_match=missing
+[[ -f $repo/ops/linear-agent/bin/run-once && -f $HOME/.local/libexec/linear-agent/run-once ]] && {
+  runner_match=no
+  cmp -s "$repo/ops/linear-agent/bin/run-once" "$HOME/.local/libexec/linear-agent/run-once" && runner_match=yes
+}
+prompts_match=yes
+for role in "${roles[@]}"; do
+  if [[ ! -f $repo/ops/linear-agent/prompts/$role.md || ! -f $data_home/linear-agent/$role.md ]] ||
+     ! cmp -s "$repo/ops/linear-agent/prompts/$role.md" "$data_home/linear-agent/$role.md"; then
+    prompts_match=no
+  fi
+done
+printf '  installed_runner_matches=%s installed_prompts_match=%s\n' "$runner_match" "$prompts_match"
+
+linear_file=
+github_file=
+cleanup() {
+  [[ -z $linear_file ]] || rm -f "$linear_file"
+  [[ -z $github_file ]] || rm -f "$github_file"
+  return 0
+}
+trap cleanup EXIT
+
+if (( ! local_only )); then
+  printf '\nQueue\n'
+  github_file=$(mktemp)
+  if [[ -n $github_repo && -n $staging ]] && command -v gh >/dev/null 2>&1 &&
+     gh pr list --repo "$github_repo" --base "$staging" --state open --limit 50 \
+       --json number,title,headRefName,statusCheckRollup >"$github_file" 2>/dev/null; then
+    count=$(jq 'length' "$github_file")
+    printf '  open_staging_prs=%s\n' "$count"
+    jq -r '.[] | "    #\(.number) \(.headRefName) checks=" + (([.statusCheckRollup[]?.conclusion] | if length == 0 then "pending" elif all(. == "SUCCESS") then "pass" else (map(select(. != "SUCCESS")) | join(",")) end)) + " — \(.title)"' "$github_file"
+  else
+    printf '  github=unavailable\n'
+    printf '[]\n' >"$github_file"
+  fi
+
+  linear_file=$(mktemp)
+  if [[ -n $project ]] && command -v executor >/dev/null 2>&1; then
+    linear_tool=$(executor tools search 'Linear list issues' --limit 10 2>/dev/null |
+      jq -r '[.items[] | select(.integration == "linear" and .name == "list_issues")][0].path // empty' 2>/dev/null || true)
+    request=$(jq -nc --arg project "$project" --arg assignee "$assignee" '{project:$project,assignee:$assignee,limit:50,orderBy:"updatedAt",fields:["id","title","priority","status","statusType","labels","updatedAt","url"]}')
+    if [[ -n $linear_tool ]] && executor call "$linear_tool" "$request" >"$linear_file.raw" 2>/dev/null &&
+       jq -e 'if .data.structuredContent then .data.structuredContent else (.data.content[0].text|fromjson) end | .issues' "$linear_file.raw" >"$linear_file" 2>/dev/null; then
+      rm -f "$linear_file.raw"
+      jq -r --arg routing "$routing_label" --arg staged "$staged_label" --arg human "$human_label" --arg inquiry "$inquiry_label" --arg campaign "$campaign_label" '
+        .[] | select(.statusType != "completed" and .statusType != "canceled") |
+        "    \(.id) [\(.status)] priority=\(.priority.name // "None")" +
+        (if (.labels | index($staged)) then " staged" else "" end) +
+        (if (.labels | index($human)) then " human" else "" end) +
+        (if (.labels | index($inquiry)) then " inquiry" else "" end) +
+        (if (.labels | index($campaign)) then " campaign" else "" end) +
+        (if (.labels | index($routing)) then " routed" else "" end) +
+        " — \(.title)"' "$linear_file"
+    else
+      rm -f "$linear_file.raw"
+      printf '[]\n' >"$linear_file"
+      printf '  linear=unavailable\n'
+    fi
+  else
+    printf '[]\n' >"$linear_file"
+    printf '  linear=unavailable\n'
+  fi
+
+  printf '\nAssessment\n'
+  expected=none
+  warning=
+  while IFS=$'\t' read -r number issue_id; do
+    [[ -n $issue_id ]] || continue
+    issue=$(jq -c --arg id "$issue_id" '.[] | select(.id == $id)' "$linear_file" | head -1)
+    if [[ -z $issue ]]; then
+      warning="PR #$number has no matching Linear issue in the configured queue"
+      continue
+    fi
+    issue_status=$(jq -r '.status' <<<"$issue")
+    is_staged=$(jq -r --arg label "$staged_label" '.labels | index($label) != null' <<<"$issue")
+    if [[ $is_staged == true ]]; then
+      warning="$issue_id is staged but PR #$number remains open"
+    elif [[ $issue_status == "$ready_status" ]]; then
+      expected="worker $issue_id (open PR plus $ready_status)"
+      break
+    elif [[ $issue_status == "$review_status" && $expected == none ]]; then
+      expected="reviewer $issue_id (open PR plus $review_status)"
+    fi
+  done < <(jq -r '.[] | [.number, ((.title + " " + .headRefName) | capture("(?<id>CHI-[0-9]+)"; "i").id // "")] | @tsv' "$github_file" 2>/dev/null || true)
+  if [[ $expected == none ]]; then
+    ready=$(jq -r --arg ready "$ready_status" --arg routing "$routing_label" --arg staged "$staged_label" --arg campaign "$campaign_label" '
+      [.[] | select(.status == $ready and ($routing == "" or (.labels | index($routing))) and ((.labels | index($staged)) == null) and ((.labels | index($campaign)) == null))] |
+      sort_by(.priority.value // 99) | .[0].id // empty' "$linear_file")
+    [[ -n $ready ]] && expected="worker $ready ($ready_status queue)"
+  fi
+  if [[ $expected == none ]]; then
+    campaign=$(jq -r --arg backlog "${LINEAR_AGENT_BACKLOG_STATUS:-Backlog}" --arg campaign "$campaign_label" '
+      [.[] | select(.status == $backlog and (.labels | index($campaign)))] |
+      sort_by(.priority.value // 99) | .[0].id // empty' "$linear_file")
+    [[ -n $campaign ]] && expected="scout $campaign (campaign coordination)"
+  fi
+  printf '  expected_next=%s\n' "$expected"
+  (( active_count > 1 )) && warning="multiple agent roles are active"
+  [[ ${dirty:-unknown} == yes ]] && warning="control checkout is dirty"
+  [[ $runner_match == no || $prompts_match == no ]] && warning="installed runtime differs from the control checkout"
+  [[ -n $latest_failure ]] && warning="latest completed run failed: $latest_failure"
+  printf '  warning=%s\n' "${warning:-none}"
+else
+  printf '\nAssessment\n  external_queue=skipped (--local)\n'
+  printf '  warning=%s\n' "${latest_failure:-none}"
+fi
+
+if (( follow )); then
+  printf '\nFollowing role journals; Ctrl-C to stop.\n'
+  cleanup
+  trap - EXIT
+  exec journalctl --user -f -o short-iso --no-pager \
+    -u "linear-agent-worker@$group-scout.service" \
+    -u "linear-agent-worker@$group-worker.service" \
+    -u "linear-agent-worker@$group-reviewer.service"
+fi
+
+exit 0

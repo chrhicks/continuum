@@ -1,121 +1,132 @@
 # Coordination contract
 
-## Authority
+## Roles
 
-| Field | Authority |
+| Role | Responsibility |
 | --- | --- |
-| Assignment, priority, dependencies, coordination status | Linear |
-| Execution plan, discoveries, decisions, local handoff | Continuum |
-| Source branch, CI, review, and merge | GitHub |
+| Scout | Reconcile the queue, preserve intent, prepare one issue, or advance one campaign item |
+| Worker | Execute one bounded implementation or inquiry and open a PR to staging |
+| Reviewer | Review one PR, merge passing work to staging, or run one bounded repository inquiry |
+| Human | Author protected intent and promote staging to `master` |
 
-Cross-links are mandatory. A Linear issue names the Continuum task, branch, and PR. The Continuum task records the Linear identifier and URL.
+Linear owns queue state, work shape, dependencies, and campaign ledgers. Continuum holds plans, discoveries, decisions, and outcomes. GitHub holds branches, checks, reviews, and staging merges.
+
+## Work shapes
+
+### Execution
+
+One bounded implementation or documentation outcome that fits one Worker run. No workflow label is required.
+
+### Inquiry
+
+An audit, discovery, investigation, research task, review, or design exercise whose deliverable is knowledge rather than an implementation. It carries `workflow:inquiry` and declares one finding-disposition policy:
+
+- `report-only`;
+- `backlog-proposals`; or
+- `campaign-ledger`.
+
+Findings and report contents are never capped.
+
+### Campaign
+
+A durable parent for multiple outcomes. It carries `workflow:campaign`, never carries `agent:effect`, and maintains a complete `## Campaign ledger`. The Scout prepares one child per run and links parent/dependency relations. The parent remains Backlog while items remain and moves to In Review after every item is staged, duplicated, rejected, or deferred.
+
+Campaign semantics dominate when an issue also carries `workflow:inquiry`.
+
+## Protected human intent
+
+`source:human` protects an issue's title, primary objective, requested emphasis, exclusions, deliverable, and completion condition. Scout preparation is appended rather than substituted. A broad human issue without `workflow:campaign` stalls for clarification instead of being narrowed into one task.
 
 ## Linear workflow
 
-The pilot uses the team's stock statuses:
-
 ```text
-Backlog
-  -> Todo             human marks ready
-  -> In Progress      worker claim and implementation
-  -> In Review        validated PR exists
-  -> Done             human merge/review authority
+Execution or inquiry
+  Backlog
+    -> Todo             Scout prepared an actionable contract
+    -> In Progress      Worker claimed it
+    -> In Review        validated staging PR exists
+    -> In Review + integration:staged
+                         Reviewer merged it to staging
+    -> Done             human promoted/disposed staging
 
-Blocked -> Backlog + needs-human label
+Campaign
+  Backlog               ledger has pending work
+    -> child Todo/In Progress/In Review/staged
+    -> next child
+    -> In Review        every ledger item has durable disposition
+    -> Done             human promotion/disposition
+
+Review changes -> Todo
+Blocked -> Backlog + needs-human
 ```
 
-The `agent:effect` label routes eligible issues to this worker. Only a human moves work from Backlog to Todo. A scout creates backlog proposals and cannot apply the routing label or move them to Todo.
+## Labels
 
-Recommended labels:
+- `agent:effect` routes execution and inquiry children to Worker.
+- `scout-proposal` marks an unprepared automated proposal.
+- `integration:staged` records a PR merged into active staging.
+- `source:human` protects human-authored intent.
+- `workflow:inquiry` selects inquiry semantics.
+- `workflow:campaign` selects parent/campaign semantics.
 
-```text
-agent:effect
-repo:<name>
-risk:data-safety
-risk:migration
-risk:backup
-pilot
-scout-proposal
-needs-human
-```
+## Preparation contracts
 
-## Claim and lease
+Before moving execution work to Todo, Scout ensures it contains repository, exact staging branch, intent, evidence, bounded scope, exclusions, acceptance criteria, validation, safety, dependencies, and source links.
 
-The worker processes one issue per run.
+Before moving inquiry work to Todo, Scout ensures it contains the primary question, requested dimensions, evidence range, artifact, coverage expectations, artifact validation, exclusions, finding-disposition policy, and completion condition.
 
-1. It selects a Todo issue carrying `agent:effect`.
-2. It moves the issue to In Progress and comments with run ID, host, base branch, and lease expiration.
-3. It re-reads the issue before touching source.
-4. It stops if assignment, status, or lease no longer matches.
-5. It sends a heartbeat at least every 20 minutes while active.
+Scout prepares or creates at most one issue or campaign child per run. This is a mutation bound, not a limit on findings or campaign size.
 
-A later run may recover an expired lease carrying the same routing label and assignee. It must inspect the existing branch, worktree, Continuum task, comments, and PR before continuing. It must not recover another agent's live lease.
+## Worker claim
 
-The Linear transition is not a database compare-and-swap. The re-read and one-worker lock reduce races but do not eliminate them across machines. Run one worker profile per assignee until Linear offers stronger claim semantics.
+1. Select one routed Todo issue that is not a campaign parent.
+2. Move it to In Progress and write a lease comment.
+3. Re-read before touching source.
+4. Resume an existing issue branch and PR for requested changes.
+5. Stop on a competing live lease.
+6. Preserve human intent and campaign-child scope.
 
-## Eligibility
+The profiles share a local lock. Linear claims remain comment-and-re-read coordination rather than an atomic lease.
 
-An implementation issue must include:
+## Worktrees and staging
 
-- repository and exact allowed base branch;
-- intent and observable impact;
-- evidence or reproduction;
-- bounded scope and explicit exclusions;
-- acceptance criteria;
-- validation commands;
-- safety and rollback notes;
-- completed dependencies.
-
-Missing fields block the issue. The worker comments with the missing contract rather than guessing.
-
-## Work isolation
-
-The timer runs from a dedicated clean control checkout, never a human development checkout. Issue source changes occur in nested ignored Git worktrees:
+The clean control checkout hosts ignored nested worktrees:
 
 ```text
 continuum-control/
-  .git/
   .linear-agent-worktrees/
-    CON-123-short-slug/
+    CHI-123-short-slug/
 ```
 
-Continuum commands use the stable control checkout as their workspace. This avoids creating a separate execution ledger for every disposable worktree. Source edits and tests use the issue worktree.
+Worker branches start from the active staging branch. PRs target staging. Worker never merges its own PR.
 
-The wrapper refuses to run when the control checkout is dirty. Existing issue worktrees remain until review or explicit cleanup.
+Reviewer may merge a passing PR only when its base is the exact staging branch. It may not merge to `master`. Human promotion remains separate.
 
-## Safety
+## Review
 
-The worker may:
+Reviewer combines acceptance, correctness, regression, validation, complexity, Effect, and data-safety review.
 
-- read assigned Linear issues;
-- update issue status and comments under this contract;
-- create Continuum tasks and notes;
-- create worktrees and issue branches;
-- edit and validate code in the issue worktree;
-- commit, push a new branch, and open a PR.
+For inquiries, Reviewer also verifies the original question was answered, every requested dimension has evidence or an explicit no-finding conclusion, every evidence-backed finding is present, and each finding has the required disposition. Adjacent architectural observations may not replace the requested concern.
 
-The worker may not:
+Blocking findings return the issue to Todo with evidence.
 
-- merge;
+## Scheduled repository inquiries
+
+When no PR is waiting and the interval has elapsed, Reviewer may inspect one bounded area. It records every evidence-backed finding without a numeric cap and deduplicates against Linear and Continuum.
+
+Independent findings become Backlog `scout-proposal` issues. An ordered or multi-stage result becomes one `workflow:campaign` parent with a complete ledger. Reviewer does not route or implement its findings.
+
+## Retained limits
+
+Agents may not:
+
 - force-push or rewrite shared history;
 - deploy;
+- change credentials or billing;
 - delete or alter production data;
-- mutate cloud infrastructure or credentials;
-- change billing;
-- execute its own scout proposals;
-- broaden scope to unrelated cleanup.
+- mutate cloud infrastructure;
+- merge to `master`;
+- launch child agents; or
+- broaden one run into unrelated work.
 
-Any issue requiring these operations moves to Blocked with the exact approval needed.
-
-## Completion
-
-In Review requires:
-
-- acceptance criteria satisfied;
-- required validation passed;
-- final diff inspected;
-- commit and pushed branch available;
-- PR open against the requested base;
-- Linear comment naming tests, PR, Continuum task, and remaining risks.
-
-Only a human or separate review policy marks Done after merge.
+Failed worktrees and branches remain available for recovery.

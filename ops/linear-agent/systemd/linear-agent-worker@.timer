@@ -1,5 +1,5 @@
 [Unit]
-Description=Poll Linear for one bounded agent issue (%i)
+Description=Poll Linear with one bounded Scout run (%i)
 
 [Timer]
 OnBootSec=5min

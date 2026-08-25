@@ -1,127 +1,126 @@
-# Linear-coordinated agent worker
+# Linear-coordinated Scout, Worker, and Reviewer
 
-This kit runs one bounded Pi session per invocation. Linear coordinates assignment, Continuum records execution context, and GitHub owns review and merge.
-
-Read [the coordination contract](COORDINATION.md) before enabling the timer.
-
-## Design
+This kit runs three bounded Pi roles:
 
 ```text
-systemd timer
-  -> run-once lock and preflight
-  -> Pi session named `effect:<profile>:<run-id>`
-  -> Executor MCP: select, claim, heartbeat, handoff
-  -> Continuum: task, plan, discoveries, outcome
-  -> ignored Git worktree: edit, test, commit, push
-  -> GitHub PR, never merge
-  -> process exits
+Scout (Luna)
+  -> prepare one issue or route existing work
+Worker (Sol)
+  -> implement one ready issue and open a staging PR
+Reviewer (Terra)
+  -> review and merge to staging, or run one bounded repository inquiry
 ```
 
-The wrapper defaults to dry-run mode, rejects group-readable configuration, refuses dirty control checkouts, allows one process per profile, and stops the agent after a configured timeout.
+Linear coordinates the queue, Continuum records execution context, and GitHub holds source review and integration state. A human promotes the staging branch to `master`.
 
-Continuum's GOAL validation invokes CLI smoke commands. `bin/validate-continuum-worktree` runs those commands with the issue worktree's source and fresh temporary HOME, XDG, and workspace state. It never points validation at the control ledger. This avoids cross-generation storage conflicts without reconciling or deleting either database.
+## Runtime flow
+
+Only the Scout needs a recurring timer. It reports `DISPATCH_WORKER` or `DISPATCH_REVIEWER` when another role should run. The wrapper releases the shared lock and starts that profile through systemd.
+
+All profiles share one lock group, so only one role runs at a time. Every run handles one execution issue, inquiry, campaign action, or review and then exits. Runs disable ambient Pi extensions and explicitly load only `pi-mcp-adapter`, so globally installed subagent tools cannot create project artifacts or child runs.
+
+The control checkout remains clean. Source work occurs in ignored nested worktrees. `bin/validate-continuum-worktree` validates Continuum changes with temporary HOME, XDG, and workspace state rather than touching the durable control ledger.
+
+## Models
+
+| Role | Model | Thinking |
+| --- | --- | --- |
+| Scout | `openai-codex/gpt-5.6-luna` | medium |
+| Worker | `openai-codex/gpt-5.6-sol` | high |
+| Reviewer | `openai-codex/gpt-5.6-terra` | high |
+
+The profile files pin these values rather than inheriting Pi defaults.
+
+## Active staging branch
+
+The initial active branch is:
+
+```text
+staging/xdg-storage-migration
+```
+
+It starts from `feature/xdg-storage-migration`. Worker PRs target staging. The Reviewer may merge passing PRs into staging, but never into `master`. Promotion to `master` remains human-owned.
+
+After promotion, create a fresh staging branch and update all three profiles.
 
 ## Prerequisites
 
 - Pi with `pi-mcp-adapter`
-- An Executor MCP configuration that exposes Linear to Pi
-- `continuum`, `git`, `gh`, `flock`, and `timeout`
-- A dedicated clean checkout with push access
-- The Linear project, stock team statuses, and routing labels from [the contract](COORDINATION.md)
+- Executor MCP exposing Linear and Continuum
+- `continuum`, `git`, `gh`, `flock`, `timeout`, and systemd user services
+- a dedicated clean control checkout with push access
+- the Linear project, statuses, and labels in [COORDINATION.md](COORDINATION.md)
 
-Store Linear credentials in the MCP configuration or its secret store. Do not put tokens in the worker environment file.
+Credentials remain in Pi, gh, SSH, and MCP configuration. Profile files contain identifiers and paths and must remain mode `0600`.
 
-## Dedicated checkout
-
-Do not use a human checkout. On `chicks-arch`, the existing `/home/chicks/workspaces/opencode/continuum` tree contains unrelated uncommitted recall work and is not eligible.
-
-Create a control checkout after this branch is pushed:
-
-```bash
-mkdir -p ~/workspaces/agents
-git clone --branch ops/linear-agent-worker \
-  git@github.com:chrhicks/continuum.git \
-  ~/workspaces/agents/continuum-control
-```
-
-The worker creates nested ignored worktrees under `.linear-agent-worktrees/`. It runs Continuum against the stable control checkout so disposable code worktrees do not fragment the execution ledger.
-
-## Install without enabling
+## Install three profiles
 
 From the control checkout:
 
 ```bash
-ops/linear-agent/bin/install-user
-$EDITOR ~/.config/linear-agent/continuum.env
-chmod 600 ~/.config/linear-agent/continuum.env
+ops/linear-agent/bin/install-user --profile=continuum-worker --role=worker
+ops/linear-agent/bin/install-user --profile=continuum-reviewer --role=reviewer
+ops/linear-agent/bin/install-user --profile=continuum-scout --role=scout
 ```
 
-The installer copies the wrapper, prompts, and systemd templates into user directories. It does not enable the timer unless passed `--enable`.
-
-The example configuration starts with:
+Edit and verify:
 
 ```text
-LINEAR_AGENT_DRY_RUN=1
+~/.config/linear-agent/continuum-scout.env
+~/.config/linear-agent/continuum-worker.env
+~/.config/linear-agent/continuum-reviewer.env
 ```
 
-Keep it enabled until paths, stock status names, project, assignee, routing label, allowed branches, Pi model, and MCP access are verified.
+The installer preserves existing profile files. New files start with `LINEAR_AGENT_DRY_RUN=1`.
 
-## Dry run
+## Verification
+
+Run each profile in dry-run mode:
 
 ```bash
-systemctl --user start linear-agent-worker@continuum.service
-journalctl --user -u linear-agent-worker@continuum.service -n 100 --no-pager
+systemctl --user start linear-agent-worker@continuum-scout.service
+systemctl --user start linear-agent-worker@continuum-worker.service
+systemctl --user start linear-agent-worker@continuum-reviewer.service
+journalctl --user -u 'linear-agent-worker@continuum-*' -n 100 --no-pager
 ```
 
-The dry run validates the control checkout and renders the exact worker prompt without calling Pi.
+Then set `LINEAR_AGENT_DRY_RUN=0` in all three files and run the Scout manually. It should route the current queue without overlap.
 
-Verify Linear MCP separately with a read-only agent request. It should list the configured project without changing any issue.
+## Enable polling
 
-## Pilot
-
-The initial coordination objects are provisioned:
-
-- Project: [Continuum XDG Storage and R2 Hardening](https://linear.app/chicks/project/continuum-xdg-storage-and-r2-hardening-b2f0659517a5)
-- Backlog issue: [CHI-98](https://linear.app/chicks/issue/CHI-98/permit-verified-backup-restore-across-application-version-changes)
-
-The issue remains in Backlog until the worker passes a no-work run.
-
-1. Verify the Linear project and routing labels. Keep the team's stock statuses.
-2. Verify CHI-98 against [the F-003 pilot issue](issues/pilot-F-003.md).
-3. Leave CHI-98 in Backlog while testing MCP; Todo is the ready queue.
-4. Set `LINEAR_AGENT_DRY_RUN=0`.
-5. Run the service once with no eligible issue. Confirm it reports `NO_WORK` and changes nothing.
-6. Move F-003 to Todo and run the service manually again.
-7. Inspect the Linear lease, Continuum task, worktree, validation, branch, and PR.
-8. Enable polling only after the manual pilot behaves correctly.
+Enable only the Scout timer:
 
 ```bash
-systemctl --user enable --now linear-agent-worker@continuum.timer
-systemctl --user list-timers 'linear-agent-worker@*'
+systemctl --user enable --now linear-agent-worker@continuum-scout.timer
+systemctl --user disable --now linear-agent-worker@continuum.timer 2>/dev/null || true
 ```
+
+Worker and Reviewer services are dispatched on demand.
+
+## Work shapes and labels
+
+Execution issues fit one Worker run. `workflow:inquiry` marks audits, discoveries, investigations, research, and design work. `workflow:campaign` marks a durable parent whose complete ledger is advanced one child at a time. `source:human` protects the title and primary intent from Scout rewriting. See [COORDINATION.md](COORDINATION.md) for contracts and finding-disposition policies.
 
 ## Operations
 
+Use one read-only snapshot for normal observation. It combines timer and role state, recent result markers, control/deployment drift, open staging PRs, the Linear queue, and the expected next role:
+
 ```bash
-# Run one bounded iteration
-systemctl --user start linear-agent-worker@continuum.service
+linear-agent-status continuum
+linear-agent-status continuum --follow  # snapshot, then follow role journals
+linear-agent-status continuum --local   # skip GitHub and Linear queries
 
-# Follow logs
-journalctl --user -fu linear-agent-worker@continuum.service
+# Run a role manually
+systemctl --user start linear-agent-worker@continuum-reviewer.service
 
-# Stop future polling without interrupting manual Git work
-systemctl --user disable --now linear-agent-worker@continuum.timer
+# Follow all role logs
+journalctl --user -fu 'linear-agent-worker@continuum-*'
 
-# Inspect private run logs and rendered prompts
-find ~/.local/state/linear-agent/continuum/runs -maxdepth 1 -type f -ls
+# Pause future queue work
+systemctl --user disable --now linear-agent-worker@continuum-scout.timer
+
+# Private run artifacts
+find ~/.local/state/linear-agent -path '*/runs/*' -type f -ls
 ```
 
-The timer waits five minutes after a run finishes, so it cannot overlap its own service. The wrapper also uses `flock` in case a manual run races the timer.
-
-## Scout mode
-
-`prompts/scout.md` is proposal-only. Do not schedule it during the pilot. After several accepted worker PRs, add a separate low-frequency profile that can create backlog proposals but cannot apply the routing label or move them to Todo.
-
-## Known limitation
-
-Linear status updates are not compare-and-swap operations. A claim is status update, lease comment, and re-read. Run only one active worker for an assignee during the pilot. Multi-machine dispatch needs a stronger external lease before expansion.
+Scheduled repository inquiries are limited to one bounded area and are considered due once per configured interval. Findings are not numerically capped. The wrapper records a shared inquiry marker after `INQUIRY_COMPLETE` or `INQUIRY_NO_FINDINGS`.
