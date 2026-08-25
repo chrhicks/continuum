@@ -1,16 +1,17 @@
-import { createHash, randomUUID } from 'node:crypto'
-import {
-  existsSync,
-  linkSync,
-  mkdirSync,
-  readFileSync,
-  realpathSync,
-  unlinkSync,
-  writeFileSync,
-} from 'node:fs'
+import { createHash } from 'node:crypto'
+import { existsSync, realpathSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
-import { migrationFailure } from './storage-errors'
+import { join, resolve } from 'node:path'
+import {
+  ensureWorkspaceIdentity,
+  readWorkspaceIdentity,
+} from './workspace-identity'
+import {
+  assertWorkspaceClaim,
+  claimWorkspaceIdentity,
+} from './workspace-registry'
+
+export { workspaceIdentityPath } from './workspace-identity'
 
 export const CANONICAL_STORAGE_GENERATION = 'xdg-project-sha256-v1'
 
@@ -18,16 +19,8 @@ const CONTINUUM_DATA_DIR = 'continuum'
 const PROJECTS_DIR = 'projects'
 const DB_FILE = 'continuum.db'
 const RECEIPT_FILE = 'legacy-migration-receipt.json'
-const WORKSPACE_IDENTITY_FILE = 'workspace.json'
-const WORKSPACE_IDENTITY_VERSION = 1
-
 export type CanonicalPathOptions = {
   dataHome?: string
-}
-
-type WorkspaceIdentity = {
-  version: number
-  id: string
 }
 
 export function continuumDir(directory: string): string {
@@ -36,10 +29,6 @@ export function continuumDir(directory: string): string {
 
 export function legacyDbFilePath(directory: string): string {
   return join(continuumDir(directory), DB_FILE)
-}
-
-export function workspaceIdentityPath(directory: string): string {
-  return join(continuumDir(directory), WORKSPACE_IDENTITY_FILE)
 }
 
 export function canonicalDataHome(options: CanonicalPathOptions = {}): string {
@@ -63,44 +52,29 @@ export function pathHashProjectStorageId(directory: string): string {
     .digest('hex')
 }
 
-export function projectStorageId(directory: string): string {
-  return (
-    readWorkspaceIdentity(directory)?.id ?? pathHashProjectStorageId(directory)
-  )
+export function unclaimedProjectStorageId(directory: string): string {
+  return resolveProjectStorageIdentity(directory).id
 }
 
-export function ensureProjectStorageId(directory: string): string {
-  const existing = readWorkspaceIdentity(directory)
-  if (existing) return existing.id
+export function projectStorageId(
+  directory: string,
+  options: CanonicalPathOptions = {},
+): string {
+  const workspacePath = normalizedWorkspacePath(directory)
+  const identity = resolveProjectStorageIdentity(workspacePath)
+  if (!identity.stable) return identity.id
+  assertWorkspaceClaim(identity.id, workspacePath, canonicalDataHome(options))
+  return identity.id
+}
 
-  const path = workspaceIdentityPath(directory)
-  mkdirSync(dirname(path), { recursive: true })
-  const identity: WorkspaceIdentity = {
-    version: WORKSPACE_IDENTITY_VERSION,
-    id: randomUUID(),
-  }
-  const staging = `${path}.${process.pid}-${randomUUID()}.tmp`
-  writeFileSync(staging, `${JSON.stringify(identity, null, 2)}\n`, {
-    encoding: 'utf8',
-    mode: 0o600,
-    flag: 'wx',
-    flush: true,
-  })
-  try {
-    try {
-      linkSync(staging, path)
-      return identity.id
-    } catch (cause) {
-      if (!existsSync(path)) throw cause
-      const winner = readWorkspaceIdentity(directory)
-      if (!winner) {
-        throw migrationFailure(`Workspace identity is unreadable: ${path}`)
-      }
-      return winner.id
-    }
-  } finally {
-    if (existsSync(staging)) unlinkSync(staging)
-  }
+export function ensureProjectStorageId(
+  directory: string,
+  options: CanonicalPathOptions = {},
+): string {
+  const workspacePath = normalizedWorkspacePath(directory)
+  const identity = ensureWorkspaceIdentity(workspacePath)
+  claimWorkspaceIdentity(identity.id, workspacePath, canonicalDataHome(options))
+  return identity.id
 }
 
 export function canonicalProjectDir(
@@ -108,23 +82,29 @@ export function canonicalProjectDir(
   options: CanonicalPathOptions = {},
 ): string {
   const projectId = existsSync(continuumDir(directory))
-    ? ensureProjectStorageId(directory)
-    : projectStorageId(directory)
-  return canonicalProjectDirForId(projectId, options)
+    ? ensureProjectStorageId(directory, options)
+    : projectStorageId(directory, options)
+  return canonicalProjectDirForStorageId(projectId, options)
 }
 
 export function readOnlyCanonicalProjectDir(
   directory: string,
   options: CanonicalPathOptions = {},
 ): string {
-  return canonicalProjectDirForId(projectStorageId(directory), options)
+  return canonicalProjectDirForStorageId(
+    projectStorageId(directory, options),
+    options,
+  )
 }
 
 export function pathHashCanonicalProjectDir(
   directory: string,
   options: CanonicalPathOptions = {},
 ): string {
-  return canonicalProjectDirForId(pathHashProjectStorageId(directory), options)
+  return canonicalProjectDirForStorageId(
+    pathHashProjectStorageId(directory),
+    options,
+  )
 }
 
 export function canonicalDbFilePath(
@@ -132,6 +112,23 @@ export function canonicalDbFilePath(
   options: CanonicalPathOptions = {},
 ): string {
   return join(canonicalProjectDir(directory, options), DB_FILE)
+}
+
+export function unclaimedCanonicalDbFilePath(
+  directory: string,
+  options: CanonicalPathOptions = {},
+): string {
+  return canonicalDbFilePathForStorageId(
+    unclaimedProjectStorageId(directory),
+    options,
+  )
+}
+
+export function canonicalDbFilePathForStorageId(
+  projectId: string,
+  options: CanonicalPathOptions = {},
+): string {
+  return join(canonicalProjectDirForStorageId(projectId, options), DB_FILE)
 }
 
 export function readOnlyCanonicalDbFilePath(
@@ -166,9 +163,9 @@ export function dbFilePath(directory: string): string {
   return canonicalDbFilePath(directory)
 }
 
-function canonicalProjectDirForId(
+export function canonicalProjectDirForStorageId(
   projectId: string,
-  options: CanonicalPathOptions,
+  options: CanonicalPathOptions = {},
 ): string {
   return join(
     canonicalDataHome(options),
@@ -178,24 +175,13 @@ function canonicalProjectDirForId(
   )
 }
 
-function readWorkspaceIdentity(directory: string): WorkspaceIdentity | null {
-  const path = workspaceIdentityPath(directory)
-  if (!existsSync(path)) return null
-  try {
-    const value = JSON.parse(
-      readFileSync(path, 'utf8'),
-    ) as Partial<WorkspaceIdentity>
-    if (
-      value.version !== WORKSPACE_IDENTITY_VERSION ||
-      typeof value.id !== 'string' ||
-      !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-        value.id,
-      )
-    ) {
-      throw new Error('unsupported workspace identity format')
-    }
-    return { version: value.version, id: value.id }
-  } catch (cause) {
-    throw migrationFailure(`Workspace identity is unreadable: ${path}`, cause)
-  }
+function resolveProjectStorageIdentity(directory: string): {
+  id: string
+  stable: boolean
+} {
+  const workspacePath = normalizedWorkspacePath(directory)
+  const identity = readWorkspaceIdentity(workspacePath)
+  return identity
+    ? { id: identity.id, stable: true }
+    : { id: pathHashProjectStorageId(workspacePath), stable: false }
 }

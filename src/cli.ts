@@ -7,6 +7,7 @@ import { createSummaryCommand } from './cli/commands/summary'
 import { createMcpCommand } from './cli/commands/mcp'
 import { createBackupCommand } from './cli/commands/backup'
 import { createRuntimeCommand } from './cli/commands/runtime'
+import { createWorkspaceCommand } from './cli/commands/workspace'
 import { runCommand } from './cli/io'
 import continuum from './sdk'
 import {
@@ -66,6 +67,7 @@ function createProgram(): Command {
   program.addCommand(createMcpCommand())
   program.addCommand(createBackupCommand())
   program.addCommand(createRuntimeCommand())
+  program.addCommand(createWorkspaceCommand())
   program.addCommand(createMemoryCommand())
   program.addCommand(createTaskCommand())
   program.exitOverride()
@@ -122,7 +124,10 @@ function registerWorkspaceHooks(program: Command): void {
     }
 
     const previous = setActiveWorkspaceContext(
-      resolveWorkspaceContext({ startDir: process.cwd() }),
+      resolveWorkspaceContext({
+        startDir: process.cwd(),
+        access: 'deferred',
+      }),
     )
     ;(actionCommand as Command & { [PREVIOUS_WORKSPACE_CONTEXT]?: unknown })[
       PREVIOUS_WORKSPACE_CONTEXT

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { Database } from 'bun:sqlite'
 import { createHash } from 'node:crypto'
 import {
+  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -12,9 +13,10 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { spawnSync } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { migrateDb } from '../src/db/migrate'
 import { canonicalDbFilePath } from '../src/db/paths'
+import { workspaceClaimPath } from '../src/db/workspace-registry'
 import { prepareInitializedSnapshot } from '../src/db/storage-lineage'
 import {
   publishDatabaseSnapshot,
@@ -328,6 +330,101 @@ describe('XDG canonical database migration', () => {
     expect(memoryContents(fixture.legacyDb)).toContain('legacy receipt proof')
   })
 
+  test('refuses to open a copied live workspace before shared data is touched', async () => {
+    const fixture = await legacyFixture()
+    expect(cli(fixture, ['init']).status).toBe(0)
+    expect(
+      cli(fixture, ['memory', 'append', 'agent', 'original-only']).status,
+    ).toBe(0)
+    const canonical = canonicalDbFilePath(fixture.workspace, {
+      dataHome: fixture.dataHome,
+    })
+    const copiedWorkspace = join(fixture.root, 'copied-workspace')
+    cpSync(fixture.workspace, copiedWorkspace, { recursive: true })
+
+    const collision = cliAt(fixture, copiedWorkspace, [
+      'memory',
+      'append',
+      'agent',
+      'must-not-be-written',
+    ])
+
+    expect(collision.status).not.toBe(0)
+    expect(collision.stderr).toContain('STORAGE_WORKSPACE_COLLISION')
+    expect(collision.stderr).toContain(fixture.workspace)
+    expect(collision.stderr).toContain(copiedWorkspace)
+    expect(memoryContents(canonical)).toContain('original-only')
+    expect(memoryContents(canonical)).not.toContain('must-not-be-written')
+  })
+
+  test('forks a copied workspace explicitly without changing the original database', async () => {
+    const fixture = await legacyFixture()
+    expect(cli(fixture, ['init']).status).toBe(0)
+    expect(
+      cli(fixture, ['memory', 'append', 'agent', 'shared-before-fork']).status,
+    ).toBe(0)
+    const originalIdentity = readWorkspaceId(fixture.workspace)
+    const originalDatabase = canonicalDbFilePath(fixture.workspace, {
+      dataHome: fixture.dataHome,
+    })
+    const originalFingerprint =
+      readDatabaseSnapshot(originalDatabase).fingerprint
+    const copiedWorkspace = join(fixture.root, 'forked-workspace')
+    cpSync(fixture.workspace, copiedWorkspace, { recursive: true })
+
+    const forked = cliAt(fixture, copiedWorkspace, ['workspace', 'fork'])
+
+    expect(forked.status).toBe(0)
+    expect(forked.stdout).toContain('Forked Continuum workspace storage')
+    const copiedIdentity = readWorkspaceId(copiedWorkspace)
+    expect(copiedIdentity).not.toBe(originalIdentity)
+    expect(readWorkspaceId(fixture.workspace)).toBe(originalIdentity)
+    const copiedDatabase = canonicalDbFilePath(copiedWorkspace, {
+      dataHome: fixture.dataHome,
+    })
+    expect(copiedDatabase).not.toBe(originalDatabase)
+    expect(memoryContents(copiedDatabase)).toContain('shared-before-fork')
+    expect(readDatabaseSnapshot(originalDatabase).fingerprint).toEqual(
+      originalFingerprint,
+    )
+
+    expect(
+      cliAt(fixture, copiedWorkspace, [
+        'memory',
+        'append',
+        'agent',
+        'fork-only',
+      ]).status,
+    ).toBe(0)
+    expect(memoryContents(copiedDatabase)).toContain('fork-only')
+    expect(memoryContents(originalDatabase)).not.toContain('fork-only')
+  })
+
+  test('serializes concurrent claims so only one copied workspace opens', async () => {
+    const fixture = await legacyFixture()
+    expect(cli(fixture, ['init']).status).toBe(0)
+    const copiedWorkspace = join(fixture.root, 'concurrent-copy')
+    cpSync(fixture.workspace, copiedWorkspace, { recursive: true })
+    const projectId = readWorkspaceId(fixture.workspace)
+    rmSync(workspaceClaimPath(projectId, fixture.dataHome))
+
+    const [original, copied] = await Promise.all([
+      cliAsync(fixture, fixture.workspace, ['summary']),
+      cliAsync(fixture, copiedWorkspace, ['summary']),
+    ])
+
+    const successes = [original, copied].filter((result) => result.status === 0)
+    const collisions = [original, copied].filter(
+      (result) =>
+        result.status !== 0 &&
+        result.stderr.includes('STORAGE_WORKSPACE_COLLISION'),
+    )
+    expect(successes).toHaveLength(1)
+    expect(collisions).toHaveLength(1)
+    expect(collisions[0]?.stderr).toContain(fixture.workspace)
+    expect(collisions[0]?.stderr).toContain(copiedWorkspace)
+  })
+
   test('keeps canonical task and memory data visible after workspace rename', async () => {
     const fixture = await legacyFixture()
     const legacy = new Database(fixture.legacyDb)
@@ -352,6 +449,11 @@ describe('XDG canonical database migration', () => {
     expect(summary.status).toBe(0)
     expect(summary.stdout).toContain('Rename-safe task')
     expect(summary.stdout).toContain('rename-safe memory')
+    const projectId = readWorkspaceId(renamedWorkspace)
+    const claim = JSON.parse(
+      readFileSync(workspaceClaimPath(projectId, fixture.dataHome), 'utf8'),
+    ) as { workspacePath: string }
+    expect(claim.workspacePath).toBe(renamedWorkspace)
   })
 })
 
@@ -409,19 +511,55 @@ async function legacyFixture(): Promise<Fixture> {
 }
 
 function cli(fixture: Fixture, args: string[]): ReturnType<typeof spawnSync> {
-  return spawnSync(
-    'bun',
-    ['run', cliPath, '--cwd', fixture.workspace, ...args],
-    {
+  return cliAt(fixture, fixture.workspace, args)
+}
+
+function cliAt(
+  fixture: Fixture,
+  workspace: string,
+  args: string[],
+): ReturnType<typeof spawnSync> {
+  return spawnSync('bun', ['run', cliPath, '--cwd', workspace, ...args], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    env: cliEnvironment(fixture),
+  })
+}
+
+function cliAsync(
+  fixture: Fixture,
+  workspace: string,
+  args: string[],
+): Promise<{ status: number | null; stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn('bun', ['run', cliPath, '--cwd', workspace, ...args], {
       cwd: repoRoot,
-      encoding: 'utf8',
-      env: {
-        ...process.env,
-        HOME: fixture.home,
-        XDG_DATA_HOME: fixture.dataHome,
-      },
-    },
-  )
+      env: cliEnvironment(fixture),
+    })
+    let stdout = ''
+    let stderr = ''
+    child.stdout.setEncoding('utf8')
+    child.stderr.setEncoding('utf8')
+    child.stdout.on('data', (chunk: string) => (stdout += chunk))
+    child.stderr.on('data', (chunk: string) => (stderr += chunk))
+    child.on('error', reject)
+    child.on('close', (status) => resolve({ status, stdout, stderr }))
+  })
+}
+
+function cliEnvironment(fixture: Fixture): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    HOME: fixture.home,
+    XDG_DATA_HOME: fixture.dataHome,
+  }
+}
+
+function readWorkspaceId(workspace: string): string {
+  const identity = JSON.parse(
+    readFileSync(join(workspace, '.continuum', 'workspace.json'), 'utf8'),
+  ) as { id: string }
+  return identity.id
 }
 
 function insertTask(sqlite: Database, id: string, title: string): void {
