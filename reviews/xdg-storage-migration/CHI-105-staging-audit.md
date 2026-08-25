@@ -2,9 +2,9 @@
 
 ## Result
 
-The staging branch is much safer than the original feature tip, but it is not ready for promotion without explicit decisions on four findings. Two affect storage safety, one breaks the required worker validation path, and one permits a same-writer backup fork.
+The staging branch is much safer than the original feature tip, but it is not ready for promotion without explicit decisions on three proposed follow-ups. Two affect storage safety, and one breaks the required worker validation path. A fourth, lower-priority backup finding is recorded but deferred under this audit's three-proposal cap.
 
-No product fix is included in this audit. The four follow-up issues are in Backlog with `scout-proposal` so a Scout can prepare them without routing unreviewed scope directly to a Worker.
+No product fix is included in this audit. CHI-106, CHI-107, and CHI-108 are the three Backlog issues with `scout-proposal` so a Scout can prepare them without routing unreviewed scope directly to a Worker. F-014 has no active proposal from this audit.
 
 ## Comparison and coverage
 
@@ -28,7 +28,7 @@ The review covered every changed-file group:
 - Linear agent scripts, profiles, prompts, systemd units, runtime verification, and isolated validation;
 - tests, package metadata, formatting rules, documentation, file modes, generated-file risk, and credential-like paths.
 
-The earlier `review/xdg-storage-migration` artifacts supplied adversarial cases and the original F-001 through F-010 findings. This audit checked the current full range rather than treating those artifacts as current. CHI-98 through CHI-104 address the original findings under their stated acceptance criteria. The checks below found four additional gaps.
+The earlier `review/xdg-storage-migration` artifacts supplied adversarial cases and the original F-001 through F-010 findings. This audit checked the current full range rather than treating those artifacts as current. CHI-98 through CHI-104 address the original findings under their stated acceptance criteria. The checks below found four additional gaps. The first three became follow-up proposals; F-014 is retained as deferred evidence because this audit is capped at three proposals.
 
 The review applied the current Cursor `unslop` writing guidance, the `dmmulroy/anti-slop` rule descriptions, the repository's Effect v4 skill, the pinned `effect@4.0.0-beta.107` source contract, and project-local standards. Anti-slop warnings were treated as prompts for evidence, not as defects by themselves.
 
@@ -72,7 +72,7 @@ Follow-up: [CHI-108](https://linear.app/chicks/issue/CHI-108/make-isolated-conti
 
 **How.** Hold a per-project local lock across the complete create operation and return a typed contention error. This can prevent same-host overlap without pretending Wrangler offers remote compare-and-swap. Keep cross-machine concurrency unsupported and documented.
 
-Follow-up: [CHI-109](https://linear.app/chicks/issue/CHI-109/serialize-same-writer-backup-creation-before-mutable-head-publication)
+Deferred: this lower-priority finding exceeded the audit's three-proposal cap. No active follow-up proposal is retained; a future Scout may deduplicate and reconsider it in a separately bounded run.
 
 ## Validation evidence
 
@@ -103,4 +103,4 @@ Additional checks inspected the complete name/status and mode summaries, tracked
 
 ## Dependency order
 
-The four follow-ups are independent once the current staging branch is their base. Fix CHI-108 first because it restores the normal validation path. Fix CHI-106 and CHI-107 before promotion because they affect canonical storage authority and durability. CHI-109 is a smaller backup hardening item and does not block local database use.
+The three proposed follow-ups are independent once the current staging branch is their base. Fix CHI-108 first because it restores the normal validation path. Fix CHI-106 and CHI-107 before promotion because they affect canonical storage authority and durability. F-014 remains deferred under the proposal cap and does not block local database use.
