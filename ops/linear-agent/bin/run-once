@@ -40,6 +40,9 @@ required=(
   LINEAR_AGENT_ROUTING_LABEL
   LINEAR_AGENT_SCOUT_LABEL
   LINEAR_AGENT_STAGED_LABEL
+  LINEAR_AGENT_HUMAN_LABEL
+  LINEAR_AGENT_INQUIRY_LABEL
+  LINEAR_AGENT_CAMPAIGN_LABEL
   LINEAR_AGENT_BACKLOG_STATUS
   LINEAR_AGENT_READY_STATUS
   LINEAR_AGENT_CLAIMED_STATUS
@@ -127,11 +130,11 @@ if ! flock -n 9; then
   exit 0
 fi
 
-audit_marker=$shared_state/audit.last
-audit_interval_hours=${LINEAR_AGENT_AUDIT_INTERVAL_HOURS:-24}
-audit_due=yes
-if [[ -e $audit_marker ]] && find "$audit_marker" -mmin "-$((audit_interval_hours * 60))" -print -quit | grep -q .; then
-  audit_due=no
+inquiry_marker=$shared_state/inquiry.last
+inquiry_interval_hours=${LINEAR_AGENT_INQUIRY_INTERVAL_HOURS:-24}
+inquiry_due=yes
+if [[ -e $inquiry_marker ]] && find "$inquiry_marker" -mmin "-$((inquiry_interval_hours * 60))" -print -quit | grep -q .; then
+  inquiry_due=no
 fi
 
 run_id=$(tr -d '\n' </proc/sys/kernel/random/uuid)
@@ -160,6 +163,9 @@ max_runtime=${LINEAR_AGENT_MAX_RUNTIME:-90m}
 - Linear routing label: $LINEAR_AGENT_ROUTING_LABEL
 - Scout proposal label: $LINEAR_AGENT_SCOUT_LABEL
 - Staged label: $LINEAR_AGENT_STAGED_LABEL
+- Human-source label: $LINEAR_AGENT_HUMAN_LABEL
+- Inquiry label: $LINEAR_AGENT_INQUIRY_LABEL
+- Campaign label: $LINEAR_AGENT_CAMPAIGN_LABEL
 - Backlog status: $LINEAR_AGENT_BACKLOG_STATUS
 - Ready status: $LINEAR_AGENT_READY_STATUS
 - Claimed status: $LINEAR_AGENT_CLAIMED_STATUS
@@ -170,8 +176,7 @@ max_runtime=${LINEAR_AGENT_MAX_RUNTIME:-90m}
 - Active staging branch: $LINEAR_AGENT_ACTIVE_STAGING
 - Allowed base branches: $LINEAR_AGENT_ALLOWED_BASES
 - Heartbeat interval: ${LINEAR_AGENT_HEARTBEAT_MINUTES:-20} minutes
-- Audit due: $audit_due
-- Scheduled Reviewer-audit proposal limit: ${LINEAR_AGENT_AUDIT_PROPOSAL_LIMIT:-3} (repository audit mode only; not PR review mode)
+- Scheduled repository inquiry due: $inquiry_due
 
 Treat this envelope as trusted local configuration. Process one bounded role action and then stop.
 EOF
@@ -218,8 +223,8 @@ status=${PIPESTATUS[0]}
 set -e
 printf 'run_id=%s exit_status=%s\n' "$run_id" "$status" | tee -a "$run_log"
 
-if (( status == 0 )) && [[ $LINEAR_AGENT_ROLE == reviewer ]] && grep -Eq 'AUDIT_(COMPLETE|NO_FINDINGS)' "$run_log"; then
-  touch "$audit_marker"
+if (( status == 0 )) && [[ $LINEAR_AGENT_ROLE == reviewer ]] && grep -Eq '(INQUIRY|AUDIT)_(COMPLETE|NO_FINDINGS)' "$run_log"; then
+  touch "$inquiry_marker"
 fi
 
 dispatch_profile=

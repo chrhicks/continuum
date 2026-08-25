@@ -51,6 +51,9 @@ routing_label=${LINEAR_AGENT_ROUTING_LABEL:-}
 ready_status=${LINEAR_AGENT_READY_STATUS:-Todo}
 review_status=${LINEAR_AGENT_IN_REVIEW_STATUS:-In Review}
 staged_label=${LINEAR_AGENT_STAGED_LABEL:-integration:staged}
+human_label=${LINEAR_AGENT_HUMAN_LABEL:-source:human}
+inquiry_label=${LINEAR_AGENT_INQUIRY_LABEL:-workflow:inquiry}
+campaign_label=${LINEAR_AGENT_CAMPAIGN_LABEL:-workflow:campaign}
 timer=linear-agent-worker@$group-scout.timer
 roles=(scout worker reviewer)
 
@@ -72,7 +75,7 @@ latest_log() {
 latest_marker() {
   local log=$1
   [[ -f $log ]] || return 0
-  grep -E '^(SCOUT_|WORK_|REVIEW_|AUDIT_|DISPATCH_)' "$log" 2>/dev/null | tail -1 || true
+  grep -E '^(SCOUT_|WORK_|REVIEW_|INQUIRY_|AUDIT_|DISPATCH_)' "$log" 2>/dev/null | tail -1 || true
 }
 
 printf 'Linear agent status: %s\n' "$group"
@@ -176,10 +179,15 @@ if (( ! local_only )); then
     if [[ -n $linear_tool ]] && executor call "$linear_tool" "$request" >"$linear_file.raw" 2>/dev/null &&
        jq -e 'if .data.structuredContent then .data.structuredContent else (.data.content[0].text|fromjson) end | .issues' "$linear_file.raw" >"$linear_file" 2>/dev/null; then
       rm -f "$linear_file.raw"
-      jq -r --arg routing "$routing_label" --arg staged "$staged_label" '
-        .[] | select(($routing == "" or (.labels | index($routing))) and (.statusType != "completed" and .statusType != "canceled")) |
+      jq -r --arg routing "$routing_label" --arg staged "$staged_label" --arg human "$human_label" --arg inquiry "$inquiry_label" --arg campaign "$campaign_label" '
+        .[] | select(.statusType != "completed" and .statusType != "canceled") |
         "    \(.id) [\(.status)] priority=\(.priority.name // "None")" +
-        (if (.labels | index($staged)) then " staged" else "" end) + " — \(.title)"' "$linear_file"
+        (if (.labels | index($staged)) then " staged" else "" end) +
+        (if (.labels | index($human)) then " human" else "" end) +
+        (if (.labels | index($inquiry)) then " inquiry" else "" end) +
+        (if (.labels | index($campaign)) then " campaign" else "" end) +
+        (if (.labels | index($routing)) then " routed" else "" end) +
+        " — \(.title)"' "$linear_file"
     else
       rm -f "$linear_file.raw"
       printf '[]\n' >"$linear_file"
@@ -212,10 +220,16 @@ if (( ! local_only )); then
     fi
   done < <(jq -r '.[] | [.number, ((.title + " " + .headRefName) | capture("(?<id>CHI-[0-9]+)"; "i").id // "")] | @tsv' "$github_file" 2>/dev/null || true)
   if [[ $expected == none ]]; then
-    ready=$(jq -r --arg ready "$ready_status" --arg routing "$routing_label" --arg staged "$staged_label" '
-      [.[] | select(.status == $ready and ($routing == "" or (.labels | index($routing))) and ((.labels | index($staged)) == null))] |
+    ready=$(jq -r --arg ready "$ready_status" --arg routing "$routing_label" --arg staged "$staged_label" --arg campaign "$campaign_label" '
+      [.[] | select(.status == $ready and ($routing == "" or (.labels | index($routing))) and ((.labels | index($staged)) == null) and ((.labels | index($campaign)) == null))] |
       sort_by(.priority.value // 99) | .[0].id // empty' "$linear_file")
     [[ -n $ready ]] && expected="worker $ready ($ready_status queue)"
+  fi
+  if [[ $expected == none ]]; then
+    campaign=$(jq -r --arg backlog "${LINEAR_AGENT_BACKLOG_STATUS:-Backlog}" --arg campaign "$campaign_label" '
+      [.[] | select(.status == $backlog and (.labels | index($campaign)))] |
+      sort_by(.priority.value // 99) | .[0].id // empty' "$linear_file")
+    [[ -n $campaign ]] && expected="scout $campaign (campaign coordination)"
   fi
   printf '  expected_next=%s\n' "$expected"
   (( active_count > 1 )) && warning="multiple agent roles are active"

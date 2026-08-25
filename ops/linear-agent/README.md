@@ -8,7 +8,7 @@ Scout (Luna)
 Worker (Sol)
   -> implement one ready issue and open a staging PR
 Reviewer (Terra)
-  -> review and merge to staging, or run one bounded audit
+  -> review and merge to staging, or run one bounded repository inquiry
 ```
 
 Linear coordinates the queue, Continuum records execution context, and GitHub holds source review and integration state. A human promotes the staging branch to `master`.
@@ -17,7 +17,7 @@ Linear coordinates the queue, Continuum records execution context, and GitHub ho
 
 Only the Scout needs a recurring timer. It reports `DISPATCH_WORKER` or `DISPATCH_REVIEWER` when another role should run. The wrapper releases the shared lock and starts that profile through systemd.
 
-All profiles share one lock group, so only one role runs at a time. Every run handles one issue, review, planning action, or bounded audit and then exits. Runs disable ambient Pi extensions and explicitly load only `pi-mcp-adapter`, so globally installed subagent tools cannot create project artifacts or child runs.
+All profiles share one lock group, so only one role runs at a time. Every run handles one execution issue, inquiry, campaign action, or review and then exits. Runs disable ambient Pi extensions and explicitly load only `pi-mcp-adapter`, so globally installed subagent tools cannot create project artifacts or child runs.
 
 The control checkout remains clean. Source work occurs in ignored nested worktrees. `bin/validate-continuum-worktree` validates Continuum changes with temporary HOME, XDG, and workspace state rather than touching the durable control ledger.
 
@@ -97,6 +97,10 @@ systemctl --user disable --now linear-agent-worker@continuum.timer 2>/dev/null |
 
 Worker and Reviewer services are dispatched on demand.
 
+## Work shapes and labels
+
+Execution issues fit one Worker run. `workflow:inquiry` marks audits, discoveries, investigations, research, and design work. `workflow:campaign` marks a durable parent whose complete ledger is advanced one child at a time. `source:human` protects the title and primary intent from Scout rewriting. See [COORDINATION.md](COORDINATION.md) for contracts and finding-disposition policies.
+
 ## Operations
 
 Use one read-only snapshot for normal observation. It combines timer and role state, recent result markers, control/deployment drift, open staging PRs, the Linear queue, and the expected next role:
@@ -119,4 +123,4 @@ systemctl --user disable --now linear-agent-worker@continuum-scout.timer
 find ~/.local/state/linear-agent -path '*/runs/*' -type f -ls
 ```
 
-Repository audits are limited to one bounded area and are considered due once per configured interval. The wrapper records a shared audit marker after `AUDIT_COMPLETE` or `AUDIT_NO_FINDINGS`.
+Scheduled repository inquiries are limited to one bounded area and are considered due once per configured interval. Findings are not numerically capped. The wrapper records a shared inquiry marker after `INQUIRY_COMPLETE` or `INQUIRY_NO_FINDINGS`.

@@ -11,10 +11,12 @@ bash -n \
   "$root/bin/status" \
   "$root/bin/validate-continuum-worktree"
 "$root/bin/status" --help >/dev/null
-grep -q 'open PR plus ready status: this is requested-change work' "$root/prompts/scout.md"
-grep -q 'do not repeat that dispatch' "$root/prompts/scout.md"
-grep -q 'does not apply in PR review mode' "$root/prompts/reviewer.md"
-grep -q 'repository audit mode only; not PR review mode' "$root/bin/run-once"
+grep -q 'has protected intent' "$root/prompts/scout.md"
+grep -q 'Never route a campaign parent to Worker' "$root/prompts/scout.md"
+grep -q 'Do not stop at three or another round number' "$root/prompts/worker.md"
+grep -q 'There is no proposal cap in PR-review mode' "$root/prompts/reviewer.md"
+grep -q 'Scheduled repository inquiry due' "$root/bin/run-once"
+! grep -Rq 'AUDIT_PROPOSAL_LIMIT' "$root"
 set +e
 "$root/bin/validate-continuum-worktree" >/dev/null 2>&1
 helper_status=$?
@@ -88,6 +90,9 @@ LINEAR_AGENT_ASSIGNEE=me
 LINEAR_AGENT_ROUTING_LABEL=agent:effect
 LINEAR_AGENT_SCOUT_LABEL=scout-proposal
 LINEAR_AGENT_STAGED_LABEL=integration:staged
+LINEAR_AGENT_HUMAN_LABEL=source:human
+LINEAR_AGENT_INQUIRY_LABEL=workflow:inquiry
+LINEAR_AGENT_CAMPAIGN_LABEL=workflow:campaign
 LINEAR_AGENT_BACKLOG_STATUS=Backlog
 LINEAR_AGENT_READY_STATUS=Todo
 LINEAR_AGENT_CLAIMED_STATUS=InProgress
