@@ -31,7 +31,7 @@ master reference: e693a594b36166025b21500642093aa8d5ea0da1
 range inventory: origin/master...736dbeca170f2ce5f3a1f51c1a30ed3675c73c85
 range size: 124 files, 9,661 additions, 837 deletions
 current source: 159 TypeScript files, 19,117 lines
-current tests: 39 TypeScript files, 6,179 lines
+current tests: 33 TypeScript files (30 `.test.ts` specs), 6,179 lines
 ```
 
 All source links below are commit-pinned to `736dbeca170f2ce5f3a1f51c1a30ed3675c73c85`. Line ranges therefore remain stable after later staging work.
@@ -636,7 +636,7 @@ The following commands ran from the isolated CHI-114 worktree after installing t
   pass
 
 PATH=/home/chicks/.bun/bin:$PATH bun test
-  pass: 147 tests, 0 failures, 677 assertions across 30 files
+  pass: 147 tests, 0 failures across 30 files
 
 PATH=/home/chicks/.bun/bin:$PATH \
 CONTINUUM_VALIDATION_BUN_BIN=/home/chicks/.bun/bin/bun \
