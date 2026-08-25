@@ -106,7 +106,7 @@ function addListCommand(command: Command): void {
           return runConfiguredBackupOperation(
             workspaceRoot,
             options.wrangler,
-            listBackups(workspaceRoot, options.limit),
+            listBackups(options.limit),
           )
         },
         (manifests) => {
