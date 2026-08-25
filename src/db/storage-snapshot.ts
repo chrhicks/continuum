@@ -4,7 +4,6 @@ import {
   closeSync,
   existsSync,
   fsyncSync,
-  linkSync,
   mkdirSync,
   openSync,
   rmSync,
@@ -18,6 +17,10 @@ import {
   migrationConflict,
   migrationFailure,
 } from './storage-errors'
+import {
+  publishStorageFileWithoutOverwrite,
+  type StoragePublicationOperations,
+} from './storage-publication'
 
 export const StorageFingerprintSchema = Schema.Struct({
   algorithm: Schema.Literal('sha256'),
@@ -52,6 +55,7 @@ export function readDatabaseSnapshot(path: string): DatabaseSnapshot {
 export function publishDatabaseSnapshot(
   path: string,
   snapshot: DatabaseSnapshot,
+  operations?: StoragePublicationOperations,
 ): void {
   mkdirSync(dirname(path), { recursive: true })
   const staging = `${path}.migrate-${process.pid}-${randomUUID()}.tmp`
@@ -63,7 +67,7 @@ export function publishDatabaseSnapshot(
         `Staged SQLite snapshot changed before publish: ${path}`,
       )
     }
-    publishWithoutOverwrite(staging, path, validation)
+    publishWithoutOverwrite(staging, path, validation, operations)
   } catch (cause) {
     if (cause instanceof CanonicalStorageError) throw cause
     throw migrationFailure(
@@ -91,15 +95,17 @@ function publishWithoutOverwrite(
   staging: string,
   destination: string,
   validation: DatabaseSnapshot,
+  operations?: StoragePublicationOperations,
 ): void {
-  try {
-    linkSync(staging, destination)
-  } catch (cause) {
-    if (!existsSync(destination)) throw cause
-    const existing = readDatabaseSnapshot(destination)
-    if (existing.fingerprint.digest !== validation.fingerprint.digest) {
-      throw migrationConflict('staged legacy snapshot', destination)
-    }
+  const result = publishStorageFileWithoutOverwrite(
+    staging,
+    destination,
+    operations,
+  )
+  if (result === 'published') return
+  const existing = readDatabaseSnapshot(destination)
+  if (existing.fingerprint.digest !== validation.fingerprint.digest) {
+    throw migrationConflict('staged legacy snapshot', destination)
   }
 }
 
