@@ -7,11 +7,14 @@ Continuum implements R2 as **one-way, immutable backup with explicit restore**. 
 - The local canonical XDG database is the only live authority.
 - Continuum opens it read-only, runs SQLite integrity validation, and uses SQLite serialization to capture a logical WAL-aware snapshot. It never uploads `continuum.db-wal` or `continuum.db-shm`.
 - Every database and manifest generation is immutable. Uploads are downloaded and SHA-256 verified before the mutable head is published.
-- `head.json` is only an inventory entry point. Backup reads it before and after generation upload and refuses to publish a stale head if it changed. Wrangler does not expose conditional object writes, so this detection does **not** make concurrent writers safe.
+- Before snapshotting, backup creation acquires a fail-fast local lock scoped by the portable project ID and holds it through verified `head.json` publication. Overlap on the same host fails with `BACKUP_CREATION_CONFLICT`; different project IDs use different locks.
+- `head.json` is only an inventory entry point. Backup reads it before and after generation upload and refuses to publish a stale head if it changed. Wrangler does not expose conditional object writes, so the local lock and stale-head check do **not** make cross-machine concurrent writers safe.
 - Restore downloads to local staging, verifies manifest identity, byte length, SHA-256, SQLite `PRAGMA integrity_check`, migration metadata, and required tables, then atomically publishes a new recovery database.
 - Restore never replaces an existing divergent file. Repeating a restore to an identical destination is idempotent; a different destination state is a conflict.
 
 An interrupted generation upload can leave immutable orphan objects. It cannot become the head unless all uploads verify and head publication succeeds. `backup list` walks only the manifest chain reachable from the verified head, so it truthfully excludes incomplete or stale orphan uploads. A missing, corrupt, cyclic, cross-project, or cross-writer head/manifest fails rather than silently selecting another generation.
+
+Normal completion and handled interruption remove the local creation lock. A process kill or host crash can leave `${XDG_DATA_HOME:-$HOME/.local/share}/continuum/backup-locks/<project-id>.lock`. Continuum deliberately does not expire or steal this file based on time: doing so could overlap a slow holder. First confirm that no local `continuum backup create` process for the project remains, then remove only that lock file and rerun `backup create`. The rerun starts with a fresh remote-head read; it never assumes whether the interrupted attempt published, and it never deletes possible orphan objects. Use `backup status` or `backup list` to inspect remote state before rerunning when publication is uncertain.
 
 ## Portable identity and writer contract
 
@@ -164,4 +167,4 @@ Run an upload/list/restore/checksum drill after initial setup and periodically t
 
 ## Deferred bidirectional sync
 
-R2 snapshots cannot merge SQLite pages or task/memory transactions. Safe future bidirectional sync would require immutable event or row-level semantics, device identities, lineage-aware compare-and-swap heads, and an explicit fork/merge UX. It must never choose a winner from wall-clock time. Until such a protocol exists, only one configured writer may advance a project's R2 head; divergent machines remain separate restore candidates under separate portable project IDs.
+R2 snapshots cannot merge SQLite pages or task/memory transactions. Safe future bidirectional sync would require immutable event or row-level semantics, device identities, lineage-aware compare-and-swap heads, and an explicit fork/merge UX. It must never choose a winner from wall-clock time. Until such a protocol exists, only one configured writer may advance a project's R2 head. Continuum prevents overlapping creation for one portable project ID only within a shared local XDG data home; divergent machines remain separate restore candidates under separate portable project IDs and must not create concurrently.

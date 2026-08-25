@@ -7,7 +7,7 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { hostname, tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import {
   createFakeWrangler,
@@ -24,6 +24,7 @@ const roots: string[] = []
 afterEach(() => {
   for (const root of roots.splice(0))
     rmSync(root, { recursive: true, force: true })
+  rmSync(backupCreationLockPath(), { force: true })
 })
 
 describe('backup CLI boundaries', () => {
@@ -63,6 +64,25 @@ describe('backup CLI boundaries', () => {
       ok: false,
       error: { code: 'BACKUP_DECODE_ERROR' },
     })
+  })
+
+  test('renders local creation contention with a stable code', () => {
+    const workspace = createWorkspace()
+    configureWorkspace(workspace)
+    writeActiveBackupLock()
+
+    const jsonResult = runCli(workspace, ['backup', 'create'])
+    expect(jsonResult.status).toBe(1)
+    expect(JSON.parse(jsonResult.stdout)).toMatchObject({
+      ok: false,
+      error: { code: 'BACKUP_CREATION_CONFLICT' },
+    })
+
+    const humanResult = runCli(workspace, ['backup', 'create'], {
+      json: false,
+    })
+    expect(humanResult.status).toBe(1)
+    expect(humanResult.stderr).toContain('BACKUP_CREATION_CONFLICT:')
   })
 
   test('lists an empty remote through human and JSON output', () => {
@@ -203,6 +223,33 @@ function configureWorkspace(workspace: string): void {
     '22222222-2222-4222-8222-222222222222',
   ])
   expect(result.status).toBe(0)
+}
+
+function backupCreationLockPath(): string {
+  const dataHome = process.env.XDG_DATA_HOME
+  if (!dataHome) throw new Error('test XDG_DATA_HOME is missing')
+  return join(
+    dataHome,
+    'continuum',
+    'backup-locks',
+    '11111111-1111-4111-8111-111111111111.lock',
+  )
+}
+
+function writeActiveBackupLock(): void {
+  const path = backupCreationLockPath()
+  mkdirSync(dirname(path), { recursive: true })
+  writeFileSync(
+    path,
+    `${JSON.stringify({
+      version: 1,
+      token: 'active-cli-test-holder',
+      pid: process.pid,
+      hostname: hostname(),
+      createdAt: '2026-01-01T00:00:00.000Z',
+    })}\n`,
+    { mode: 0o600, flag: 'wx' },
+  )
 }
 
 function cliEnvironment(
