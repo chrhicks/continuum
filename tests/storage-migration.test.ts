@@ -2,10 +2,13 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { Database } from 'bun:sqlite'
 import { createHash } from 'node:crypto'
 import {
+  closeSync,
   cpSync,
   existsSync,
+  linkSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   readFileSync,
   renameSync,
   rmSync,
@@ -18,6 +21,7 @@ import { migrateDb } from '../src/db/migrate'
 import { canonicalDbFilePath } from '../src/db/paths'
 import { workspaceClaimPath } from '../src/db/workspace-registry'
 import { prepareInitializedSnapshot } from '../src/db/storage-lineage'
+import type { StoragePublicationOperations } from '../src/db/storage-publication'
 import {
   publishDatabaseSnapshot,
   readDatabaseSnapshot,
@@ -76,6 +80,36 @@ describe('XDG canonical database migration', () => {
     expect(memoryContents(canonical)).toContain('new XDG-only memory')
     expect(memoryContents(fixture.legacyDb)).not.toContain(
       'new XDG-only memory',
+    )
+  })
+
+  test('keeps an authoritative database after directory sync failure', async () => {
+    const fixture = await legacyFixture()
+    const source = readDatabaseSnapshot(fixture.legacyDb)
+    const canonical = canonicalDbFilePath(fixture.workspace, {
+      dataHome: fixture.dataHome,
+    })
+    const operations: StoragePublicationOperations = {
+      link: linkSync,
+      exists: existsSync,
+      openDirectory: (path) => openSync(path, 'r'),
+      sync: () => {
+        throw new Error('directory sync failed')
+      },
+      close: closeSync,
+    }
+
+    expect(() =>
+      publishDatabaseSnapshot(canonical, source, operations),
+    ).toThrow('Unable to publish canonical database')
+    expect(existsSync(canonical)).toBe(true)
+    expect(readDatabaseSnapshot(canonical).fingerprint).toEqual(
+      source.fingerprint,
+    )
+
+    publishDatabaseSnapshot(canonical, source)
+    expect(readDatabaseSnapshot(canonical).fingerprint).toEqual(
+      source.fingerprint,
     )
   })
 

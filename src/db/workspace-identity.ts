@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import {
   existsSync,
-  linkSync,
   mkdirSync,
   readFileSync,
   renameSync,
@@ -10,6 +9,10 @@ import {
 import { dirname, join } from 'node:path'
 import { Schema } from 'effect'
 import { migrationFailure } from './storage-errors'
+import {
+  publishStorageFileWithoutOverwrite,
+  type StoragePublicationOperations,
+} from './storage-publication'
 import { writeDurably } from './storage-snapshot'
 
 const WORKSPACE_IDENTITY_FILE = 'workspace.json'
@@ -47,7 +50,10 @@ export function readWorkspaceIdentity(
   }
 }
 
-export function ensureWorkspaceIdentity(directory: string): WorkspaceIdentity {
+export function ensureWorkspaceIdentity(
+  directory: string,
+  operations?: StoragePublicationOperations,
+): WorkspaceIdentity {
   const existing = readWorkspaceIdentity(directory)
   if (existing) return existing
 
@@ -57,17 +63,13 @@ export function ensureWorkspaceIdentity(directory: string): WorkspaceIdentity {
   const staging = `${path}.${process.pid}-${randomUUID()}.tmp`
   writeDurably(staging, serializeIdentity(identity))
   try {
-    try {
-      linkSync(staging, path)
-      return identity
-    } catch (cause) {
-      if (!existsSync(path)) throw cause
-      const winner = readWorkspaceIdentity(directory)
-      if (!winner) {
-        throw migrationFailure(`Workspace identity is unreadable: ${path}`)
-      }
-      return winner
+    const result = publishStorageFileWithoutOverwrite(staging, path, operations)
+    if (result === 'published') return identity
+    const winner = readWorkspaceIdentity(directory)
+    if (!winner) {
+      throw migrationFailure(`Workspace identity is unreadable: ${path}`)
     }
+    return winner
   } finally {
     if (existsSync(staging)) unlinkSync(staging)
   }

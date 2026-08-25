@@ -1,15 +1,13 @@
 import { randomUUID } from 'node:crypto'
-import {
-  existsSync,
-  linkSync,
-  mkdirSync,
-  readFileSync,
-  unlinkSync,
-} from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, unlinkSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { Schema } from 'effect'
 import { normalizedWorkspacePath, projectStorageId } from './paths'
 import { CanonicalStorageError, migrationFailure } from './storage-errors'
+import {
+  publishStorageFileWithoutOverwrite,
+  type StoragePublicationOperations,
+} from './storage-publication'
 import {
   StorageFingerprintSchema,
   type StorageFingerprint,
@@ -62,15 +60,14 @@ export function createMigrationReceipt(
 export function publishMigrationReceipt(
   path: string,
   receipt: MigrationReceipt,
+  operations?: StoragePublicationOperations,
 ): void {
   mkdirSync(dirname(path), { recursive: true })
   const staging = `${path}.${process.pid}-${randomUUID()}.tmp`
   writeDurably(staging, `${JSON.stringify(receipt, null, 2)}\n`)
   try {
-    try {
-      linkSync(staging, path)
-    } catch (cause) {
-      if (!existsSync(path)) throw cause
+    const result = publishStorageFileWithoutOverwrite(staging, path, operations)
+    if (result === 'existing') {
       assertEquivalentReceipt(readMigrationReceipt(path), receipt)
     }
   } finally {
