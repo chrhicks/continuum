@@ -102,12 +102,19 @@ for role in "${roles[@]}"; do
     seconds=$(( $(date +%s) - $(stat -c %Y "$log") ))
     log_age=$(age "$seconds")
     exit_status=$(grep -Eo 'exit_status=[0-9]+' "$log" 2>/dev/null | tail -1 | cut -d= -f2 || true)
-    [[ -n $exit_status && $exit_status != 0 ]] && latest_failure="$profile exit=$exit_status"
   else
     log_age=none
-    exit_status=none
+    exit_status=
   fi
-  printf '  %-8s state=%-10s result=%-9s exit=%-4s log_age=%s\n' "$role" "$active" "$result" "${exit_status:-running}" "$log_age"
+  if [[ $active == active || $active == activating ]]; then
+    display_exit=running
+  else
+    display_exit=${exit_status:-${status:-unknown}}
+  fi
+  if [[ $active == failed || ( -n $exit_status && $exit_status != 0 ) ]]; then
+    latest_failure="$profile state=$active result=$result exit=$display_exit"
+  fi
+  printf '  %-8s state=%-10s result=%-9s exit=%-7s log_age=%s\n' "$role" "$active" "$result" "$display_exit" "$log_age"
   [[ -n $started ]] && printf '           started=%s\n' "$started"
   [[ -n $marker ]] && printf '           marker=%s\n' "$marker"
 done

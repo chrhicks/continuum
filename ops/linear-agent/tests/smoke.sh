@@ -33,6 +33,13 @@ PATH="$tmp/home/bin:$PATH" \
 [[ -x $tmp/home/.local/libexec/linear-agent/run-once ]]
 [[ -x $tmp/home/.local/bin/linear-agent-status ]]
 [[ -f $tmp/data/linear-agent/reviewer.md ]]
+runner_inode=$(stat -c %i "$tmp/home/.local/libexec/linear-agent/run-once")
+HOME="$tmp/home" \
+XDG_CONFIG_HOME="$tmp/config" \
+XDG_DATA_HOME="$tmp/data" \
+PATH="$tmp/home/bin:$PATH" \
+  "$root/bin/install-user" >/dev/null
+[[ $(stat -c %i "$tmp/home/.local/libexec/linear-agent/run-once") != "$runner_inode" ]]
 HOME="$tmp/home" \
 XDG_CONFIG_HOME="$tmp/config" \
 XDG_DATA_HOME="$tmp/data" \
