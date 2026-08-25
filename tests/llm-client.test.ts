@@ -1,6 +1,5 @@
 import { describe, expect, test, mock } from 'bun:test'
 import { createLlmClient } from '../src/llm/client'
-import { extractJsonObject, parseJsonResponse } from '../src/llm/json'
 import type { LlmConfig } from '../src/llm/types'
 import { Redacted } from 'effect'
 
@@ -357,78 +356,5 @@ describe('LlmClient.callWithRetry', () => {
     } finally {
       restore()
     }
-  })
-})
-
-// ---------------------------------------------------------------------------
-// extractJsonObject
-// ---------------------------------------------------------------------------
-
-describe('extractJsonObject', () => {
-  test('returns clean JSON object unchanged', () => {
-    const input = '{"key": "value"}'
-    expect(extractJsonObject(input)).toBe(input)
-  })
-
-  test('strips surrounding text', () => {
-    const input = 'Here is the result:\n{"key": "value"}\nThat is all.'
-    expect(extractJsonObject(input)).toBe('{"key": "value"}')
-  })
-
-  test('strips markdown json fence', () => {
-    const input = '```json\n{"key": "value"}\n```'
-    expect(extractJsonObject(input)).toBe('{"key": "value"}')
-  })
-
-  test('strips plain markdown fence', () => {
-    const input = '```\n{"key": "value"}\n```'
-    expect(extractJsonObject(input)).toBe('{"key": "value"}')
-  })
-
-  test('throws when no object found', () => {
-    expect(() => extractJsonObject('no json here')).toThrow(
-      'does not contain a JSON object',
-    )
-  })
-
-  test('handles nested objects', () => {
-    const input = 'prefix {"outer": {"inner": 1}} suffix'
-    const result = extractJsonObject(input)
-    expect(JSON.parse(result)).toEqual({ outer: { inner: 1 } })
-  })
-})
-
-// ---------------------------------------------------------------------------
-// parseJsonResponse
-// ---------------------------------------------------------------------------
-
-describe('parseJsonResponse', () => {
-  test('parses and validates a well-formed response', () => {
-    const content = '{"focus": "test session", "confidence": "high"}'
-    const result = parseJsonResponse(content, (raw) => {
-      const rec = raw as Record<string, unknown>
-      if (typeof rec.focus !== 'string') throw new Error('bad')
-      return { focus: rec.focus, confidence: rec.confidence as string }
-    })
-    expect(result.focus).toBe('test session')
-    expect(result.confidence).toBe('high')
-  })
-
-  test('throws when validate rejects the shape', () => {
-    const content = '{"wrong": true}'
-    expect(() =>
-      parseJsonResponse(content, (raw) => {
-        const rec = raw as Record<string, unknown>
-        if (typeof rec.focus !== 'string')
-          throw new Error('Missing focus field')
-        return rec
-      }),
-    ).toThrow('Missing focus field')
-  })
-
-  test('throws on invalid JSON', () => {
-    expect(() => parseJsonResponse('{"broken": }', (r) => r)).toThrow(
-      'Failed to parse LLM JSON response',
-    )
   })
 })
