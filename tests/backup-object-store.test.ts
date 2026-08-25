@@ -11,10 +11,17 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { Effect, type Layer } from 'effect'
 import {
+  BackupConfiguration,
+  configureBackup,
+  readBackupConfig,
+} from '../src/backup/config'
+import { encodeJson } from '../src/backup/contracts'
+import {
   BackupObjectStore,
   type BackupObjectStoreService,
   wranglerObjectStoreLayer,
 } from '../src/backup/object-store'
+import { backupRuntimeLayer } from '../src/backup/runtime'
 import {
   createFakeWrangler,
   FAKE_WRANGLER_TOKEN,
@@ -32,6 +39,56 @@ afterEach(() => {
 })
 
 describe('Wrangler R2 object store', () => {
+  test('acquires one config snapshot for identity and adapter bucket', async () => {
+    const root = createRoot()
+    const workspace = join(root, 'workspace')
+    const original = await Effect.runPromise(
+      configureBackup({
+        workspaceRoot: workspace,
+        bucket,
+        projectId: '11111111-1111-4111-8111-111111111111',
+        writerId: '22222222-2222-4222-8222-222222222222',
+      }),
+    )
+    const fake = createFakeWrangler(root)
+    const layer = backupRuntimeLayer({
+      workspaceRoot: workspace,
+      executable: fake.executable,
+      environment: fakeWranglerEnvironment(fake, 'missing'),
+    })
+
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const config = yield* BackupConfiguration
+        yield* Effect.sync(() =>
+          writeFileSync(
+            join(workspace, '.continuum', 'r2-backup.json'),
+            encodeJson({
+              ...original,
+              bucket: 'changed-continuum-bucket',
+              projectId: '33333333-3333-4333-8333-333333333333',
+              writerId: '44444444-4444-4444-8444-444444444444',
+            }),
+          ),
+        )
+        const store = yield* BackupObjectStore
+        const object = yield* store.get('projects/original/head.json')
+        return { config, object }
+      }).pipe(Effect.provide(layer)),
+    )
+
+    expect(result.config).toEqual(original)
+    expect(result.object).toBeNull()
+    expect(readFakeWranglerInvocation(fake).args[3]).toBe(
+      `${bucket}/projects/original/head.json`,
+    )
+    expect(await Effect.runPromise(readBackupConfig(workspace))).toMatchObject({
+      bucket: 'changed-continuum-bucket',
+      projectId: '33333333-3333-4333-8333-333333333333',
+      writerId: '44444444-4444-4444-8444-444444444444',
+    })
+  })
+
   test('downloads through exact Wrangler argv and a controlled environment', async () => {
     const root = createRoot()
     const fake = createFakeWrangler(root)

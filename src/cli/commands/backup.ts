@@ -1,7 +1,8 @@
 import { Command } from 'commander'
 import { Effect, Result } from 'effect'
-import { configureBackup, readBackupConfig } from '../../backup/config'
-import { wranglerObjectStoreLayer } from '../../backup/object-store'
+import { BackupConfiguration, configureBackup } from '../../backup/config'
+import { BackupObjectStore } from '../../backup/object-store'
+import { backupRuntimeLayer } from '../../backup/runtime'
 import { createBackup, listBackups, restoreBackup } from '../../backup/service'
 import { getBackupStatus, type BackupStatus } from '../../backup/status'
 import { resolveWorkspaceContext } from '../../workspace/resolve'
@@ -55,16 +56,10 @@ function addStatusCommand(command: Command): void {
         actionCommand,
         async () => {
           const workspaceRoot = resolveWorkspaceContext().workspaceRoot
-          const config = await runEffect(readBackupConfig(workspaceRoot))
-          return runEffect(
-            getBackupStatus(workspaceRoot).pipe(
-              Effect.provide(
-                wranglerObjectStoreLayer({
-                  bucket: config.bucket,
-                  executable: options.wrangler,
-                }),
-              ),
-            ),
+          return runConfiguredBackupOperation(
+            workspaceRoot,
+            options.wrangler,
+            getBackupStatus(workspaceRoot),
           )
         },
         renderBackupStatus,
@@ -82,16 +77,10 @@ function addCreateCommand(command: Command): void {
         actionCommand,
         async () => {
           const workspaceRoot = resolveWorkspaceContext().workspaceRoot
-          const config = await runEffect(readBackupConfig(workspaceRoot))
-          return runEffect(
-            createBackup(workspaceRoot).pipe(
-              Effect.provide(
-                wranglerObjectStoreLayer({
-                  bucket: config.bucket,
-                  executable: options.wrangler,
-                }),
-              ),
-            ),
+          return runConfiguredBackupOperation(
+            workspaceRoot,
+            options.wrangler,
+            createBackup(workspaceRoot),
           )
         },
         (result) => {
@@ -114,16 +103,10 @@ function addListCommand(command: Command): void {
         actionCommand,
         async () => {
           const workspaceRoot = resolveWorkspaceContext().workspaceRoot
-          const config = await runEffect(readBackupConfig(workspaceRoot))
-          return runEffect(
-            listBackups(workspaceRoot, options.limit).pipe(
-              Effect.provide(
-                wranglerObjectStoreLayer({
-                  bucket: config.bucket,
-                  executable: options.wrangler,
-                }),
-              ),
-            ),
+          return runConfiguredBackupOperation(
+            workspaceRoot,
+            options.wrangler,
+            listBackups(workspaceRoot, options.limit),
           )
         },
         (manifests) => {
@@ -156,19 +139,13 @@ function addRestoreCommand(command: Command): void {
         actionCommand,
         async () => {
           const workspaceRoot = resolveWorkspaceContext().workspaceRoot
-          const config = await runEffect(readBackupConfig(workspaceRoot))
-          return runEffect(
+          return runConfiguredBackupOperation(
+            workspaceRoot,
+            options.wrangler,
             restoreBackup(workspaceRoot, {
               generation: options.generation,
               outputPath: options.output,
-            }).pipe(
-              Effect.provide(
-                wranglerObjectStoreLayer({
-                  bucket: config.bucket,
-                  executable: options.wrangler,
-                }),
-              ),
-            ),
+            }),
           )
         },
         (result) => {
@@ -195,6 +172,18 @@ function renderBackupStatus(status: BackupStatus): void {
   } else {
     console.log(`Remote: unavailable (${status.errorCode})`)
   }
+}
+
+function runConfiguredBackupOperation<A, E>(
+  workspaceRoot: string,
+  executable: string | undefined,
+  operation: Effect.Effect<A, E, BackupConfiguration | BackupObjectStore>,
+): Promise<A> {
+  const runtime = backupRuntimeLayer({
+    workspaceRoot,
+    ...(executable === undefined ? {} : { executable }),
+  })
+  return runEffect(operation.pipe(Effect.provide(runtime)))
 }
 
 async function runEffect<A, E>(effect: Effect.Effect<A, E>): Promise<A> {
