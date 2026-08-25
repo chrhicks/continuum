@@ -25,12 +25,7 @@ export async function handleSearch(
     access,
     Effect.gen(function* () {
       const runtime = yield* MemoryRuntime
-      return yield* searchMemoryEvidence(
-        runtime.dbPath,
-        input.query,
-        input,
-        runtime.handle,
-      )
+      return yield* searchMemoryEvidence(runtime, input.query, input)
     }),
     (matches) => {
       if (matches.length === 0) {

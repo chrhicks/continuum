@@ -1,4 +1,4 @@
-import type { DbHandle } from '../../db/client'
+import type { MemoryResourceOwner } from './resource-owner'
 
 export type RecallStatus = {
   sources: number
@@ -6,8 +6,8 @@ export type RecallStatus = {
   summaries: number
 }
 
-export function getRecallStatus(handle: DbHandle): RecallStatus {
-  return handle.sqlite
+export function getRecallStatus(owner: MemoryResourceOwner): RecallStatus {
+  return owner.handle.sqlite
     .query(
       `SELECT
        (SELECT COUNT(*) FROM memory_recall_sources) sources,

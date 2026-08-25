@@ -6,6 +6,8 @@ import { join } from 'node:path'
 import { importCanonicalOpencodeRecall } from '../src/memory/application/recall-import'
 import { extractOpencodeSessions } from '../src/memory/opencode/extract'
 import { Effect, Redacted } from 'effect'
+import { getDbClientByPath } from '../src/db/client'
+import { memoryResourceOwner } from '../src/memory/application/resource-owner'
 
 const roots: string[] = []
 afterEach(() => {
@@ -35,11 +37,18 @@ describe('real OpenCode SQLite extraction', () => {
       'Evidence from session-newest',
     )
 
+    const continuumDbPath = join(root, 'continuum.db')
+    const owner = memoryResourceOwner(
+      {
+        workspaceRoot: repoPath,
+        memoryDir: join(repoPath, '.continuum', 'memory'),
+        dbPath: continuumDbPath,
+      },
+      getDbClientByPath(continuumDbPath),
+    )
     const imported = await Effect.runPromise(
-      importCanonicalOpencodeRecall({
+      importCanonicalOpencodeRecall(owner, {
         dbPath,
-        repoPath,
-        continuumDbPath: join(root, 'continuum.db'),
         afterDate: new Date('2026-07-10T00:00:00.000Z'),
         limit: 1,
         dryRun: true,

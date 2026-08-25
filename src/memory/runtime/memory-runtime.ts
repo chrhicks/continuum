@@ -1,15 +1,16 @@
 import { Context, Effect, Layer } from 'effect'
-import { createClient, type DbHandle } from '../../db/client'
+import { createClient } from '../../db/client'
 import { runMigrations } from '../../db/migrate'
 import { DatabaseMigrationError, DatabaseOpenError } from '../domain/errors'
+import {
+  memoryResourceOwner,
+  type MemoryResourceOwner,
+  type MemoryResourcePaths,
+} from '../application/resource-owner'
 
-export type MemoryRuntimeConfig = {
-  workspaceRoot: string
-  memoryDir: string
-  dbPath: string
-}
+export type MemoryRuntimeConfig = MemoryResourcePaths
 
-export type MemoryRuntimeService = MemoryRuntimeConfig & { handle: DbHandle }
+export type MemoryRuntimeService = MemoryResourceOwner
 
 export class MemoryRuntime extends Context.Service<
   MemoryRuntime,
@@ -41,5 +42,5 @@ const openMemoryDatabase = Effect.fn('MemoryRuntime.open')(function* (
       return new DatabaseMigrationError({ path: config.dbPath, cause })
     },
   })
-  return MemoryRuntime.of({ ...config, handle })
+  return MemoryRuntime.of(memoryResourceOwner(config, handle))
 })

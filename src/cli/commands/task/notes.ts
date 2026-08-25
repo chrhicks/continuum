@@ -1,12 +1,13 @@
 import { Command } from 'commander'
 import continuum from '../../../sdk'
-import { join } from 'node:path'
 import { appendMemory } from '../../../memory/application/append'
 import { getWorkspaceContext } from '../../../memory/paths'
 import { readInput, runCommand } from '../../io'
 import { parseNoteKind, parseNoteSource } from './parse'
 import { formatDecision, formatDiscovery } from './render'
 import { Effect } from 'effect'
+import { getDbClientByPath } from '../../../db/client'
+import { memoryResourceOwner } from '../../../memory/application/resource-owner'
 
 type TaskNoteAddOptions = {
   kind?: string
@@ -146,10 +147,16 @@ async function appendTaskMemory(
   taskId: string,
 ): Promise<void> {
   const context = getWorkspaceContext()
-  await Effect.runPromise(
-    appendMemory({
+  const owner = memoryResourceOwner(
+    {
+      workspaceRoot: context.workspaceRoot,
+      memoryDir: context.memoryDir,
       dbPath: context.continuumDbPath,
-      nowPath: join(context.memoryDir, 'NOW.md'),
+    },
+    getDbClientByPath(context.continuumDbPath),
+  )
+  await Effect.runPromise(
+    appendMemory(owner, {
       input: {
         kind: 'agent',
         content,

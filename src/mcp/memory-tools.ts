@@ -1,32 +1,21 @@
 import { isAbsolute } from 'node:path'
-import { getDbClientByPath, getReadOnlyDbClientByPath } from '../db/client'
 import { consolidateMemory } from '../memory/application/consolidate'
 import { importCanonicalOpencodeRecall } from '../memory/application/recall-import'
 import { getRecallStatus } from '../memory/application/recall-status'
-import { makeConsolidationRepository } from '../memory/repository/consolidation-repository'
-import { makeJournalRepository } from '../memory/repository/journal-repository'
-import { makeRecallRepository } from '../memory/repository/recall-repository'
-import { resolveMcpWorkspace, resolveReadOnlyMcpWorkspace } from './tools'
+import { resolveMcpMemoryOwner, resolveReadOnlyMcpMemoryOwner } from './tools'
 import { runMcpEffect } from './result'
 
 export async function consolidateMcpMemory(input: {
   workspace: string
   dryRun?: boolean
 }): Promise<Record<string, unknown>> {
-  const context = resolveMcpWorkspace(input.workspace)
-  const handle = getDbClientByPath(context.dbPath)
+  const owner = resolveMcpMemoryOwner(input.workspace)
   const result = await runMcpEffect(
-    consolidateMemory({
-      dbPath: context.dbPath,
-      memoryDir: context.memoryDir,
-      dryRun: input.dryRun,
-      journal: makeJournalRepository(handle),
-      consolidations: makeConsolidationRepository(handle),
-    }),
+    consolidateMemory(owner, { dryRun: input.dryRun }),
   )
   if (result.status === 'conflict') {
     return {
-      workspace: context.workspaceRoot,
+      workspace: owner.workspaceRoot,
       status: result.status,
       dryRun: result.dryRun,
       expectedBoundary: result.error.expectedBoundary,
@@ -35,7 +24,7 @@ export async function consolidateMcpMemory(input: {
   }
   if (result.status === 'completed') {
     return {
-      workspace: context.workspaceRoot,
+      workspace: owner.workspaceRoot,
       status: result.status,
       dryRun: result.dryRun,
       consolidation: result.consolidation,
@@ -43,7 +32,7 @@ export async function consolidateMcpMemory(input: {
       projectionStale: result.projection.stale,
     }
   }
-  return { workspace: context.workspaceRoot, ...result }
+  return { workspace: owner.workspaceRoot, ...result }
 }
 
 export function getMcpRecallStatus(input: { workspace: string }): {
@@ -52,10 +41,10 @@ export function getMcpRecallStatus(input: { workspace: string }): {
   rawMessages: number
   derivedSummaries: number
 } {
-  const context = resolveReadOnlyMcpWorkspace(input.workspace)
-  const status = getRecallStatus(getReadOnlyDbClientByPath(context.dbPath))
+  const owner = resolveReadOnlyMcpMemoryOwner(input.workspace)
+  const status = getRecallStatus(owner)
   return {
-    workspace: context.workspaceRoot,
+    workspace: owner.workspaceRoot,
     sources: status.sources,
     rawMessages: status.messages,
     derivedSummaries: status.summaries,
@@ -71,27 +60,22 @@ export async function importMcpRecall(input: {
   limit?: number
   dryRun?: boolean
 }): Promise<Record<string, unknown>> {
-  const context = resolveMcpWorkspace(input.workspace)
+  const owner = resolveMcpMemoryOwner(input.workspace)
   if (input.sourceDb && !isAbsolute(input.sourceDb)) {
     throw new Error('sourceDb must be an absolute path')
   }
   const afterDate = input.after ? parseDate(input.after) : undefined
-  const handle = getDbClientByPath(context.dbPath)
   const result = await runMcpEffect(
-    importCanonicalOpencodeRecall({
-      continuumDbPath: context.dbPath,
-      memoryDir: context.memoryDir,
+    importCanonicalOpencodeRecall(owner, {
       dbPath: input.sourceDb,
-      repoPath: context.workspaceRoot,
       projectId: input.projectId,
       sessionId: input.sessionId,
       afterDate,
       limit: input.limit,
       dryRun: input.dryRun,
-      repository: makeRecallRepository(handle),
     }),
   )
-  return { workspace: context.workspaceRoot, ...result }
+  return { workspace: owner.workspaceRoot, ...result }
 }
 
 function parseDate(value: string): Date {

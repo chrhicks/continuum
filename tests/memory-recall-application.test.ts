@@ -9,6 +9,10 @@ import { importCanonicalOpencodeRecall } from '../src/memory/application/recall-
 import { makeRecallRepository } from '../src/memory/repository/recall-repository'
 import type { OpencodeExtractionResult } from '../src/memory/opencode/extract'
 import type { RecallSummaryResult } from '../src/memory/opencode/summary-schema'
+import {
+  memoryResourceOwner,
+  type MemoryResourceOwner,
+} from '../src/memory/application/resource-owner'
 
 const config = {
   apiUrl: 'test',
@@ -104,16 +108,22 @@ function extraction(text: string): OpencodeExtractionResult {
 
 async function withRepository(
   run: (
+    owner: MemoryResourceOwner,
     repository: ReturnType<typeof makeRecallRepository>,
     sqlite: Database,
   ) => Promise<void>,
 ): Promise<void> {
-  const root = mkdtempSync(join(tmpdir(), 'continuum-recall-'))
+  const workspaceRoot = mkdtempSync(join(tmpdir(), 'continuum-recall-'))
   try {
-    const handle = getDbClientByPath(join(root, 'continuum.db'))
-    await run(makeRecallRepository(handle), handle.sqlite)
+    const dbPath = join(workspaceRoot, 'continuum.db')
+    const handle = getDbClientByPath(dbPath)
+    const owner = memoryResourceOwner(
+      { workspaceRoot, memoryDir: join(workspaceRoot, 'memory'), dbPath },
+      handle,
+    )
+    await run(owner, makeRecallRepository(handle), handle.sqlite)
   } finally {
-    rmSync(root, { recursive: true, force: true })
+    rmSync(workspaceRoot, { recursive: true, force: true })
   }
 }
 
@@ -125,10 +135,9 @@ function taggedErrorName(error: unknown): string | undefined {
 
 describe('canonical recall application', () => {
   test('unchanged reimport skips summarization and retains provenance', async () =>
-    withRepository(async (repository) => {
+    withRepository(async (owner, repository) => {
       let calls = 0
       const options = {
-        repository,
         summaryConfig: config,
         extract: () => extraction('exact user evidence'),
         summarize: async () => {
@@ -137,10 +146,10 @@ describe('canonical recall application', () => {
         },
       }
       const first = await Effect.runPromise(
-        importCanonicalOpencodeRecall(options),
+        importCanonicalOpencodeRecall(owner, options),
       )
       const second = await Effect.runPromise(
-        importCanonicalOpencodeRecall(options),
+        importCanonicalOpencodeRecall(owner, options),
       )
       expect(first.imported).toBe(1)
       expect(second.skippedExisting).toBe(1)
@@ -158,18 +167,16 @@ describe('canonical recall application', () => {
     }))
 
   test('changed sessions atomically refresh messages and summary', async () =>
-    withRepository(async (repository, sqlite) => {
+    withRepository(async (owner, repository, sqlite) => {
       await Effect.runPromise(
-        importCanonicalOpencodeRecall({
-          repository,
+        importCanonicalOpencodeRecall(owner, {
           summaryConfig: config,
           extract: () => extraction('old raw'),
           summarize: async () => summary('old summary'),
         }),
       )
       const changed = await Effect.runPromise(
-        importCanonicalOpencodeRecall({
-          repository,
+        importCanonicalOpencodeRecall(owner, {
           summaryConfig: config,
           extract: () => extraction('new raw'),
           summarize: async () => summary('new summary'),
@@ -192,10 +199,9 @@ describe('canonical recall application', () => {
     }))
 
   test('failed changed summary leaves canonical rows untouched', async () =>
-    withRepository(async (repository) => {
+    withRepository(async (owner, repository) => {
       await Effect.runPromise(
-        importCanonicalOpencodeRecall({
-          repository,
+        importCanonicalOpencodeRecall(owner, {
           summaryConfig: config,
           extract: () => extraction('stable raw'),
           summarize: async () => summary('stable summary'),
@@ -203,8 +209,7 @@ describe('canonical recall application', () => {
       )
       const failure = await Effect.runPromise(
         Effect.result(
-          importCanonicalOpencodeRecall({
-            repository,
+          importCanonicalOpencodeRecall(owner, {
             summaryConfig: config,
             extract: () => extraction('interrupted raw'),
             summarize: async () => {
@@ -224,10 +229,9 @@ describe('canonical recall application', () => {
     }))
 
   test('search rows preserve exact raw and derived summary evidence', async () =>
-    withRepository(async (repository) => {
+    withRepository(async (owner, repository) => {
       await Effect.runPromise(
-        importCanonicalOpencodeRecall({
-          repository,
+        importCanonicalOpencodeRecall(owner, {
           summaryConfig: config,
           extract: () => extraction('needle exact/raw'),
           summarize: async () => summary('needle summary'),

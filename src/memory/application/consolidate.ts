@@ -1,5 +1,4 @@
 import { Effect, Result } from 'effect'
-import { getDbClientByPath } from '../../db/client'
 import type { MemoryConfig } from '../config'
 import { loadMemoryConfig } from '../config'
 import type { JournalEntry } from '../domain/journal-entry'
@@ -19,6 +18,7 @@ import {
   makeJournalRepository,
   type JournalRepositoryService,
 } from '../repository/journal-repository'
+import type { MemoryResourceOwner } from './resource-owner'
 import { publishMemoryProjections } from '../projection/consolidation-projections'
 import { withProjectionPublicationLock } from '../projection/publication-lock'
 
@@ -46,23 +46,22 @@ export type ConsolidateMemoryResult =
     }
 
 export type ConsolidateMemoryOptions = {
-  dbPath: string
-  memoryDir: string
   dryRun?: boolean
-  journal?: JournalRepositoryService
-  consolidations?: ConsolidationRepositoryService
+}
+
+export type ConsolidateMemoryDependencies = {
   config?: MemoryConfig
   summarize?: (entries: readonly JournalEntry[]) => Promise<MemorySummary>
   publish?: typeof publishMemoryProjections
 }
 
 export function consolidateMemory(
-  options: ConsolidateMemoryOptions,
+  owner: MemoryResourceOwner,
+  options: ConsolidateMemoryOptions = {},
+  dependencies: ConsolidateMemoryDependencies = {},
 ): Effect.Effect<ConsolidateMemoryResult, unknown> {
-  const handle = getDbClientByPath(options.dbPath)
-  const journal = options.journal ?? makeJournalRepository(handle)
-  const consolidations =
-    options.consolidations ?? makeConsolidationRepository(handle)
+  const journal = makeJournalRepository(owner.handle)
+  const consolidations = makeConsolidationRepository(owner.handle)
   return Effect.gen(function* () {
     const boundary = (yield* journal.latestBoundary()) ?? 0
     const snapshot = yield* journal.maxSequence()
@@ -76,9 +75,9 @@ export function consolidateMemory(
     if (!first || !last)
       return { status: 'no-pending', dryRun: options.dryRun ?? false } as const
     const config =
-      options.config ?? (yield* loadMemoryConfig(options.memoryDir))
+      dependencies.config ?? (yield* loadMemoryConfig(owner.memoryDir))
     const summary = yield* Effect.tryPromise({
-      try: () => (options.summarize ?? defaultSummarizer(config))(entries),
+      try: () => (dependencies.summarize ?? defaultSummarizer(config))(entries),
       catch: (cause) => new ConsolidationSummarizationError({ cause }),
     })
     const firstSequence = first.sequence
@@ -115,9 +114,9 @@ export function consolidateMemory(
       regenerateProjections({
         journal,
         consolidations,
-        memoryDir: options.memoryDir,
+        memoryDir: owner.memoryDir,
         config,
-        publish: options.publish ?? publishMemoryProjections,
+        publish: dependencies.publish ?? publishMemoryProjections,
       }),
     )
     return {
