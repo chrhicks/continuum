@@ -16,6 +16,109 @@ helper_status=$?
 set -e
 [[ $helper_status == 64 ]]
 
+validation_source=$tmp/validation-source
+validation_runtime=$tmp/validation-runtime
+validation_tmp=$tmp/validation-tmp
+validation_trace=$tmp/validation-trace
+validation_bun=$validation_runtime/configured-bun
+mkdir -p "$validation_source/bin" "$validation_runtime" "$validation_tmp"
+printf '{}\n' > "$validation_source/package.json"
+cat > "$validation_source/bin/continuum" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+workspace=
+command=
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --cwd)
+      workspace=$(realpath "$2")
+      shift 2
+      ;;
+    --json)
+      shift
+      ;;
+    *)
+      command=$1
+      shift
+      ;;
+  esac
+done
+entrypoint=$(realpath "$0")
+case $command in
+  runtime)
+    database=$XDG_DATA_HOME/continuum/projects/test/continuum.db
+    jq -cn \
+      --arg workspace "$workspace" \
+      --arg entrypoint "$entrypoint" \
+      --arg data_home "$XDG_DATA_HOME" \
+      --arg database "$database" \
+      '{ok:true,data:{workspace:$workspace,entrypoint:$entrypoint,dataHome:$data_home,database:$database,storageGeneration:"xdg-project-sha256-v1"}}'
+    ;;
+  init)
+    ;;
+  verify-wrapper)
+    isolated_root=${workspace%/workspace}
+    [[ $entrypoint == "$VALIDATION_EXPECTED_ENTRYPOINT" ]]
+    [[ $isolated_root == "$VALIDATION_EXPECTED_TMP_ROOT"/tmp.* ]]
+    [[ $HOME == "$isolated_root/home" ]]
+    [[ $XDG_DATA_HOME == "$isolated_root/xdg" ]]
+    printf 'continuum_wrapper_verified\n' >> "$VALIDATION_TRACE"
+    ;;
+  *)
+    exit 64
+    ;;
+esac
+EOF
+cat > "$validation_bun" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ ${1:-} == run && ${2:-} == */bin/continuum ]]; then
+  shift
+  exec "$@"
+fi
+if [[ ${1:-} == run && ${2:-} == validate ]]; then
+  resolved_bun=$(command -v bun)
+  [[ $resolved_bun == "$VALIDATION_EXPECTED_TMP_ROOT"/tmp.*/bin/bun ]]
+  bun nested-validation
+  continuum verify-wrapper
+  printf 'validate_script_verified\n' >> "$VALIDATION_TRACE"
+  exit 0
+fi
+if [[ ${1:-} == nested-validation ]]; then
+  [[ $(realpath "$0") == "$VALIDATION_EXPECTED_BUN" ]]
+  printf 'nested_bun_verified\n' >> "$VALIDATION_TRACE"
+  exit 0
+fi
+exit 64
+EOF
+chmod +x "$validation_source/bin/continuum" "$validation_bun"
+
+set +e
+PATH=/usr/bin \
+CONTINUUM_VALIDATION_BUN_BIN=$validation_runtime/missing-bun \
+  "$root/bin/validate-continuum-worktree" "$validation_source" >/dev/null 2>&1
+missing_bun_status=$?
+touch "$validation_runtime/non-executable-bun"
+PATH=/usr/bin \
+CONTINUUM_VALIDATION_BUN_BIN=$validation_runtime/non-executable-bun \
+  "$root/bin/validate-continuum-worktree" "$validation_source" >/dev/null 2>&1
+non_executable_bun_status=$?
+set -e
+[[ $missing_bun_status == 69 ]]
+[[ $non_executable_bun_status == 69 ]]
+
+PATH=/usr/bin \
+TMPDIR=$validation_tmp \
+VALIDATION_TRACE=$validation_trace \
+VALIDATION_EXPECTED_BUN=$(realpath "$validation_bun") \
+VALIDATION_EXPECTED_ENTRYPOINT=$(realpath "$validation_source/bin/continuum") \
+VALIDATION_EXPECTED_TMP_ROOT=$(realpath "$validation_tmp") \
+CONTINUUM_VALIDATION_BUN_BIN=$validation_bun \
+  "$root/bin/validate-continuum-worktree" "$validation_source" >/dev/null
+grep -qx 'nested_bun_verified' "$validation_trace"
+grep -qx 'continuum_wrapper_verified' "$validation_trace"
+grep -qx 'validate_script_verified' "$validation_trace"
+
 mkdir -p "$tmp/home/bin"
 printf '#!/bin/sh\nexit 0\n' > "$tmp/home/bin/systemctl"
 chmod +x "$tmp/home/bin/systemctl"

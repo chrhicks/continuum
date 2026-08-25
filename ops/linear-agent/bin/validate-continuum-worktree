@@ -59,13 +59,17 @@ printf 'isolated_validation_runtime workspace=%s bun=%s cli=%s data_home=%s data
 HOME="$home" XDG_DATA_HOME="$xdg" \
   "$bun_bin" run "$worktree/bin/continuum" --cwd "$workspace" init >/dev/null
 
+cat > "$wrapper_dir/bun" <<EOF
+#!/usr/bin/env bash
+exec $(printf '%q' "$bun_bin") "\$@"
+EOF
 cat > "$wrapper_dir/continuum" <<EOF
 #!/usr/bin/env bash
 exec env HOME=$(printf '%q' "$home") XDG_DATA_HOME=$(printf '%q' "$xdg") \
   $(printf '%q' "$bun_bin") run $(printf '%q' "$worktree/bin/continuum") \
   --cwd $(printf '%q' "$workspace") "\$@"
 EOF
-chmod 700 "$wrapper_dir/continuum"
+chmod 700 "$wrapper_dir/bun" "$wrapper_dir/continuum"
 
 cd "$worktree"
 HOME="$home" XDG_DATA_HOME="$xdg" PATH="$wrapper_dir:$PATH" \
