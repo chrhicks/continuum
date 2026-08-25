@@ -13,6 +13,8 @@ bash -n \
 "$root/bin/status" --help >/dev/null
 grep -q 'open PR plus ready status: this is requested-change work' "$root/prompts/scout.md"
 grep -q 'do not repeat that dispatch' "$root/prompts/scout.md"
+grep -q 'does not apply in PR review mode' "$root/prompts/reviewer.md"
+grep -q 'repository audit mode only; not PR review mode' "$root/bin/run-once"
 set +e
 "$root/bin/validate-continuum-worktree" >/dev/null 2>&1
 helper_status=$?
