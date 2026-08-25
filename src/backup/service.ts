@@ -1,6 +1,9 @@
 import { join, resolve } from 'node:path'
 import { Effect } from 'effect'
-import { canonicalProjectDir } from '../db/paths'
+import {
+  claimStorageAuthorityEffect,
+  resolveStorageAuthority,
+} from '../db/storage-authority'
 import { CanonicalStorageError } from '../db/storage-errors'
 import { prepareCanonicalDatabaseEffect } from '../db/storage'
 import {
@@ -64,7 +67,8 @@ const createLockedBackup = Effect.fn('Backup.createLocked')(function* (
   workspaceRoot: string,
   config: BackupConfig,
 ) {
-  const canonical = yield* prepareCanonicalDatabaseEffect(workspaceRoot)
+  const authority = yield* claimStorageAuthorityEffect(workspaceRoot)
+  const canonical = yield* prepareCanonicalDatabaseEffect(authority)
   const snapshot = yield* storageTry('read database snapshot', () =>
     readDatabaseSnapshot(canonical.dbPath),
   )
@@ -154,7 +158,7 @@ export const restoreBackup = Effect.fn('Backup.restore')(function* (
   const outputPath = resolve(
     options.outputPath ??
       join(
-        canonicalProjectDir(workspaceRoot),
+        resolveStorageAuthority(workspaceRoot, 'read-write').projectDir,
         'restores',
         `${generation}.sqlite`,
       ),

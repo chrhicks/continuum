@@ -3,8 +3,8 @@ import { dirname } from 'node:path'
 import { Effect } from 'effect'
 import {
   canonicalDataHome,
-  canonicalDbFilePathForStorageId,
-  canonicalProjectDirForStorageId,
+  canonicalDbFilePath,
+  canonicalProjectDir,
   legacyDbFilePath,
   normalizedWorkspacePath,
   type CanonicalPathOptions,
@@ -59,18 +59,16 @@ function forkWorkspaceStorage(
       `Cannot fork an uninitialized workspace: ${workspacePath}`,
     )
   }
-  const sourceDatabasePath = canonicalDbFilePathForStorageId(
-    previous.id,
-    options,
-  )
+  const dataHome = canonicalDataHome(options)
+  const sourceDatabasePath = canonicalDbFilePath(previous.id, dataHome)
   if (!existsSync(sourceDatabasePath)) {
     throw migrationFailure(
       `Cannot fork because the canonical database is missing: ${sourceDatabasePath}`,
     )
   }
 
-  const projectId = generateAvailableProjectId(options)
-  const databasePath = canonicalDbFilePathForStorageId(projectId, options)
+  const projectId = generateAvailableProjectId(dataHome)
+  const databasePath = canonicalDbFilePath(projectId, dataHome)
   const legacy = readLegacyLineage(workspacePath, projectId)
   const source = readDatabaseSnapshot(sourceDatabasePath)
   const forked = prepareMigratedSnapshot(
@@ -82,7 +80,7 @@ function forkWorkspaceStorage(
   publishDatabaseSnapshot(databasePath, forked)
   assertLegacyUnchanged(legacy)
   replaceWorkspaceIdentity(workspacePath, projectId)
-  claimWorkspaceIdentity(projectId, workspacePath, canonicalDataHome(options))
+  claimWorkspaceIdentity(projectId, workspacePath, dataHome)
   return {
     workspacePath,
     previousProjectId: previous.id,
@@ -92,11 +90,10 @@ function forkWorkspaceStorage(
   }
 }
 
-function generateAvailableProjectId(options: CanonicalPathOptions): string {
-  const dataHome = canonicalDataHome(options)
+function generateAvailableProjectId(dataHome: string): string {
   for (let attempt = 0; attempt < 10; attempt += 1) {
     const id = makeWorkspaceIdentity().id
-    const projectDir = canonicalProjectDirForStorageId(id, options)
+    const projectDir = canonicalProjectDir(id, dataHome)
     if (!existsSync(projectDir) && !workspaceClaimExists(id, dataHome)) {
       return id
     }

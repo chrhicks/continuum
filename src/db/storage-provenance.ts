@@ -1,15 +1,15 @@
-import { projectStorageId } from './paths'
+import type { ClaimedStorageAuthority } from './storage-authority'
 import { sourceChangedDuringMigration } from './storage-errors'
 import type { StorageLineage } from './storage-lineage'
 import { readDatabaseSnapshot, type DatabaseSnapshot } from './storage-snapshot'
 
 export function legacyLineage(
-  workspaceRoot: string,
+  authority: ClaimedStorageAuthority,
   sourcePath: string,
   source: DatabaseSnapshot,
 ): StorageLineage {
   return {
-    projectId: projectStorageId(workspaceRoot),
+    projectId: authority.projectId,
     sourceKind: 'legacy',
     sourcePath,
     sourceFingerprint: source.fingerprint,

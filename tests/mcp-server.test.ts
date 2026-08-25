@@ -4,11 +4,15 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
-import { canonicalDbFilePath } from '../src/db/paths'
+import { resolveStorageAuthority } from '../src/db/storage-authority'
 
 const repoRoot = process.cwd()
 const continuumBin = join(repoRoot, 'bin', 'continuum')
 const roots: string[] = []
+
+function canonicalDbFilePath(workspace: string): string {
+  return resolveStorageAuthority(workspace, 'read-write').dbPath
+}
 
 afterEach(() => {
   for (const root of roots.splice(0)) {

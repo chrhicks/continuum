@@ -1,7 +1,7 @@
 import { realpathSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { resolve } from 'node:path'
-import { CANONICAL_STORAGE_GENERATION, canonicalDataHome } from '../db/paths'
+import { CANONICAL_STORAGE_GENERATION } from '../db/paths'
 import { resolveWorkspaceContext } from '../workspace/resolve'
 
 export type RuntimeContract = {
@@ -19,14 +19,14 @@ export function resolveRuntimeContract(
 ): RuntimeContract {
   const context = resolveWorkspaceContext({
     startDir,
-    access: options.readOnly ? 'read-only' : 'read-write',
+    access: options.readOnly ? 'read-only' : 'deferred',
   })
   return {
     storageGeneration: CANONICAL_STORAGE_GENERATION,
     workspace: context.workspaceRoot,
     entrypoint: resolveEntrypoint(),
     home: resolve(process.env.HOME ?? homedir()),
-    dataHome: canonicalDataHome(),
+    dataHome: context.storageAuthority.dataHome,
     database: context.continuumDbPath,
   }
 }

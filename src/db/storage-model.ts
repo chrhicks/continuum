@@ -1,10 +1,9 @@
 import {
-  canonicalDbFilePath,
+  canonicalStoragePaths,
   legacyDbFilePath,
-  migrationReceiptPath,
-  pathHashCanonicalDbFilePath,
-  pathHashMigrationReceiptPath,
+  pathHashProjectStorageId,
 } from './paths'
+import type { StorageAuthority } from './storage-authority'
 
 export type CanonicalDatabaseState = {
   dbPath: string
@@ -21,21 +20,25 @@ export type StoragePaths = {
   receiptPath: string
 }
 
-export function resolveStoragePaths(workspaceRoot: string): StoragePaths {
+export function resolveStoragePaths(authority: StorageAuthority): StoragePaths {
   return {
-    dbPath: canonicalDbFilePath(workspaceRoot),
-    sourcePath: legacyDbFilePath(workspaceRoot),
-    receiptPath: migrationReceiptPath(workspaceRoot),
+    dbPath: authority.dbPath,
+    sourcePath: legacyDbFilePath(authority.workspacePath),
+    receiptPath: authority.receiptPath,
   }
 }
 
 export function resolvePathHashStoragePaths(
-  workspaceRoot: string,
+  authority: StorageAuthority,
 ): StoragePaths {
+  const paths = canonicalStoragePaths(
+    pathHashProjectStorageId(authority.workspacePath),
+    authority.dataHome,
+  )
   return {
-    dbPath: pathHashCanonicalDbFilePath(workspaceRoot),
-    sourcePath: legacyDbFilePath(workspaceRoot),
-    receiptPath: pathHashMigrationReceiptPath(workspaceRoot),
+    dbPath: paths.dbPath,
+    sourcePath: legacyDbFilePath(authority.workspacePath),
+    receiptPath: paths.receiptPath,
   }
 }
 

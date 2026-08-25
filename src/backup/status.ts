@@ -1,6 +1,6 @@
 import { Effect, Result } from 'effect'
 import { createReadOnlyClient } from '../db/client'
-import { readOnlyCanonicalDbFilePath } from '../db/paths'
+import { observeStorageAuthority } from '../db/storage-authority'
 import {
   type CanonicalStorageError,
   isCanonicalStorageError,
@@ -98,7 +98,7 @@ function readLocalSnapshot(
 ): Effect.Effect<DatabaseSnapshot, CanonicalStorageError> {
   return Effect.try({
     try: () => {
-      const dbPath = readOnlyCanonicalDbFilePath(workspaceRoot)
+      const dbPath = observeStorageAuthority(workspaceRoot).dbPath
       const client = createReadOnlyClient(dbPath)
       try {
         return readDatabaseSnapshot(dbPath)

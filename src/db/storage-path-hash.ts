@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs'
 import { dirname } from 'node:path'
-import { pathHashProjectStorageId, projectStorageId } from './paths'
+import { pathHashProjectStorageId } from './paths'
+import type { ClaimedStorageAuthority } from './storage-authority'
 import { containsSnapshotRows } from './storage-content'
 import { migrationConflict, migrationFailure } from './storage-errors'
 import {
@@ -20,19 +21,19 @@ import {
 } from './storage-snapshot'
 
 export function upgradePathHashStorage(
-  workspaceRoot: string,
+  authority: ClaimedStorageAuthority,
   oldPaths: StoragePaths,
   paths: StoragePaths,
 ): void {
   const source = readDatabaseSnapshot(oldPaths.dbPath)
   const pathHashLineage: StorageLineage = {
-    projectId: projectStorageId(workspaceRoot),
+    projectId: authority.projectId,
     sourceKind: 'path-hash',
     sourcePath: oldPaths.dbPath,
     sourceFingerprint: source.fingerprint,
   }
   const lineages: StorageLineage[] = [pathHashLineage]
-  const priorLegacy = priorLegacyLineage(workspaceRoot, oldPaths, source)
+  const priorLegacy = priorLegacyLineage(authority, oldPaths, source)
   if (priorLegacy) lineages.push(priorLegacy)
 
   if (existsSync(paths.dbPath)) {
@@ -66,7 +67,7 @@ function assertExistingDestination(
 }
 
 function priorLegacyLineage(
-  workspaceRoot: string,
+  authority: ClaimedStorageAuthority,
   oldPaths: StoragePaths,
   oldCanonical: DatabaseSnapshot,
 ): StorageLineage | null {
@@ -76,7 +77,7 @@ function priorLegacyLineage(
   const receipt = readMigrationReceipt(oldPaths.receiptPath)
   const validOldIdentity =
     receipt.version === 1 &&
-    receipt.projectId === pathHashProjectStorageId(workspaceRoot) &&
+    receipt.projectId === pathHashProjectStorageId(authority.workspacePath) &&
     receipt.sourcePath === oldPaths.sourcePath &&
     receipt.destinationPath === oldPaths.dbPath &&
     receipt.method === 'sqlite-serialize-snapshot'
@@ -93,7 +94,7 @@ function priorLegacyLineage(
   ) {
     return null
   }
-  return legacyLineage(workspaceRoot, oldPaths.sourcePath, source)
+  return legacyLineage(authority, oldPaths.sourcePath, source)
 }
 
 function fingerprintMatches(

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, unlinkSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { Schema } from 'effect'
-import { normalizedWorkspacePath, projectStorageId } from './paths'
+import type { ClaimedStorageAuthority } from './storage-authority'
 import { CanonicalStorageError, migrationFailure } from './storage-errors'
 import {
   publishStorageFileWithoutOverwrite,
@@ -38,7 +38,7 @@ export interface MigrationReceipt extends Schema.Schema.Type<
 > {}
 
 export function createMigrationReceipt(
-  workspaceRoot: string,
+  authority: ClaimedStorageAuthority,
   sourcePath: string,
   destinationPath: string,
   sourceFingerprint: StorageFingerprint,
@@ -46,8 +46,8 @@ export function createMigrationReceipt(
 ): MigrationReceipt {
   return {
     version: RECEIPT_VERSION,
-    projectId: projectStorageId(workspaceRoot),
-    workspacePath: normalizedWorkspacePath(workspaceRoot),
+    projectId: authority.projectId,
+    workspacePath: authority.workspacePath,
     sourcePath,
     destinationPath,
     sourceFingerprint,
@@ -86,11 +86,11 @@ export function readMigrationReceipt(path: string): MigrationReceipt {
 
 export function verifyMigrationReceiptIdentity(
   receipt: MigrationReceipt,
-  workspaceRoot: string,
+  authority: ClaimedStorageAuthority,
 ): void {
   const identityMatches =
     receipt.version === RECEIPT_VERSION &&
-    receipt.projectId === projectStorageId(workspaceRoot)
+    receipt.projectId === authority.projectId
   if (!identityMatches) {
     throw migrationFailure(
       `Migration receipt does not match workspace identity: ${receipt.sourcePath}`,
@@ -100,11 +100,11 @@ export function verifyMigrationReceiptIdentity(
 
 export function verifyMigrationReceipt(
   receipt: MigrationReceipt,
-  workspaceRoot: string,
+  authority: ClaimedStorageAuthority,
   sourcePath: string,
   sourceFingerprint: StorageFingerprint,
 ): void {
-  verifyMigrationReceiptIdentity(receipt, workspaceRoot)
+  verifyMigrationReceiptIdentity(receipt, authority)
   if (
     receipt.sourceFingerprint.digest !== sourceFingerprint.digest ||
     receipt.sourceFingerprint.byteLength !== sourceFingerprint.byteLength
