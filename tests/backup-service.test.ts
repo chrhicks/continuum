@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { Database } from 'bun:sqlite'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { Effect, Layer } from 'effect'
+import { hostname, tmpdir } from 'node:os'
+import { dirname, join } from 'node:path'
+import { Deferred, Effect, Fiber, Layer } from 'effect'
 import { TestClock } from 'effect/testing'
 import { configureBackup, readBackupConfig } from '../src/backup/config'
 import {
@@ -27,12 +27,16 @@ import {
 import { prepareCanonicalDatabase } from '../src/db/storage'
 
 const PROJECT_ID = '11111111-1111-4111-8111-111111111111'
+const OTHER_PROJECT_ID = '44444444-4444-4444-8444-444444444444'
 const WRITER_ID = '22222222-2222-4222-8222-222222222222'
 const roots: string[] = []
 
 afterEach(() => {
   for (const root of roots.splice(0))
     rmSync(root, { recursive: true, force: true })
+  for (const projectId of [PROJECT_ID, OTHER_PROJECT_ID]) {
+    rmSync(backupCreationLockPath(projectId), { force: true })
+  }
 })
 
 describe('R2 backup service', () => {
@@ -49,9 +53,7 @@ describe('R2 backup service', () => {
     expect(fixture.store.keys().some((key) => /(?:-wal|-shm)$/.test(key))).toBe(
       false,
     )
-    expect(snapshotTaskIds(fixture.store, first.generation)).toContain(
-      'tkt-first',
-    )
+    expect(snapshotTaskIds(fixture, first.generation)).toContain('tkt-first')
 
     const secondConnection = new Database(fixture.dbPath)
     insertTask(secondConnection, 'tkt-second', 'second snapshot')
@@ -65,6 +67,77 @@ describe('R2 backup service', () => {
       first.generation,
     ])
     expect(inventory[0]?.database.digest).toBe(second.digest)
+  })
+
+  test('fails fast on same-project overlap and keeps the winner reachable', async () => {
+    const fixture = await createFixture()
+    const gate = fixture.store.blockNextGet(
+      (key) => key === headObjectKey(fixture.projectId),
+    )
+    const program = Effect.scoped(
+      Effect.gen(function* () {
+        const winnerFiber = yield* createBackup(fixture.workspace).pipe(
+          Effect.forkScoped,
+        )
+        yield* Deferred.await(gate.entered)
+        const conflict = yield* createBackup(fixture.workspace).pipe(
+          Effect.flip,
+        )
+        expect(conflict).toMatchObject({
+          code: 'BACKUP_CREATION_CONFLICT',
+        })
+        yield* Deferred.succeed(gate.release, undefined)
+        const winner = yield* Fiber.join(winnerFiber)
+        const inventory = yield* listBackups(fixture.workspace)
+        return { winner, inventory }
+      }),
+    ).pipe(Effect.provide(fixture.store.layer))
+
+    const result = await Effect.runPromise(program)
+    expect(result.inventory.map((manifest) => manifest.generation)).toEqual([
+      result.winner.generation,
+    ])
+  })
+
+  test('does not block simultaneous creation for different project IDs', async () => {
+    const first = await createFixture()
+    const second = await createFixture(OTHER_PROJECT_ID)
+    const gate = first.store.blockNextGet(
+      (key) => key === headObjectKey(first.projectId),
+    )
+    const program = Effect.scoped(
+      Effect.gen(function* () {
+        const firstFiber = yield* createBackup(first.workspace).pipe(
+          Effect.provide(first.store.layer),
+          Effect.forkScoped,
+        )
+        yield* Deferred.await(gate.entered)
+        const secondResult = yield* createBackup(second.workspace).pipe(
+          Effect.provide(second.store.layer),
+        )
+        yield* Deferred.succeed(gate.release, undefined)
+        const firstResult = yield* Fiber.join(firstFiber)
+        return { firstResult, secondResult }
+      }),
+    )
+
+    const result = await Effect.runPromise(program)
+    expect(result.firstResult.parentGeneration).toBeNull()
+    expect(result.secondResult.parentGeneration).toBeNull()
+  })
+
+  test('requires explicit recovery after an interrupted lock holder', async () => {
+    const fixture = await createFixture()
+    writeInterruptedLock(fixture.projectId)
+
+    await expect(
+      runBackup(fixture, createBackup(fixture.workspace)),
+    ).rejects.toMatchObject({ code: 'BACKUP_CREATION_CONFLICT' })
+    expect(fixture.store.keys()).toEqual([])
+
+    rmSync(backupCreationLockPath(fixture.projectId))
+    const backup = await runBackup(fixture, createBackup(fixture.workspace))
+    expect(backup.parentGeneration).toBeNull()
   })
 
   test('leaves interrupted uploads unreferenced and reports a stale head', async () => {
@@ -299,10 +372,11 @@ type Fixture = {
   root: string
   workspace: string
   dbPath: string
+  projectId: string
   store: MemoryObjectStore
 }
 
-async function createFixture(): Promise<Fixture> {
+async function createFixture(projectId = PROJECT_ID): Promise<Fixture> {
   const root = mkdtempSync(join(tmpdir(), 'continuum-r2-test-'))
   roots.push(root)
   const workspace = join(root, 'workspace')
@@ -311,7 +385,7 @@ async function createFixture(): Promise<Fixture> {
     configureBackup({
       workspaceRoot: workspace,
       bucket: 'continuum-test-backups',
-      projectId: PROJECT_ID,
+      projectId,
       writerId: WRITER_ID,
     }),
   )
@@ -319,7 +393,19 @@ async function createFixture(): Promise<Fixture> {
     initialize: true,
     warn: false,
   }).dbPath
-  return { root, workspace, dbPath, store: new MemoryObjectStore() }
+  return {
+    root,
+    workspace,
+    dbPath,
+    projectId,
+    store: new MemoryObjectStore(projectId),
+  }
+}
+
+type GetGate = {
+  predicate: (key: string) => boolean
+  entered: Deferred.Deferred<void>
+  release: Deferred.Deferred<void>
 }
 
 class MemoryObjectStore {
@@ -328,28 +414,40 @@ class MemoryObjectStore {
   #getFailure: unknown | null = null
   #headReads = 0
   #replaceRead: { count: number; head: BackupHead } | null = null
+  #getGate: GetGate | null = null
+  readonly #projectId: string
   readonly layer: Layer.Layer<BackupObjectStore>
 
-  constructor() {
+  constructor(projectId: string) {
+    this.#projectId = projectId
+    const store = this
     const service: BackupObjectStoreService = {
       get: (key) =>
-        Effect.try({
-          try: () => {
-            if (this.#getFailure !== null) {
-              const failure = this.#getFailure
-              this.#getFailure = null
-              throw failure
-            }
-            return this.get(key)
-          },
-          catch: (cause) =>
-            new BackupRemoteError({
-              code: 'BACKUP_REMOTE_ERROR',
-              operation: 'test download',
-              key,
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause,
-            }),
+        Effect.gen(function* () {
+          const gate = store.#getGate
+          if (gate?.predicate(key)) {
+            store.#getGate = null
+            yield* Deferred.succeed(gate.entered, undefined)
+            yield* Deferred.await(gate.release)
+          }
+          return yield* Effect.try({
+            try: () => {
+              if (store.#getFailure !== null) {
+                const failure = store.#getFailure
+                store.#getFailure = null
+                throw failure
+              }
+              return store.get(key)
+            },
+            catch: (cause) =>
+              new BackupRemoteError({
+                code: 'BACKUP_REMOTE_ERROR',
+                operation: 'test download',
+                key,
+                message: cause instanceof Error ? cause.message : String(cause),
+                cause,
+              }),
+          })
         }),
       put: (key, content, contentType) =>
         Effect.try({
@@ -368,7 +466,7 @@ class MemoryObjectStore {
   }
 
   get(key: string): Uint8Array | null {
-    if (key === headObjectKey(PROJECT_ID)) {
+    if (key === headObjectKey(this.#projectId)) {
       this.#headReads += 1
       if (this.#replaceRead?.count === this.#headReads) {
         const bytes = encodeJson(this.#replaceRead.head)
@@ -397,6 +495,16 @@ class MemoryObjectStore {
 
   failNextGet(cause: unknown): void {
     this.#getFailure = cause
+  }
+
+  blockNextGet(predicate: (key: string) => boolean): GetGate {
+    const gate = {
+      predicate,
+      entered: Effect.runSync(Deferred.make<void>()),
+      release: Effect.runSync(Deferred.make<void>()),
+    }
+    this.#getGate = gate
+    return gate
   }
 
   replaceOnHeadRead(countFromNow: number, head: BackupHead): void {
@@ -444,11 +552,10 @@ function readTaskIds(path: string): string[] {
   }
 }
 
-function snapshotTaskIds(
-  store: MemoryObjectStore,
-  generation: string,
-): string[] {
-  const bytes = store.get(databaseObjectKey(PROJECT_ID, generation))
+function snapshotTaskIds(fixture: Fixture, generation: string): string[] {
+  const bytes = fixture.store.get(
+    databaseObjectKey(fixture.projectId, generation),
+  )
   if (!bytes) throw new Error('missing test snapshot')
   const directory = mkdtempSync(join(tmpdir(), 'continuum-r2-read-'))
   const path = join(directory, 'snapshot.sqlite')
@@ -458,6 +565,28 @@ function snapshotTaskIds(
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
+}
+
+function backupCreationLockPath(projectId: string): string {
+  const dataHome = process.env.XDG_DATA_HOME
+  if (!dataHome) throw new Error('test XDG_DATA_HOME is missing')
+  return join(dataHome, 'continuum', 'backup-locks', `${projectId}.lock`)
+}
+
+function writeInterruptedLock(projectId: string): void {
+  const path = backupCreationLockPath(projectId)
+  mkdirSync(dirname(path), { recursive: true })
+  writeFileSync(
+    path,
+    `${JSON.stringify({
+      version: 1,
+      token: 'interrupted-test-holder',
+      pid: 2_147_483_647,
+      hostname: hostname(),
+      createdAt: '2026-01-01T00:00:00.000Z',
+    })}\n`,
+    { mode: 0o600, flag: 'wx' },
+  )
 }
 
 async function tableExists(sqlite: Database, table: string): Promise<boolean> {

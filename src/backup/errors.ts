@@ -38,6 +38,15 @@ export class BackupIdentityConflict extends Schema.TaggedError<BackupIdentityCon
   },
 ) {}
 
+export class BackupCreationConflict extends Schema.TaggedError<BackupCreationConflict>()(
+  'BackupCreationConflict',
+  {
+    code: Schema.Literal('BACKUP_CREATION_CONFLICT'),
+    message: Schema.String,
+    cause: Schema.optionalKey(Schema.Defect()),
+  },
+) {}
+
 export class BackupLineageError extends Schema.TaggedError<BackupLineageError>()(
   'BackupLineageError',
   {
@@ -69,6 +78,7 @@ export type BackupError =
   | BackupDecodeError
   | BackupRemoteError
   | BackupIdentityConflict
+  | BackupCreationConflict
   | BackupLineageError
   | BackupIntegrityError
   | BackupRestoreConflict

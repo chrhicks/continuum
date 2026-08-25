@@ -10,6 +10,7 @@ import {
 } from '../db/storage-snapshot'
 import { currentDate, randomUuid } from './authority'
 import { readBackupConfig } from './config'
+import { withBackupCreationLock } from './creation-lock'
 import {
   bytesDigest,
   databaseObjectKey,
@@ -53,6 +54,16 @@ export const createBackup = Effect.fn('Backup.create')(function* (
   workspaceRoot: string,
 ) {
   const config = yield* readBackupConfig(workspaceRoot)
+  return yield* withBackupCreationLock(
+    config.projectId,
+    createLockedBackup(workspaceRoot, config),
+  )
+})
+
+const createLockedBackup = Effect.fn('Backup.createLocked')(function* (
+  workspaceRoot: string,
+  config: BackupConfig,
+) {
   const canonical = yield* prepareCanonicalDatabaseEffect(workspaceRoot)
   const snapshot = yield* storageTry('read database snapshot', () =>
     readDatabaseSnapshot(canonical.dbPath),
