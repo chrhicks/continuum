@@ -67,12 +67,15 @@ describe('R2 backup service', () => {
     const second = await runBackup(fixture, createBackup(fixture.workspace))
     expect(second.parentGeneration).toBe(first.generation)
 
-    const inventory = await runBackup(fixture, listBackups(fixture.workspace))
+    const inventory = await runBackup(fixture, listBackups())
     expect(inventory.map((item) => item.generation)).toEqual([
       second.generation,
       first.generation,
     ])
     expect(inventory[0]?.database.digest).toBe(second.digest)
+
+    const latest = await runBackup(fixture, listBackups(1))
+    expect(latest.map((item) => item.generation)).toEqual([second.generation])
   })
 
   test('fails fast on same-project overlap and keeps the winner reachable', async () => {
@@ -94,7 +97,7 @@ describe('R2 backup service', () => {
         })
         yield* Deferred.succeed(gate.release, undefined)
         const winner = yield* Fiber.join(winnerFiber)
-        const inventory = yield* listBackups(fixture.workspace)
+        const inventory = yield* listBackups()
         return { winner, inventory }
       }),
     ).pipe(Effect.provide(fixture.layer))
@@ -171,9 +174,9 @@ describe('R2 backup service', () => {
       runBackup(fixture, createBackup(fixture.workspace)),
     ).rejects.toThrow('head changed during upload')
     expect(first.generation).not.toBe(conflictingGeneration)
-    await expect(
-      runBackup(fixture, listBackups(fixture.workspace)),
-    ).rejects.toThrow('manifest is missing')
+    await expect(runBackup(fixture, listBackups())).rejects.toThrow(
+      'manifest is missing',
+    )
   })
 
   test('rejects writer conflicts before uploading a generation', async () => {
@@ -303,7 +306,7 @@ describe('R2 backup service', () => {
     rmSync(join(fixture.workspace, '.continuum', 'r2-backup.json'))
 
     const backup = await runBackup(fixture, createBackup(fixture.workspace))
-    const inventory = await runBackup(fixture, listBackups(fixture.workspace))
+    const inventory = await runBackup(fixture, listBackups())
     const status = await runBackup(fixture, getBackupStatus(fixture.workspace))
     const restored = await runBackup(
       fixture,

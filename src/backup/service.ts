@@ -96,10 +96,7 @@ const createLockedBackup = Effect.fn('Backup.createLocked')(function* (
   return resultFromManifest(manifest)
 })
 
-export const listBackups = Effect.fn('Backup.list')(function* (
-  workspaceRoot: string,
-  limit = 100,
-) {
+export const listBackups = Effect.fn('Backup.list')(function* (limit = 100) {
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1_000) {
     return yield* Effect.fail(
       new BackupLineageError({
