@@ -5,7 +5,6 @@ import {
   create_task_for_directory,
   delete_task_for_directory,
   get_task_for_directory,
-  get_open_blockers_for_directory,
   list_tasks_for_directory,
   update_task_for_directory,
   add_steps_for_directory,
@@ -14,10 +13,9 @@ import {
   add_discovery_for_directory,
   add_decision_for_directory,
 } from '../task/tasks.service'
-import type { TaskStatus } from '../task/types'
 import { ContinuumError, isContinuumError } from '../task/error'
+import { validate_task_transition_for_directory } from '../task/task-inspection.service'
 import { is_valid_task_type, TASK_TYPES } from '../task/templates'
-import { validate_status_transition } from '../task/validation'
 import { query_task_graph } from './graph'
 import {
   map_create_input,
@@ -129,19 +127,11 @@ const continuum: ContinuumSDK = {
           'deleted is not a valid transition status',
         )
       }
-      const task = await get_task_for_directory(get_directory(), id)
-      if (!task) {
-        throw new ContinuumError('TASK_NOT_FOUND', 'Task not found')
-      }
-      const missingFields = validate_status_transition(
-        task,
-        nextStatus as TaskStatus,
+      return validate_task_transition_for_directory(
+        get_directory(),
+        id,
+        nextStatus,
       )
-      const openBlockers =
-        nextStatus === 'completed'
-          ? await get_open_blockers_for_directory(get_directory(), id)
-          : []
-      return { missingFields, openBlockers }
     },
     graph: async (
       query: SdkTaskGraphQuery,

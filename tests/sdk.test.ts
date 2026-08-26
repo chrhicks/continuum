@@ -214,4 +214,26 @@ describe('sdk flows', () => {
       expect(second.warnings?.[0]).toContain('already completed')
     })
   })
+
+  test('transition validation rejects deleted as a target status', async () => {
+    await withTempCwd(async () => {
+      await continuum.task.init()
+      const task = await continuum.task.create({
+        title: 'Invalid transition target',
+        type: 'chore',
+        description: 'Deleted is not a validation target.',
+        plan: 'Validate without mutation.',
+      })
+
+      try {
+        await continuum.task.validateTransition(task.id, 'deleted')
+        throw new Error('Expected INVALID_STATUS')
+      } catch (error) {
+        expect(isContinuumError(error)).toBe(true)
+        if (isContinuumError(error)) {
+          expect(error.code).toBe('INVALID_STATUS')
+        }
+      }
+    })
+  })
 })
