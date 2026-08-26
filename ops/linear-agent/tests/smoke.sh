@@ -185,6 +185,9 @@ case ${LINEAR_AGENT_TEST_PI_RESULT:-scout-dispatch} in
   inquiry-no-findings)
     printf 'INQUIRY_NO_FINDINGS control-plane\n'
     ;;
+  inquiry-with-trailing-output)
+    printf 'INQUIRY_COMPLETE control-plane 2 2\nstill processing\n'
+    ;;
   unsupported-audit)
     printf 'AUDIT_COMPLETE control-plane 1\n'
     ;;
@@ -365,6 +368,16 @@ XDG_CONFIG_HOME="$tmp/run/config" \
 XDG_STATE_HOME="$tmp/run/state" \
 PATH="$tmp/run/bin:$PATH" \
   "$root/bin/run-once" test > "$tmp/unsupported-audit.log"
+[[ $(stat -c '%Y' "$audit_marker") == "$stale_marker_time" ]]
+
+touch --date='2 days ago' "$audit_marker"
+stale_marker_time=$(stat -c '%Y' "$audit_marker")
+LINEAR_AGENT_TEST_PI_RESULT=inquiry-with-trailing-output \
+HOME="$tmp/run" \
+XDG_CONFIG_HOME="$tmp/run/config" \
+XDG_STATE_HOME="$tmp/run/state" \
+PATH="$tmp/run/bin:$PATH" \
+  "$root/bin/run-once" test > "$tmp/inquiry-with-trailing-output.log"
 [[ $(stat -c '%Y' "$audit_marker") == "$stale_marker_time" ]]
 
 set +e
