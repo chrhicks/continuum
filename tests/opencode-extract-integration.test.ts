@@ -47,25 +47,33 @@ describe('real OpenCode SQLite extraction', () => {
       getDbClientByPath(continuumDbPath),
     )
     const imported = await Effect.runPromise(
-      importCanonicalOpencodeRecall(owner, {
-        dbPath,
-        afterDate: new Date('2026-07-10T00:00:00.000Z'),
-        limit: 1,
-        dryRun: true,
-        summaryConfig: {
-          apiUrl: 'test',
-          apiKey: Redacted.make('test'),
-          model: 'test',
-          maxTokens: 1,
-          timeoutMs: 1,
-          maxChars: 1000,
-          maxLines: 100,
-          mergeMaxEstTokens: 1000,
+      importCanonicalOpencodeRecall(
+        owner,
+        {
+          dbPath,
+          afterDate: new Date('2026-07-10T00:00:00.000Z'),
+          limit: 1,
+          dryRun: true,
         },
-      }),
+        {
+          summaryConfig: {
+            apiUrl: 'test',
+            apiKey: Redacted.make('test'),
+            model: 'test',
+            maxTokens: 1,
+            timeoutMs: 1,
+            maxChars: 1000,
+            maxLines: 100,
+            mergeMaxEstTokens: 1000,
+          },
+        },
+      ),
     )
     expect(imported.totalSessions).toBe(1)
     expect(imported.importedSessions).toEqual(['session-newest'])
+    expect(imported.sessionOutcomes).toEqual([
+      { sessionId: 'session-newest', status: 'would-import' },
+    ])
   })
 })
 
