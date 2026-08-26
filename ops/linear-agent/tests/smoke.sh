@@ -175,8 +175,27 @@ git -C "$tmp/run/repo" commit -qm init
 git -C "$tmp/run/repo" remote add origin https://example.invalid/repo.git
 cat > "$tmp/run/bin/pi" <<'EOF'
 #!/bin/sh
-printf 'SCOUT_READY CHI-TEST\nDISPATCH_WORKER\n'
-exit 0
+case ${LINEAR_AGENT_TEST_PI_RESULT:-scout-dispatch} in
+  scout-dispatch)
+    printf 'SCOUT_READY CHI-TEST\nDISPATCH_WORKER\n'
+    ;;
+  inquiry-complete)
+    printf 'INQUIRY_COMPLETE control-plane 2 2\n'
+    ;;
+  inquiry-no-findings)
+    printf 'INQUIRY_NO_FINDINGS control-plane\n'
+    ;;
+  unsupported-audit)
+    printf 'AUDIT_COMPLETE control-plane 1\n'
+    ;;
+  failed-inquiry)
+    printf 'INQUIRY_COMPLETE control-plane 1 1\n'
+    exit 17
+    ;;
+  *)
+    exit 64
+    ;;
+esac
 EOF
 cat > "$tmp/run/bin/bun" <<'EOF'
 #!/bin/sh
@@ -316,6 +335,50 @@ PATH="$tmp/run/bin:$PATH" \
   "$root/bin/run-once" test > "$tmp/live-run.log"
 grep -q 'dispatching profile=test-worker' "$tmp/live-run.log"
 grep -q -- '--user start --no-block linear-agent-worker@test-worker.service' "$tmp/run/systemctl.log"
+
+sed -i 's/LINEAR_AGENT_ROLE=scout/LINEAR_AGENT_ROLE=reviewer/' "$tmp/run/config/linear-agent/test.env"
+audit_marker=$tmp/run/state/linear-agent/test/audit.last
+rm -f "$audit_marker"
+LINEAR_AGENT_TEST_PI_RESULT=inquiry-complete \
+HOME="$tmp/run" \
+XDG_CONFIG_HOME="$tmp/run/config" \
+XDG_STATE_HOME="$tmp/run/state" \
+PATH="$tmp/run/bin:$PATH" \
+  "$root/bin/run-once" test > "$tmp/inquiry-complete.log"
+[[ -f $audit_marker ]]
+
+touch --date='2 days ago' "$audit_marker"
+stale_marker_time=$(stat -c '%Y' "$audit_marker")
+LINEAR_AGENT_TEST_PI_RESULT=inquiry-no-findings \
+HOME="$tmp/run" \
+XDG_CONFIG_HOME="$tmp/run/config" \
+XDG_STATE_HOME="$tmp/run/state" \
+PATH="$tmp/run/bin:$PATH" \
+  "$root/bin/run-once" test > "$tmp/inquiry-no-findings.log"
+[[ $(stat -c '%Y' "$audit_marker") -gt $stale_marker_time ]]
+
+touch --date='2 days ago' "$audit_marker"
+stale_marker_time=$(stat -c '%Y' "$audit_marker")
+LINEAR_AGENT_TEST_PI_RESULT=unsupported-audit \
+HOME="$tmp/run" \
+XDG_CONFIG_HOME="$tmp/run/config" \
+XDG_STATE_HOME="$tmp/run/state" \
+PATH="$tmp/run/bin:$PATH" \
+  "$root/bin/run-once" test > "$tmp/unsupported-audit.log"
+[[ $(stat -c '%Y' "$audit_marker") == "$stale_marker_time" ]]
+
+set +e
+LINEAR_AGENT_TEST_PI_RESULT=failed-inquiry \
+HOME="$tmp/run" \
+XDG_CONFIG_HOME="$tmp/run/config" \
+XDG_STATE_HOME="$tmp/run/state" \
+PATH="$tmp/run/bin:$PATH" \
+  "$root/bin/run-once" test > "$tmp/failed-inquiry.log"
+failed_inquiry_status=$?
+set -e
+[[ $failed_inquiry_status == 17 ]]
+[[ $(stat -c '%Y' "$audit_marker") == "$stale_marker_time" ]]
+
 sed -i 's/LINEAR_AGENT_DRY_RUN=0/LINEAR_AGENT_DRY_RUN=1/' "$tmp/run/config/linear-agent/test.env"
 
 printf 'dirty\n' > "$tmp/run/repo/untracked"

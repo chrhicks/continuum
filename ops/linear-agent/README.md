@@ -160,4 +160,4 @@ systemctl --user disable --now linear-agent-worker@continuum-scout.timer
 find ~/.local/state/linear-agent -path '*/runs/*' -type f -ls
 ```
 
-Repository audits are limited to one bounded area and are considered due once per configured interval. The wrapper records a shared audit marker after `AUDIT_COMPLETE` or `AUDIT_NO_FINDINGS`.
+Repository audits are limited to one bounded area and are considered due once per configured interval. After a successful reviewer run, the wrapper records a shared audit marker for `INQUIRY_COMPLETE <area> <finding-count> <proposal-or-campaign-count>` or `INQUIRY_NO_FINDINGS <area>`.
