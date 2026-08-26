@@ -4,8 +4,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { getDbClientByPath } from '../src/db/client'
 import {
+  buildMemoryEvidenceQueryPlan,
   listMemoryEvidence,
   searchMemoryEvidence,
+  type MemoryQueryOptions,
 } from '../src/memory/application/query'
 import { Effect, Result } from 'effect'
 import {
@@ -14,6 +16,11 @@ import {
 } from '../src/memory/application/resource-owner'
 
 const roots: string[] = []
+type PlannedSource =
+  | 'journal'
+  | 'consolidation'
+  | 'currentRecall'
+  | 'recallHistory'
 
 function owner(workspaceRoot: string, dbPath: string): MemoryResourceOwner {
   return memoryResourceOwner(
@@ -126,6 +133,141 @@ describe('canonical memory query', () => {
     expect(historicalSummary[0]?.source).toContain('(historical)')
   })
 
+  test('makes the complete source and tier selection matrix explicit', () => {
+    const cases: Array<{
+      options: MemoryQueryOptions
+      list: PlannedSource[]
+      search: PlannedSource[]
+    }> = [
+      {
+        options: { source: 'all', tier: 'all' },
+        list: ['journal', 'consolidation', 'currentRecall'],
+        search: ['journal', 'consolidation', 'currentRecall', 'recallHistory'],
+      },
+      {
+        options: { source: 'all', tier: 'NOW' },
+        list: ['journal'],
+        search: ['journal'],
+      },
+      {
+        options: { source: 'all', tier: 'MEMORY' },
+        list: ['consolidation'],
+        search: ['consolidation'],
+      },
+      {
+        options: { source: 'memory', tier: 'all' },
+        list: ['journal', 'consolidation'],
+        search: ['journal', 'consolidation'],
+      },
+      {
+        options: { source: 'memory', tier: 'NOW' },
+        list: ['journal'],
+        search: ['journal'],
+      },
+      {
+        options: { source: 'memory', tier: 'MEMORY' },
+        list: ['consolidation'],
+        search: ['consolidation'],
+      },
+      {
+        options: { source: 'recall', tier: 'all' },
+        list: ['currentRecall'],
+        search: ['currentRecall', 'recallHistory'],
+      },
+      {
+        options: { source: 'recall', tier: 'NOW' },
+        list: [],
+        search: [],
+      },
+      {
+        options: { source: 'recall', tier: 'MEMORY' },
+        list: [],
+        search: [],
+      },
+    ]
+
+    for (const { options, list, search } of cases) {
+      expect(planSources('list', options)).toEqual(list)
+      expect(planSources('search', options)).toEqual(search)
+    }
+    expect(buildMemoryEvidenceQueryPlan('search')).toEqual(
+      buildMemoryEvidenceQueryPlan('search', {
+        source: 'all',
+        tier: 'all',
+      }),
+    )
+  })
+
+  test('executes list and search plans across memory and recall sources', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'continuum-query-plan-'))
+    roots.push(root)
+    const dbPath = join(root, 'continuum.db')
+    const resourceOwner = owner(root, dbPath)
+    const db = resourceOwner.handle.sqlite
+
+    db.query(
+      `INSERT INTO memory_journal_entries
+       (id, kind, content, metadata, created_at)
+       VALUES ('journal-consolidated', 'agent', 'matrix old', '{}', ?)`,
+    ).run('2026-07-01T00:00:00.000Z')
+    db.query(
+      `INSERT INTO memory_consolidations
+       (id, first_sequence, last_sequence, status, summary, created_at, completed_at)
+       VALUES ('consolidation', 1, 1, 'completed', ?, ?, ?)`,
+    ).run(
+      JSON.stringify(memorySummary('matrix consolidation')),
+      '2026-07-01T12:00:00.000Z',
+      '2026-07-02T00:00:00.000Z',
+    )
+    db.query(
+      `INSERT INTO memory_journal_entries
+       (id, kind, content, metadata, created_at)
+       VALUES ('journal-current', 'agent', 'matrix journal', '{}', ?)`,
+    ).run('2026-07-04T00:00:00.000Z')
+    db.query(
+      `INSERT INTO memory_recall_sources
+       (id, harness, external_session_id, fingerprint, first_ingested_at, last_ingested_at)
+       VALUES ('matrix-source', 'opencode', 'matrix-session', 'current-fp', ?, ?)`,
+    ).run('2026-07-03T00:00:00.000Z', '2026-07-03T00:00:00.000Z')
+    db.query(
+      `INSERT INTO memory_recall_messages
+       (id, source_id, source_fingerprint, ordinal, role, content, created_at)
+       VALUES ('recall-current', 'matrix-source', 'current-fp', 0, 'user', 'matrix current recall', ?)`,
+    ).run('2026-07-03T00:00:00.000Z')
+    db.query(
+      `INSERT INTO memory_recall_messages
+       (id, source_id, source_fingerprint, ordinal, role, content, created_at)
+       VALUES ('recall-history', 'matrix-source', 'older-fp', 0, 'user', 'matrix historical recall', ?)`,
+    ).run('2026-06-30T00:00:00.000Z')
+
+    expect(
+      await listedIds(resourceOwner, { source: 'memory', tier: 'NOW' }),
+    ).toEqual(['journal-current'])
+    expect(
+      await listedIds(resourceOwner, { source: 'memory', tier: 'MEMORY' }),
+    ).toEqual(['consolidation'])
+    expect(
+      await listedIds(resourceOwner, { source: 'all', tier: 'all' }),
+    ).toEqual(['journal-current', 'recall-current', 'consolidation'])
+    expect(
+      await searchedIds(resourceOwner, { source: 'all', tier: 'all' }),
+    ).toEqual([
+      'journal-current',
+      'recall-current',
+      'consolidation',
+      'recall-history',
+    ])
+    expect(
+      await searchedIds(resourceOwner, { source: 'memory', tier: 'all' }),
+    ).toEqual(await listedIds(resourceOwner, { source: 'memory', tier: 'all' }))
+    expect(
+      await listedIds(resourceOwner, { source: 'recall', tier: 'NOW' }),
+    ).toEqual([])
+    expect(
+      await searchedIds(resourceOwner, { source: 'recall', tier: 'MEMORY' }),
+    ).toEqual([])
+  })
+
   test('returns tagged decode failures for malformed persisted JSON', async () => {
     const root = mkdtempSync(join(tmpdir(), 'continuum-query-decode-'))
     roots.push(root)
@@ -145,6 +287,40 @@ describe('canonical memory query', () => {
     expect(Result.isFailure(result) && result.failure._tag).toBe('DecodeError')
   })
 })
+
+function planSources(
+  operation: 'list' | 'search',
+  options: MemoryQueryOptions,
+): PlannedSource[] {
+  const { journal, consolidation, currentRecall, recallHistory } =
+    buildMemoryEvidenceQueryPlan(operation, options).sources
+  return [
+    ...(journal ? (['journal'] as const) : []),
+    ...(consolidation ? (['consolidation'] as const) : []),
+    ...(currentRecall ? (['currentRecall'] as const) : []),
+    ...(recallHistory ? (['recallHistory'] as const) : []),
+  ]
+}
+
+async function listedIds(
+  resourceOwner: MemoryResourceOwner,
+  options: MemoryQueryOptions,
+): Promise<string[]> {
+  return (
+    await Effect.runPromise(listMemoryEvidence(resourceOwner, options))
+  ).map((item) => item.id)
+}
+
+async function searchedIds(
+  resourceOwner: MemoryResourceOwner,
+  options: MemoryQueryOptions,
+): Promise<string[]> {
+  return (
+    await Effect.runPromise(
+      searchMemoryEvidence(resourceOwner, 'matrix', options),
+    )
+  ).map((item) => item.id)
+}
 
 function memorySummary(narrative: string) {
   return {

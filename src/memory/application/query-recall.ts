@@ -30,37 +30,50 @@ type StoredRecallEvidence = {
   current: number
 }
 
-export function appendRecallEvidence(
+export function loadCurrentRecallEvidence(sqlite: Database): MemoryEvidence[] {
+  return loadRecallEvidence(sqlite, true)
+}
+
+export function loadRecallHistoryEvidence(sqlite: Database): MemoryEvidence[] {
+  return loadRecallEvidence(sqlite, false)
+}
+
+function loadRecallEvidence(
   sqlite: Database,
-  evidence: MemoryEvidence[],
-  includeHistory: boolean,
-): void {
+  selectCurrent: boolean,
+): MemoryEvidence[] {
   const rows = sqlite
     .query(
-      `SELECT 'recall-message' type, m.id, m.content, COALESCE(m.created_at,s.source_created_at) created_at,
-              s.external_session_id session_id, m.source_fingerprint = s.fingerprint current
-       FROM memory_recall_messages m JOIN memory_recall_sources s ON s.id=m.source_id
-       UNION ALL
-       SELECT 'recall-summary', r.id, r.summary, r.created_at, s.external_session_id,
-              r.source_fingerprint = s.fingerprint
-       FROM memory_recall_summaries r JOIN memory_recall_sources s ON s.id=r.source_id`,
+      `SELECT type, id, content, created_at, session_id, current FROM (
+         SELECT 'recall-message' type, m.id, m.content,
+                COALESCE(m.created_at,s.source_created_at) created_at,
+                s.external_session_id session_id,
+                m.source_fingerprint = s.fingerprint current
+         FROM memory_recall_messages m
+         JOIN memory_recall_sources s ON s.id=m.source_id
+         UNION ALL
+         SELECT 'recall-summary', r.id, r.summary, r.created_at,
+                s.external_session_id,
+                r.source_fingerprint = s.fingerprint
+         FROM memory_recall_summaries r
+         JOIN memory_recall_sources s ON s.id=r.source_id
+       ) WHERE current = ?`,
     )
-    .all() as StoredRecallEvidence[]
-  for (const row of rows) {
-    const current = Boolean(row.current)
-    if (!includeHistory && !current) continue
+    .all(selectCurrent ? 1 : 0) as StoredRecallEvidence[]
+
+  return rows.map((row) => {
     const derived = row.type === 'recall-summary'
-    evidence.push({
+    return {
       type: row.type,
       provenance: derived ? 'derived' : 'raw',
       id: row.id,
       content: derived ? flattenRecallSummary(row.content) : row.content,
       createdAt: row.created_at,
-      source: `opencode session ${row.session_id}${current ? '' : ' (historical)'}`,
+      source: `opencode session ${row.session_id}${selectCurrent ? '' : ' (historical)'}`,
       tags: [],
-      current,
-    })
-  }
+      current: selectCurrent,
+    }
+  })
 }
 
 function flattenRecallSummary(value: string): string {
