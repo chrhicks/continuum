@@ -224,9 +224,11 @@ set +e
 ) 2>&1 | tee -a "$run_log"
 status=${PIPESTATUS[0]}
 set -e
+pi_result=$(tail -n 1 "$run_log")
 printf 'run_id=%s exit_status=%s\n' "$run_id" "$status" | tee -a "$run_log"
 
-if (( status == 0 )) && [[ $LINEAR_AGENT_ROLE == reviewer ]] && grep -Eq 'AUDIT_(COMPLETE|NO_FINDINGS)' "$run_log"; then
+inquiry_result_pattern='^(INQUIRY_COMPLETE [^[:space:]]+ [0-9]+ [0-9]+|INQUIRY_NO_FINDINGS [^[:space:]]+)$'
+if (( status == 0 )) && [[ $LINEAR_AGENT_ROLE == reviewer ]] && [[ $pi_result =~ $inquiry_result_pattern ]]; then
   touch "$audit_marker"
 fi
 

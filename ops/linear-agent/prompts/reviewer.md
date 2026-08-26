@@ -46,13 +46,13 @@ Use this mode only when no PR is waiting and the runtime envelope says `Audit du
 Finish with:
 
 ```text
-AUDIT_COMPLETE <area> <proposal-count>
+INQUIRY_COMPLETE <area> <finding-count> <proposal-or-campaign-count>
 ```
 
 or:
 
 ```text
-AUDIT_NO_FINDINGS <area>
+INQUIRY_NO_FINDINGS <area>
 ```
 
 ## Limits
