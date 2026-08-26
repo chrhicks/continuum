@@ -1,108 +1,129 @@
 import { createHash } from 'node:crypto'
-import { Effect } from 'effect'
+import { Effect, Result } from 'effect'
 import {
   extractOpencodeSessions,
+  type OpencodeExtractionResult,
   type OpencodeSessionBundle,
 } from '../opencode/extract'
 import { normalizeSessionMessages } from '../collectors/opencode-message-normalization'
 import { resolveSummaryConfig } from '../collectors/opencode-summary-config'
 import { summarizeOpencodeSession } from '../collectors/opencode-summary'
-import type {
-  NormalizedOpencodeMessage,
-  ResolvedSummaryConfig,
-} from '../collectors/opencode-artifacts'
-import type { RecallSummaryResult } from '../opencode/summary-schema'
-import {
-  makeRecallRepository,
-  type RecallRepositoryService,
-} from '../repository/recall-repository'
+import type { NormalizedOpencodeMessage } from '../collectors/opencode-artifacts'
+import { makeRecallRepository } from '../repository/recall-repository'
 import { RecallSourceError, RecallSummaryError } from '../domain/errors'
 import { loadMemoryConfig } from '../config'
 import type { MemoryResourceOwner } from './resource-owner'
+import {
+  buildCanonicalRecallImportResult,
+  RecallImportExecutionError,
+  type CanonicalRecallImportResult,
+  type PreparedRecallImport,
+  type RecallImportDependencies,
+  type RecallImportDependencyOverrides,
+  type RecallImportRequest,
+  type RecallSessionImportOutcome,
+} from './recall-import-contract'
 
-export type CanonicalRecallImportOptions = {
-  dbPath?: string
-  projectId?: string
-  sessionId?: string
-  limit?: number
-  afterDate?: Date
-  dryRun?: boolean
-  summaryConfig?: ResolvedSummaryConfig
-  summarize?: (
-    session: OpencodeSessionBundle,
-    messages: NormalizedOpencodeMessage[],
-    config: ResolvedSummaryConfig,
-  ) => Promise<RecallSummaryResult>
-  now?: () => Date
-  extract?: typeof extractOpencodeSessions
-}
-
-export type CanonicalRecallImportResult = {
-  sourceDbPath: string
-  dryRun: boolean
-  totalSessions: number
-  imported: number
-  changed: number
-  skippedExisting: number
-  importedSessions: string[]
-}
+export {
+  RecallImportExecutionError,
+  type CanonicalRecallImportResult,
+  type PreparedRecallImport,
+  type RecallImportDependencies,
+  type RecallImportDependencyOverrides,
+  type RecallImportRequest,
+  type RecallSessionImportOutcome,
+} from './recall-import-contract'
 
 export function importCanonicalOpencodeRecall(
   owner: MemoryResourceOwner,
-  options: CanonicalRecallImportOptions = {},
+  request: RecallImportRequest = {},
+  dependencyOverrides: RecallImportDependencyOverrides = {},
 ): Effect.Effect<CanonicalRecallImportResult, unknown> {
+  return prepareCanonicalRecallImport(owner, request, dependencyOverrides).pipe(
+    Effect.flatMap(executeCanonicalRecallImport),
+    Effect.mapError((error) =>
+      error instanceof RecallImportExecutionError ? error.cause : error,
+    ),
+  )
+}
+
+export function prepareCanonicalRecallImport(
+  owner: MemoryResourceOwner,
+  request: RecallImportRequest = {},
+  overrides: RecallImportDependencyOverrides = {},
+): Effect.Effect<PreparedRecallImport, unknown> {
   return Effect.gen(function* () {
-    const extraction = yield* Effect.try({
-      try: () =>
-        (options.extract ?? extractOpencodeSessions)({
-          dbPath: options.dbPath,
-          repoPath: owner.workspaceRoot,
-          projectId: options.projectId,
-          sessionId: options.sessionId,
-          afterDate: options.afterDate,
-          limit: options.limit,
-        }),
-      catch: (cause) => new RecallSourceError({ cause }),
-    })
-    const repository = makeRecallRepository(owner.handle)
-    const config =
-      options.summaryConfig ??
-      resolveSummaryConfig(yield* loadMemoryConfig(owner.memoryDir))
-    const sessions = applySessionFilters(
-      extraction.sessions,
-      options.afterDate,
-      options.limit,
+    const extraction = yield* extractRecallSource(
+      request,
+      owner.workspaceRoot,
+      overrides.extract ?? extractOpencodeSessions,
     )
-    const result: CanonicalRecallImportResult = {
-      sourceDbPath: extraction.dbPath,
-      dryRun: options.dryRun ?? false,
-      totalSessions: sessions.length,
-      imported: 0,
-      changed: 0,
-      skippedExisting: 0,
-      importedSessions: [],
+    const summaryConfig =
+      overrides.summaryConfig ??
+      resolveSummaryConfig(yield* loadMemoryConfig(owner.memoryDir))
+    return {
+      request,
+      extraction,
+      dependencies: {
+        repository: makeRecallRepository(owner.handle),
+        summaryConfig,
+        summarize: overrides.summarize ?? summarizeOpencodeSession,
+        now: overrides.now ?? (() => new Date()),
+      },
     }
-    for (const session of sessions) {
-      yield* importSession(
-        session,
-        extraction.project.id,
-        repository,
-        config,
-        options,
-        result,
-      )
-    }
-    return result
   })
 }
 
-function applySessionFilters(
+export function executeCanonicalRecallImport(
+  prepared: PreparedRecallImport,
+): Effect.Effect<CanonicalRecallImportResult, RecallImportExecutionError> {
+  const { request, extraction, dependencies } = prepared
+  return Effect.gen(function* () {
+    const sessions = selectRequestedSessions(extraction.sessions, request)
+    const sessionOutcomes = yield* importRecallSessions(
+      sessions,
+      extraction.project.id,
+      request,
+      dependencies,
+    )
+    return buildCanonicalRecallImportResult(
+      extraction.dbPath,
+      request.dryRun ?? false,
+      sessions.length,
+      sessionOutcomes,
+    )
+  })
+}
+
+function extractRecallSource(
+  request: RecallImportRequest,
+  workspaceRoot: string,
+  extract: typeof extractOpencodeSessions,
+): Effect.Effect<OpencodeExtractionResult, RecallSourceError> {
+  return Effect.try({
+    try: () =>
+      extract({
+        dbPath: request.dbPath,
+        repoPath: workspaceRoot,
+        projectId: request.projectId,
+        sessionId: request.sessionId,
+        afterDate: request.afterDate,
+        limit: request.limit,
+      }),
+    catch: (cause) => new RecallSourceError({ cause }),
+  })
+}
+
+function selectRequestedSessions(
   sessions: OpencodeSessionBundle[],
-  afterDate?: Date,
-  limit?: number,
+  request: RecallImportRequest,
 ): OpencodeSessionBundle[] {
-  const filtered = sessions.filter((session) => isAfter(session, afterDate))
-  return typeof limit === 'number' ? filtered.slice(0, limit) : filtered
+  const filtered = sessions.filter((session) =>
+    isAfter(session, request.afterDate),
+  )
+  return typeof request.limit === 'number'
+    ? filtered.slice(0, request.limit)
+    : filtered
 }
 
 function isAfter(session: OpencodeSessionBundle, afterDate?: Date): boolean {
@@ -112,38 +133,66 @@ function isAfter(session: OpencodeSessionBundle, afterDate?: Date): boolean {
   )
 }
 
+function importRecallSessions(
+  sessions: readonly OpencodeSessionBundle[],
+  projectId: string,
+  request: RecallImportRequest,
+  dependencies: RecallImportDependencies,
+): Effect.Effect<RecallSessionImportOutcome[], RecallImportExecutionError> {
+  return Effect.gen(function* () {
+    const completedOutcomes: RecallSessionImportOutcome[] = []
+    for (const [index, session] of sessions.entries()) {
+      const attempt = yield* Effect.result(
+        importRecallSession(session, projectId, request, dependencies),
+      )
+      if (Result.isFailure(attempt)) {
+        return yield* Effect.fail(
+          new RecallImportExecutionError({
+            completedOutcomes,
+            failedSessionId: session.session.id,
+            unattemptedSessionIds: sessions
+              .slice(index + 1)
+              .map((item) => item.session.id),
+            cause: attempt.failure,
+          }),
+        )
+      }
+      completedOutcomes.push(attempt.success)
+    }
+    return completedOutcomes
+  })
+}
+
 function isRecallMessage(
   message: NormalizedOpencodeMessage,
 ): message is NormalizedOpencodeMessage & { role: 'user' | 'assistant' } {
   return message.role === 'user' || message.role === 'assistant'
 }
 
-function importSession(
+function importRecallSession(
   session: OpencodeSessionBundle,
   projectId: string,
-  repository: RecallRepositoryService,
-  config: ResolvedSummaryConfig | null,
-  options: CanonicalRecallImportOptions,
-  result: CanonicalRecallImportResult,
-): Effect.Effect<void, unknown> {
+  request: RecallImportRequest,
+  dependencies: RecallImportDependencies,
+): Effect.Effect<RecallSessionImportOutcome, unknown> {
   return Effect.gen(function* () {
+    const sessionId = session.session.id
     const messages = normalizeSessionMessages(session.messageBlocks).filter(
       isRecallMessage,
     )
     const fingerprint = fingerprintSession(session, projectId, messages)
-    const existing = yield* repository.findSource(
+    const existing = yield* dependencies.repository.findSource(
       'opencode',
-      session.session.id,
+      sessionId,
     )
-    if (existing?.fingerprint === fingerprint) {
-      result.skippedExisting += 1
-      return
-    }
-    if (options.dryRun) {
-      existing ? (result.changed += 1) : (result.imported += 1)
-      result.importedSessions.push(session.session.id)
-      return
-    }
+    if (existing?.fingerprint === fingerprint)
+      return sessionOutcome(sessionId, 'current')
+    if (request.dryRun)
+      return sessionOutcome(
+        sessionId,
+        existing ? 'would-refresh' : 'would-import',
+      )
+    const config = dependencies.summaryConfig
     if (!config) {
       return yield* Effect.fail(
         new RecallSummaryError({
@@ -154,22 +203,17 @@ function importSession(
       )
     }
     const summary = yield* Effect.tryPromise({
-      try: () =>
-        (options.summarize ?? summarizeOpencodeSession)(
-          session,
-          messages,
-          config,
-        ),
+      try: () => dependencies.summarize(session, messages, config),
       catch: (cause) => new RecallSummaryError({ cause }),
     })
-    const timestamp = (options.now ?? (() => new Date()))().toISOString()
-    const sourceId = existing?.id ?? `recall_opencode_${session.session.id}`
-    yield* repository.replace({
+    const timestamp = dependencies.now().toISOString()
+    const sourceId = existing?.id ?? `recall_opencode_${sessionId}`
+    yield* dependencies.repository.replace({
       source: {
         id: sourceId,
         harness: 'opencode',
         externalProjectId: projectId,
-        externalSessionId: session.session.id,
+        externalSessionId: sessionId,
         title: session.session.title ?? session.session.slug ?? null,
         sourceCreatedAt: toIso(session.session.time?.created),
         sourceUpdatedAt: toIso(session.session.time?.updated),
@@ -196,9 +240,15 @@ function importSession(
         createdAt: timestamp,
       },
     })
-    existing ? (result.changed += 1) : (result.imported += 1)
-    result.importedSessions.push(session.session.id)
+    return sessionOutcome(sessionId, existing ? 'refreshed' : 'imported')
   })
+}
+
+function sessionOutcome(
+  sessionId: string,
+  status: RecallSessionImportOutcome['status'],
+): RecallSessionImportOutcome {
+  return { sessionId, status }
 }
 
 function fingerprintSession(
