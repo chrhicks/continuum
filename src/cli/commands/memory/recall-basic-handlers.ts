@@ -7,7 +7,6 @@ import { runMemoryCommand } from '../../io'
 import { resolveCliMemoryAccess, type CliInvocation } from '../../memory-access'
 import { resolveFrom } from '../../../workspace/resolve'
 import { MemoryRuntime } from '../../../memory/runtime/memory-runtime'
-import { makeRecallRepository } from '../../../memory/repository/recall-repository'
 import { getRecallStatus } from '../../../memory/application/recall-status'
 
 export async function handleRecallStatus(
@@ -24,7 +23,7 @@ export async function handleRecallStatus(
     access,
     Effect.gen(function* () {
       const runtime = yield* MemoryRuntime
-      return getRecallStatus(runtime.handle)
+      return getRecallStatus(runtime)
     }),
     (counts) => {
       console.log('Canonical recall status:')
@@ -50,19 +49,15 @@ export async function handleRecallImport(
     access,
     Effect.gen(function* () {
       const runtime = yield* MemoryRuntime
-      return yield* importCanonicalOpencodeRecall({
-        continuumDbPath: runtime.dbPath,
-        memoryDir: runtime.memoryDir,
+      return yield* importCanonicalOpencodeRecall(runtime, {
         dbPath: options.db
           ? resolveFrom(access.executionCwd, options.db)
           : undefined,
-        repoPath: runtime.workspaceRoot,
         projectId: options.project,
         sessionId: options.session,
         afterDate: options.after ? parseDate(options.after) : undefined,
         limit: options.limit ? parseRecallLimit(options.limit) : undefined,
         dryRun: options.dryRun,
-        repository: makeRecallRepository(runtime.handle),
       })
     }),
     (result) => {

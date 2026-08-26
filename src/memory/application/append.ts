@@ -1,14 +1,11 @@
 import { Effect } from 'effect'
-import { getDbClientByPath } from '../../db/client'
-import { dirname } from 'node:path'
+import { join } from 'node:path'
 import type { JournalEntry } from '../domain/journal-entry'
 import { publishNowProjection } from '../projection/now-projection'
 import { ProjectionPublicationError } from '../domain/errors'
 import { withProjectionPublicationLock } from '../projection/publication-lock'
-import {
-  makeJournalRepository,
-  type JournalRepositoryService,
-} from '../repository/journal-repository'
+import { makeJournalRepository } from '../repository/journal-repository'
+import type { MemoryResourceOwner } from './resource-owner'
 
 type AppendMemoryInput = {
   kind: string
@@ -32,35 +29,33 @@ export type AppendMemoryResult = {
 }
 
 export type AppendMemoryOptions = {
-  dbPath: string
-  nowPath: string
   input: AppendMemoryInput
-  repository?: JournalRepositoryService
+}
+
+export type AppendMemoryDependencies = {
   publish?: (path: string, entries: readonly JournalEntry[]) => void
 }
 
 export function appendMemory(
+  owner: MemoryResourceOwner,
   options: AppendMemoryOptions,
+  dependencies: AppendMemoryDependencies = {},
 ): Effect.Effect<AppendMemoryResult, unknown> {
-  const repository =
-    options.repository ??
-    makeJournalRepository(getDbClientByPath(options.dbPath))
+  const repository = makeJournalRepository(owner.handle)
+  const nowPath = join(owner.memoryDir, 'NOW.md')
   return Effect.gen(function* () {
     const entry = yield* repository.append(options.input)
     const projection = yield* Effect.result(
       withProjectionPublicationLock(
-        dirname(options.nowPath),
+        owner.memoryDir,
         Effect.gen(function* () {
           const boundary = (yield* repository.latestBoundary()) ?? 0
           const pending = yield* repository.listPending(boundary)
           yield* Effect.try({
             try: () =>
-              (options.publish ?? publishNowProjection)(
-                options.nowPath,
-                pending,
-              ),
+              (dependencies.publish ?? publishNowProjection)(nowPath, pending),
             catch: (cause) =>
-              new ProjectionPublicationError({ path: options.nowPath, cause }),
+              new ProjectionPublicationError({ path: nowPath, cause }),
           })
         }),
       ),

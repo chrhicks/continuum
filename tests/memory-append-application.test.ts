@@ -7,6 +7,10 @@ import { Effect } from 'effect'
 import { appendMemory } from '../src/memory/application/append'
 import { getDbClientByPath } from '../src/db/client'
 import { makeJournalRepository } from '../src/memory/repository/journal-repository'
+import {
+  memoryResourceOwner,
+  type MemoryResourceOwner,
+} from '../src/memory/application/resource-owner'
 
 const directories: string[] = []
 
@@ -16,13 +20,25 @@ afterEach(() => {
   }
 })
 
-function paths(): { dbPath: string; nowPath: string } {
-  const directory = mkdtempSync(join(tmpdir(), 'continuum-append-'))
-  directories.push(directory)
+function paths(): {
+  workspaceRoot: string
+  memoryDir: string
+  dbPath: string
+  nowPath: string
+} {
+  const workspaceRoot = mkdtempSync(join(tmpdir(), 'continuum-append-'))
+  directories.push(workspaceRoot)
+  const memoryDir = join(workspaceRoot, '.continuum', 'memory')
   return {
-    dbPath: join(directory, '.continuum', 'continuum.db'),
-    nowPath: join(directory, '.continuum', 'memory', 'NOW.md'),
+    workspaceRoot,
+    memoryDir,
+    dbPath: join(workspaceRoot, '.continuum', 'continuum.db'),
+    nowPath: join(memoryDir, 'NOW.md'),
   }
+}
+
+function owner(target: ReturnType<typeof paths>): MemoryResourceOwner {
+  return memoryResourceOwner(target, getDbClientByPath(target.dbPath))
 }
 
 describe('memory append application', () => {
@@ -33,7 +49,7 @@ describe('memory append application', () => {
       { kind: 'agent', content: 'response' },
       { kind: 'tool', content: 'bash - checked' },
     ]) {
-      await Effect.runPromise(appendMemory({ ...target, input }))
+      await Effect.runPromise(appendMemory(owner(target), { input }))
     }
 
     const content = readFileSync(target.nowPath, 'utf8')
@@ -53,9 +69,14 @@ describe('memory append application', () => {
       content: 'once',
       idempotencyKey: 'operation-1',
     }
-    const first = await Effect.runPromise(appendMemory({ ...target, input }))
+    const resourceOwner = owner(target)
+    const first = await Effect.runPromise(
+      appendMemory(resourceOwner, { input }),
+    )
     unlinkSync(target.nowPath)
-    const retry = await Effect.runPromise(appendMemory({ ...target, input }))
+    const retry = await Effect.runPromise(
+      appendMemory(resourceOwner, { input }),
+    )
 
     expect(retry.entry).toEqual(first.entry)
     expect(retry.projection.stale).toBe(false)
@@ -64,16 +85,40 @@ describe('memory append application', () => {
     expect(await Effect.runPromise(repository.listPending())).toHaveLength(1)
   })
 
+  test('writes only through the selected resource owner', async () => {
+    const selected = owner(paths())
+    const unselected = owner(paths())
+
+    await Effect.runPromise(
+      appendMemory(selected, {
+        input: { kind: 'agent', content: 'selected owner' },
+      }),
+    )
+
+    expect(
+      selected.handle.sqlite
+        .query('SELECT content FROM memory_journal_entries')
+        .get(),
+    ).toEqual({ content: 'selected owner' })
+    expect(
+      unselected.handle.sqlite
+        .query('SELECT COUNT(*) AS count FROM memory_journal_entries')
+        .get(),
+    ).toEqual({ count: 0 })
+  })
+
   test('reports stale projection after the row commits', async () => {
     const target = paths()
     const result = await Effect.runPromise(
-      appendMemory({
-        ...target,
-        input: { kind: 'agent', content: 'durable' },
-        publish: () => {
-          throw new Error('disk full')
+      appendMemory(
+        owner(target),
+        { input: { kind: 'agent', content: 'durable' } },
+        {
+          publish: () => {
+            throw new Error('disk full')
+          },
         },
-      }),
+      ),
     )
 
     expect(result.projection.stale).toBe(true)

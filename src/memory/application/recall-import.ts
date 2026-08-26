@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto'
 import { Effect } from 'effect'
-import { getWorkspaceContext } from '../paths'
 import {
   extractOpencodeSessions,
   type OpencodeSessionBundle,
@@ -19,19 +18,15 @@ import {
 } from '../repository/recall-repository'
 import { RecallSourceError, RecallSummaryError } from '../domain/errors'
 import { loadMemoryConfig } from '../config'
-import { getDbClientByPath } from '../../db/client'
+import type { MemoryResourceOwner } from './resource-owner'
 
 export type CanonicalRecallImportOptions = {
-  continuumDbPath?: string
-  memoryDir?: string
   dbPath?: string
-  repoPath?: string
   projectId?: string
   sessionId?: string
   limit?: number
   afterDate?: Date
   dryRun?: boolean
-  repository?: RecallRepositoryService
   summaryConfig?: ResolvedSummaryConfig
   summarize?: (
     session: OpencodeSessionBundle,
@@ -53,26 +48,15 @@ export type CanonicalRecallImportResult = {
 }
 
 export function importCanonicalOpencodeRecall(
+  owner: MemoryResourceOwner,
   options: CanonicalRecallImportOptions = {},
 ): Effect.Effect<CanonicalRecallImportResult, unknown> {
   return Effect.gen(function* () {
-    const workspace =
-      options.repoPath && options.continuumDbPath ? null : getWorkspaceContext()
-    const repoPath = options.repoPath ?? workspace?.workspaceRoot
-    const continuumDbPath =
-      options.continuumDbPath ?? workspace?.continuumDbPath
-    if (!repoPath || !continuumDbPath) {
-      return yield* Effect.fail(
-        new RecallSourceError({
-          cause: new Error('Unable to resolve recall workspace paths'),
-        }),
-      )
-    }
     const extraction = yield* Effect.try({
       try: () =>
         (options.extract ?? extractOpencodeSessions)({
           dbPath: options.dbPath,
-          repoPath,
+          repoPath: owner.workspaceRoot,
           projectId: options.projectId,
           sessionId: options.sessionId,
           afterDate: options.afterDate,
@@ -80,14 +64,10 @@ export function importCanonicalOpencodeRecall(
         }),
       catch: (cause) => new RecallSourceError({ cause }),
     })
-    const repository =
-      options.repository ??
-      makeRecallRepository(getDbClientByPath(continuumDbPath))
+    const repository = makeRecallRepository(owner.handle)
     const config =
       options.summaryConfig ??
-      resolveSummaryConfig(
-        yield* loadMemoryConfig(options.memoryDir ?? workspace?.memoryDir),
-      )
+      resolveSummaryConfig(yield* loadMemoryConfig(owner.memoryDir))
     const sessions = applySessionFilters(
       extraction.sessions,
       options.afterDate,

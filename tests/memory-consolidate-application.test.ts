@@ -10,6 +10,10 @@ import { consolidateMemory } from '../src/memory/application/consolidate'
 import { ConsolidationConflictError } from '../src/memory/domain/errors'
 import { makeConsolidationRepository } from '../src/memory/repository/consolidation-repository'
 import { makeJournalRepository } from '../src/memory/repository/journal-repository'
+import {
+  memoryResourceOwner,
+  type MemoryResourceOwner,
+} from '../src/memory/application/resource-owner'
 import type { MemorySummary } from '../src/memory/types'
 
 const directories: string[] = []
@@ -20,15 +24,28 @@ afterEach(() => {
   }
 })
 
-function target(): { dbPath: string; memoryDir: string; nowPath: string } {
-  const root = mkdtempSync(join(tmpdir(), 'continuum-consolidate-'))
-  directories.push(root)
-  const memoryDir = join(root, '.continuum', 'memory')
+function target(): {
+  workspaceRoot: string
+  dbPath: string
+  memoryDir: string
+  nowPath: string
+} {
+  const workspaceRoot = mkdtempSync(join(tmpdir(), 'continuum-consolidate-'))
+  directories.push(workspaceRoot)
+  const memoryDir = join(workspaceRoot, '.continuum', 'memory')
   return {
-    dbPath: join(root, '.continuum', 'continuum.db'),
+    workspaceRoot,
+    dbPath: join(workspaceRoot, '.continuum', 'continuum.db'),
     memoryDir,
     nowPath: join(memoryDir, 'NOW.md'),
   }
+}
+
+function owner(
+  paths: ReturnType<typeof target>,
+  handle = getDbClientByPath(paths.dbPath),
+): MemoryResourceOwner {
+  return memoryResourceOwner(paths, handle)
 }
 
 function summary(narrative: string): MemorySummary {
@@ -53,17 +70,14 @@ async function append(
   content: string,
 ): Promise<void> {
   await Effect.runPromise(
-    appendMemory({
-      ...paths,
-      input: { kind: 'user', content },
-    }),
+    appendMemory(owner(paths), { input: { kind: 'user', content } }),
   )
 }
 
 describe('memory consolidate application', () => {
   test('returns no pending without writing projections', async () => {
     const paths = target()
-    const result = await Effect.runPromise(consolidateMemory(paths))
+    const result = await Effect.runPromise(consolidateMemory(owner(paths)))
     expect(result.status).toBe('no-pending')
     expect(existsSync(paths.nowPath)).toBe(false)
   })
@@ -73,11 +87,11 @@ describe('memory consolidate application', () => {
     await append(paths, 'pending')
     rmSync(paths.nowPath)
     const result = await Effect.runPromise(
-      consolidateMemory({
-        ...paths,
-        dryRun: true,
-        summarize: async () => summary('preview'),
-      }),
+      consolidateMemory(
+        owner(paths),
+        { dryRun: true },
+        { summarize: async () => summary('preview') },
+      ),
     )
     expect(result.status).toBe('preview')
     expect(existsSync(paths.nowPath)).toBe(false)
@@ -88,13 +102,16 @@ describe('memory consolidate application', () => {
     const paths = target()
     await append(paths, 'first')
     const result = await Effect.runPromise(
-      consolidateMemory({
-        ...paths,
-        summarize: async () => {
-          await append(paths, 'later')
-          return summary('first only')
+      consolidateMemory(
+        owner(paths),
+        {},
+        {
+          summarize: async () => {
+            await append(paths, 'later')
+            return summary('first only')
+          },
         },
-      }),
+      ),
     )
     expect(result.status).toBe('completed')
     if (result.status !== 'completed') return
@@ -112,26 +129,28 @@ describe('memory consolidate application', () => {
     const releaseFirst = Effect.runSync(Deferred.make<void>())
     try {
       const first = Effect.runPromise(
-        consolidateMemory({
-          ...paths,
-          journal: makeJournalRepository(firstHandle),
-          consolidations: makeConsolidationRepository(firstHandle),
-          summarize: async () => {
-            await Effect.runPromise(Deferred.succeed(firstStarted, undefined))
-            await Effect.runPromise(Deferred.await(releaseFirst))
-            return summary('stale overlap')
+        consolidateMemory(
+          owner(paths, firstHandle),
+          {},
+          {
+            summarize: async () => {
+              await Effect.runPromise(Deferred.succeed(firstStarted, undefined))
+              await Effect.runPromise(Deferred.await(releaseFirst))
+              return summary('stale overlap')
+            },
           },
-        }),
+        ),
       )
       await Effect.runPromise(Deferred.await(firstStarted))
       await append(paths, 'second')
       const second = await Effect.runPromise(
-        consolidateMemory({
-          ...paths,
-          journal: makeJournalRepository(secondHandle),
-          consolidations: makeConsolidationRepository(secondHandle),
-          summarize: async () => summary('winning range'),
-        }),
+        consolidateMemory(
+          owner(paths, secondHandle),
+          {},
+          {
+            summarize: async () => summary('winning range'),
+          },
+        ),
       )
       expect(second.status).toBe('completed')
       await Effect.runPromise(Deferred.succeed(releaseFirst, undefined))
@@ -152,12 +171,15 @@ describe('memory consolidate application', () => {
     const before = journalRows(paths.dbPath)
     const failure = await Effect.runPromise(
       Effect.result(
-        consolidateMemory({
-          ...paths,
-          summarize: async () => {
-            throw new Error('summary failed')
+        consolidateMemory(
+          owner(paths),
+          {},
+          {
+            summarize: async () => {
+              throw new Error('summary failed')
+            },
           },
-        }),
+        ),
       ),
     )
     expect(Result.isFailure(failure) && taggedErrorName(failure.failure)).toBe(
@@ -188,10 +210,13 @@ describe('memory consolidate application', () => {
     const paths = target()
     await append(paths, 'first source')
     await Effect.runPromise(
-      consolidateMemory({
-        ...paths,
-        summarize: async () => summary('persisted first summary'),
-      }),
+      consolidateMemory(
+        owner(paths),
+        {},
+        {
+          summarize: async () => summary('persisted first summary'),
+        },
+      ),
     )
     rmSync(paths.memoryDir, { recursive: true, force: true })
     const journal = makeJournalRepository(getDbClientByPath(paths.dbPath))
@@ -199,10 +224,13 @@ describe('memory consolidate application', () => {
       journal.append({ kind: 'user', content: 'second source' }),
     )
     await Effect.runPromise(
-      consolidateMemory({
-        ...paths,
-        summarize: async () => summary('second summary'),
-      }),
+      consolidateMemory(
+        owner(paths),
+        {},
+        {
+          summarize: async () => summary('second summary'),
+        },
+      ),
     )
     expect(readFileSync(join(paths.memoryDir, 'MEMORY.md'), 'utf8')).toContain(
       'persisted first summary',
@@ -213,13 +241,16 @@ describe('memory consolidate application', () => {
     const paths = target()
     await append(paths, 'durable')
     const result = await Effect.runPromise(
-      consolidateMemory({
-        ...paths,
-        summarize: async () => summary('saved'),
-        publish: () => {
-          throw new Error('disk full')
+      consolidateMemory(
+        owner(paths),
+        {},
+        {
+          summarize: async () => summary('saved'),
+          publish: () => {
+            throw new Error('disk full')
+          },
         },
-      }),
+      ),
     )
     expect(result.status).toBe('completed')
     if (result.status !== 'completed') return

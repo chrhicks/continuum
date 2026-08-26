@@ -17,6 +17,10 @@ import { consolidateMemory } from '../src/memory/application/consolidate'
 import { getDbClientByPath } from '../src/db/client'
 import { makeJournalRepository } from '../src/memory/repository/journal-repository'
 import type { MemorySummary } from '../src/memory/types'
+import {
+  memoryResourceOwner,
+  type MemoryResourceOwner,
+} from '../src/memory/application/resource-owner'
 
 const roots: string[] = []
 
@@ -25,7 +29,23 @@ afterEach(() => {
     rmSync(root, { recursive: true, force: true })
 })
 
-function fixture(): { root: string; memoryDir: string; dbPath: string } {
+type LegacyFixture = { root: string; memoryDir: string; dbPath: string }
+
+function owner(
+  paths: LegacyFixture,
+  handle = getDbClientByPath(paths.dbPath),
+): MemoryResourceOwner {
+  return memoryResourceOwner(
+    {
+      workspaceRoot: paths.root,
+      memoryDir: paths.memoryDir,
+      dbPath: paths.dbPath,
+    },
+    handle,
+  )
+}
+
+function fixture(): LegacyFixture {
   const root = mkdtempSync(join(tmpdir(), 'continuum-legacy-'))
   roots.push(root)
   const memoryDir = join(root, '.continuum', 'memory')
@@ -190,12 +210,13 @@ describe('legacy memory migration', () => {
 
     const journal = makeJournalRepository(handle)
     const consolidated = await Effect.runPromise(
-      consolidateMemory({
-        dbPath: paths.dbPath,
-        memoryDir: paths.memoryDir,
-        journal,
-        summarize: async () => summary('migrated NOW entries'),
-      }),
+      consolidateMemory(
+        owner(paths, handle),
+        {},
+        {
+          summarize: async () => summary('migrated NOW entries'),
+        },
+      ),
     )
     expect(consolidated.status).toBe('completed')
     const before = counts(handle.sqlite)
@@ -286,13 +307,14 @@ describe('legacy memory migration', () => {
     ])
 
     const result = await Effect.runPromise(
-      consolidateMemory({
-        dbPath: paths.dbPath,
-        memoryDir: paths.memoryDir,
-        journal,
-        summarize: async () => summary('migrated NOW entries'),
-        publish: () => {},
-      }),
+      consolidateMemory(
+        owner(paths, handle),
+        {},
+        {
+          summarize: async () => summary('migrated NOW entries'),
+          publish: () => {},
+        },
+      ),
     )
     expect(result.status).toBe('completed')
     if (result.status !== 'completed') return

@@ -1,5 +1,5 @@
 import { existsSync, statSync } from 'node:fs'
-import { isAbsolute, join, resolve } from 'node:path'
+import { isAbsolute, resolve } from 'node:path'
 import { appendMemory } from '../memory/application/append'
 import {
   listMemoryEvidence,
@@ -18,36 +18,36 @@ import {
 } from '../cli/commands/summary-tasks'
 import { resolveWorkspaceContext } from '../workspace/resolve'
 import { runMcpEffect } from './result'
+import {
+  memoryResourceOwner,
+  type MemoryResourceOwner,
+  type MemoryResourcePaths,
+} from '../memory/application/resource-owner'
 
-export type McpWorkspace = {
-  workspaceRoot: string
-  memoryDir: string
-  dbPath: string
-}
+export type McpWorkspace = MemoryResourcePaths
 
 export async function getSummary(input: {
   workspace: string
   taskLimit?: number
   memoryLimit?: number
 }): Promise<{ workspace: string; output: string }> {
-  const context = resolveReadOnlyMcpWorkspace(input.workspace)
+  const owner = resolveReadOnlyMcpMemoryOwner(input.workspace)
   const taskLimit = input.taskLimit ?? 5
   const memoryLimit = input.memoryLimit ?? 3
-  const handle = getReadOnlyDbClientByPath(context.dbPath)
   const [tasks, evidence] = await Promise.all([
-    loadTaskSummary(taskLimit, context.workspaceRoot, { readOnly: true }),
-    runMcpEffect(listMemoryEvidence(context.dbPath, {}, handle)),
+    loadTaskSummary(taskLimit, owner.workspaceRoot, { readOnly: true }),
+    runMcpEffect(listMemoryEvidence(owner)),
   ])
   const output = [
     '# Continuum Summary',
     '',
-    `Workspace: ${context.workspaceRoot}`,
+    `Workspace: ${owner.workspaceRoot}`,
     '',
     renderTaskSummary(tasks, taskLimit),
     '',
     renderMemorySummary(evidence, memoryLimit),
   ].join('\n')
-  return { workspace: context.workspaceRoot, output }
+  return { workspace: owner.workspaceRoot, output }
 }
 
 export async function appendMcpMemory(input: {
@@ -61,11 +61,9 @@ export async function appendMcpMemory(input: {
   sequence: number
   projectionStale: boolean
 }> {
-  const context = resolveMcpWorkspace(input.workspace)
+  const owner = resolveMcpMemoryOwner(input.workspace)
   const result = await runMcpEffect(
-    appendMemory({
-      dbPath: context.dbPath,
-      nowPath: join(context.memoryDir, 'NOW.md'),
+    appendMemory(owner, {
       input: {
         kind: input.kind,
         content: input.content,
@@ -74,7 +72,7 @@ export async function appendMcpMemory(input: {
     }),
   )
   return {
-    workspace: context.workspaceRoot,
+    workspace: owner.workspaceRoot,
     id: result.entry.id,
     sequence: result.entry.sequence,
     projectionStale: result.projection.stale,
@@ -89,17 +87,11 @@ export async function searchMcpMemory(input: {
   workspace: string
   matches: Array<MemoryEvidence & { score: number }>
 }> {
-  const context = resolveReadOnlyMcpWorkspace(input.workspace)
-  const handle = getReadOnlyDbClientByPath(context.dbPath)
+  const owner = resolveReadOnlyMcpMemoryOwner(input.workspace)
   const matches = await runMcpEffect(
-    searchMemoryEvidence(
-      context.dbPath,
-      input.query,
-      { limit: input.limit ?? 20 },
-      handle,
-    ),
+    searchMemoryEvidence(owner, input.query, { limit: input.limit ?? 20 }),
   )
-  return { workspace: context.workspaceRoot, matches }
+  return { workspace: owner.workspaceRoot, matches }
 }
 
 export function resolveMcpWorkspace(workspace: string): McpWorkspace {
@@ -117,6 +109,18 @@ export function resolveMcpWorkspace(workspace: string): McpWorkspace {
     )
   }
   return toMcpWorkspace(resolved)
+}
+
+export function resolveMcpMemoryOwner(workspace: string): MemoryResourceOwner {
+  const context = resolveMcpWorkspace(workspace)
+  return memoryResourceOwner(context, getDbClientByPath(context.dbPath))
+}
+
+export function resolveReadOnlyMcpMemoryOwner(
+  workspace: string,
+): MemoryResourceOwner {
+  const context = resolveReadOnlyMcpWorkspace(workspace)
+  return memoryResourceOwner(context, getReadOnlyDbClientByPath(context.dbPath))
 }
 
 export function resolveReadOnlyMcpWorkspace(workspace: string): McpWorkspace {

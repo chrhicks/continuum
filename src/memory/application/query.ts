@@ -1,5 +1,3 @@
-import { getDbClientByPath } from '../../db/client'
-import type { DbHandle } from '../../db/client'
 import { Effect, Schema } from 'effect'
 import {
   DatabaseQueryError,
@@ -11,6 +9,7 @@ import { JournalMetadata } from '../domain/journal-entry'
 import { MemorySummarySchema } from '../domain/memory-summary'
 import type { MemorySummary } from '../types'
 import { appendRecallEvidence } from './query-recall'
+import type { MemoryResourceOwner } from './resource-owner'
 
 export type MemoryEvidence = {
   type: 'journal' | 'consolidation' | 'recall-message' | 'recall-summary'
@@ -40,16 +39,15 @@ type StoredJournalEvidence = {
 }
 
 export function listMemoryEvidence(
-  dbPath: string,
+  owner: MemoryResourceOwner,
   options: MemoryQueryOptions = {},
-  handle?: DbHandle,
 ): Effect.Effect<
   MemoryEvidence[],
   DatabaseQueryError | DatabaseBusyError | DecodeError
 > {
   return Effect.try({
     try: () => {
-      const sqlite = (handle ?? getDbClientByPath(dbPath)).sqlite
+      const sqlite = owner.handle.sqlite
       const evidence: MemoryEvidence[] = []
       const source = options.source ?? 'all'
       const tier = options.tier ?? 'all'
@@ -128,21 +126,16 @@ export function listMemoryEvidence(
 }
 
 export function searchMemoryEvidence(
-  dbPath: string,
+  owner: MemoryResourceOwner,
   query: string,
   options: MemoryQueryOptions = {},
-  handle?: DbHandle,
 ): Effect.Effect<
   Array<MemoryEvidence & { score: number }>,
   DatabaseQueryError | DatabaseBusyError | DecodeError
 > {
   const terms = query.toLowerCase().split(/\s+/).filter(Boolean)
   const { limit, ...unlimitedOptions } = options
-  return listMemoryEvidenceIncludingRecallHistory(
-    dbPath,
-    unlimitedOptions,
-    handle,
-  ).pipe(
+  return listMemoryEvidenceIncludingRecallHistory(owner, unlimitedOptions).pipe(
     Effect.map((evidence) =>
       evidence
         .map((item) => ({
@@ -162,9 +155,8 @@ export function searchMemoryEvidence(
 }
 
 function listMemoryEvidenceIncludingRecallHistory(
-  dbPath: string,
+  owner: MemoryResourceOwner,
   options: MemoryQueryOptions,
-  handle?: DbHandle,
 ): Effect.Effect<
   MemoryEvidence[],
   DatabaseQueryError | DatabaseBusyError | DecodeError
@@ -172,7 +164,7 @@ function listMemoryEvidenceIncludingRecallHistory(
   const currentMemory =
     options.source === 'recall'
       ? Effect.succeed([] as MemoryEvidence[])
-      : listMemoryEvidence(dbPath, { ...options, source: 'memory' }, handle)
+      : listMemoryEvidence(owner, { ...options, source: 'memory' })
   return currentMemory.pipe(
     Effect.flatMap((evidence) =>
       Effect.try({
@@ -182,11 +174,7 @@ function listMemoryEvidenceIncludingRecallHistory(
             (options.tier !== undefined && options.tier !== 'all')
           )
             return evidence
-          appendRecallEvidence(
-            (handle ?? getDbClientByPath(dbPath)).sqlite,
-            evidence,
-            true,
-          )
+          appendRecallEvidence(owner.handle.sqlite, evidence, true)
           return filterEvidence(evidence, options).sort((a, b) =>
             compareDates(b.createdAt, a.createdAt),
           )

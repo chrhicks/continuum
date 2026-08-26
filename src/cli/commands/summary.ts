@@ -78,11 +78,7 @@ function renderSummary(
       sections.push('', renderTaskSummary(taskSummary, limit))
     }
     if (options.memory !== false) {
-      const evidence = yield* listMemoryEvidence(
-        context.dbPath,
-        {},
-        context.handle,
-      )
+      const evidence = yield* listMemoryEvidence(context)
       sections.push('', renderMemorySummary(evidence, memoryLines))
     }
     sections.push('', renderSuggestedCommands(taskSummary))

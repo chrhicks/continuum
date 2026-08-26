@@ -1,4 +1,3 @@
-import { join } from 'node:path'
 import { appendMemory } from '../../../memory/application/append'
 import { consolidateMemory } from '../../../memory/application/consolidate'
 import { migrateLegacyMemory } from '../../../memory/application/legacy-migrate'
@@ -16,8 +15,6 @@ import { Effect } from 'effect'
 import { runCommand, runMemoryCommand } from '../../io'
 import { resolveCliMemoryAccess, type CliInvocation } from '../../memory-access'
 import { MemoryRuntime } from '../../../memory/runtime/memory-runtime'
-import { makeJournalRepository } from '../../../memory/repository/journal-repository'
-import { makeConsolidationRepository } from '../../../memory/repository/consolidation-repository'
 
 export function registerMemoryHandlers(
   memory: Command,
@@ -123,13 +120,7 @@ async function handleConsolidate(
     access,
     Effect.gen(function* () {
       const runtime = yield* MemoryRuntime
-      return yield* consolidateMemory({
-        dbPath: runtime.dbPath,
-        memoryDir: runtime.memoryDir,
-        dryRun,
-        journal: makeJournalRepository(runtime.handle),
-        consolidations: makeConsolidationRepository(runtime.handle),
-      })
+      return yield* consolidateMemory(runtime, { dryRun })
     }),
     (result) => {
       if (result.status === 'no-pending')
@@ -171,11 +162,8 @@ async function handleAppend(
     access,
     Effect.gen(function* () {
       const runtime = yield* MemoryRuntime
-      return yield* appendMemory({
-        dbPath: runtime.dbPath,
-        nowPath: join(runtime.memoryDir, 'NOW.md'),
+      return yield* appendMemory(runtime, {
         input: { kind, content: parts.join(' ').trim() },
-        repository: makeJournalRepository(runtime.handle),
       })
     }),
     (result) => {

@@ -8,8 +8,20 @@ import {
   searchMemoryEvidence,
 } from '../src/memory/application/query'
 import { Effect, Result } from 'effect'
+import {
+  memoryResourceOwner,
+  type MemoryResourceOwner,
+} from '../src/memory/application/resource-owner'
 
 const roots: string[] = []
+
+function owner(workspaceRoot: string, dbPath: string): MemoryResourceOwner {
+  return memoryResourceOwner(
+    { workspaceRoot, memoryDir: join(workspaceRoot, 'memory'), dbPath },
+    getDbClientByPath(dbPath),
+  )
+}
+
 afterEach(() => {
   for (const root of roots.splice(0))
     rmSync(root, { recursive: true, force: true })
@@ -20,7 +32,8 @@ describe('canonical memory query', () => {
     const root = mkdtempSync(join(tmpdir(), 'continuum-query-'))
     roots.push(root)
     const dbPath = join(root, 'continuum.db')
-    const db = getDbClientByPath(dbPath).sqlite
+    const resourceOwner = owner(root, dbPath)
+    const db = resourceOwner.handle.sqlite
     db.query(
       `INSERT INTO memory_journal_entries
        (id, kind, content, metadata, created_at) VALUES (?, 'agent', ?, '{}', ?)`,
@@ -66,14 +79,14 @@ describe('canonical memory query', () => {
     )
 
     expect(
-      (await Effect.runPromise(listMemoryEvidence(dbPath, { limit: 2 }))).map(
-        (row) => row.id,
-      ),
+      (
+        await Effect.runPromise(listMemoryEvidence(resourceOwner, { limit: 2 }))
+      ).map((row) => row.id),
     ).toEqual(['recall', 'journal-new'])
     expect(
       (
         await Effect.runPromise(
-          listMemoryEvidence(dbPath, {
+          listMemoryEvidence(resourceOwner, {
             afterDate: new Date('2026-07-10T12:00:00.000Z'),
             limit: 1,
           }),
@@ -83,26 +96,28 @@ describe('canonical memory query', () => {
     expect(
       (
         await Effect.runPromise(
-          searchMemoryEvidence(dbPath, 'needle', { limit: 1 }),
+          searchMemoryEvidence(resourceOwner, 'needle', { limit: 1 }),
         )
       )[0]?.id,
     ).toBe('journal-old')
     expect(
       (
         await Effect.runPromise(
-          searchMemoryEvidence(dbPath, 'historical exact'),
+          searchMemoryEvidence(resourceOwner, 'historical exact'),
         )
       ).map((row) => row.id),
     ).toEqual(['recall-history'])
     const recallList = await Effect.runPromise(
-      listMemoryEvidence(dbPath, { source: 'recall' }),
+      listMemoryEvidence(resourceOwner, { source: 'recall' }),
     )
     expect(recallList.map((row) => row.id).sort()).toEqual([
       'recall',
       'summary-current',
     ])
     const historicalSummary = await Effect.runPromise(
-      searchMemoryEvidence(dbPath, 'superseded summary', { source: 'recall' }),
+      searchMemoryEvidence(resourceOwner, 'superseded summary', {
+        source: 'recall',
+      }),
     )
     expect(historicalSummary[0]).toMatchObject({
       id: 'summary-history',
@@ -115,8 +130,9 @@ describe('canonical memory query', () => {
     const root = mkdtempSync(join(tmpdir(), 'continuum-query-decode-'))
     roots.push(root)
     const dbPath = join(root, 'continuum.db')
-    getDbClientByPath(dbPath)
-      .sqlite.query(
+    const resourceOwner = owner(root, dbPath)
+    resourceOwner.handle.sqlite
+      .query(
         `INSERT INTO memory_journal_entries
        (id, kind, content, metadata, created_at)
        VALUES ('bad-json', 'agent', 'evidence', '{', '2026-07-01')`,
@@ -124,7 +140,7 @@ describe('canonical memory query', () => {
       .run()
 
     const result = await Effect.runPromise(
-      Effect.result(listMemoryEvidence(dbPath)),
+      Effect.result(listMemoryEvidence(resourceOwner)),
     )
     expect(Result.isFailure(result) && result.failure._tag).toBe('DecodeError')
   })
