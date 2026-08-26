@@ -1,6 +1,9 @@
 import { Command } from 'commander'
 import continuum, { TASK_TYPES } from '../../sdk'
+import { map_task } from '../../sdk/mappers'
 import type { Task } from '../../sdk/types'
+import { load_task_view_for_directory } from '../../task/task-inspection.service'
+import { resolveWorkspaceRoot } from '../../workspace/resolve'
 import { runCommand } from '../io'
 import { registerCrudCommands } from './task/crud'
 import {
@@ -124,30 +127,21 @@ async function loadTaskGetResult(
   taskId: string,
   options: TaskGetOptions,
 ): Promise<TaskGetResult> {
-  const task = await continuum.task.get(taskId)
-  if (!task) {
+  const expand = parseExpandOptions(options.expand, options.tree)
+  const view = await load_task_view_for_directory(
+    resolveWorkspaceRoot(),
+    taskId,
+    { ...expand, includeDeleted: options.includeDeleted },
+  )
+  if (!view) {
     throw new Error(`Task '${taskId}' not found.`)
   }
-  const expand = parseExpandOptions(options.expand, options.tree)
-  const parent =
-    expand.parent && task.parentId
-      ? await continuum.task.get(task.parentId)
-      : null
-  const children = expand.children
-    ? (
-        await continuum.task.list({
-          parentId: task.id,
-          includeDeleted: options.includeDeleted,
-          limit: 1000,
-        })
-      ).tasks
-    : undefined
-  const blockers = expand.blockers
-    ? (
-        await Promise.all(task.blockedBy.map((id) => continuum.task.get(id)))
-      ).filter((item): item is Task => Boolean(item))
-    : undefined
-  return { task, parent, children, blockers }
+  return {
+    task: map_task(view.task),
+    parent: view.parent ? map_task(view.parent) : null,
+    children: view.children?.map(map_task),
+    blockers: view.blockers?.map(map_task),
+  }
 }
 
 function printTaskGetResult(

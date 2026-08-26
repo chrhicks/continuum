@@ -9,12 +9,11 @@ import type {
 } from '../sdk/types'
 import { ContinuumError } from '../task/error'
 import {
-  get_open_blockers_for_directory,
-  get_task_for_directory,
-  list_tasks_for_directory,
-} from '../task/tasks.service'
-import { validate_status_transition } from '../task/validation'
-import { getMappedTask, requireTask } from './task-tool-util'
+  load_task_view_for_directory,
+  validate_task_transition_for_directory,
+} from '../task/task-inspection.service'
+import { list_tasks_for_directory } from '../task/tasks.service'
+import { requireTask } from './task-tool-util'
 import { resolveReadOnlyMcpWorkspace } from './tools'
 
 const readOnlyTaskAccess = { readOnly: true } as const
@@ -59,42 +58,26 @@ export async function getMcpTask(input: {
   blockers?: Task[]
 }> {
   const context = resolveReadOnlyMcpWorkspace(input.workspace)
-  const task = await requireTask(
+  const expand = new Set(input.expand ?? [])
+  const view = await load_task_view_for_directory(
     context.workspaceRoot,
     input.id,
+    {
+      parent: expand.has('parent'),
+      children: expand.has('children'),
+      blockers: expand.has('blockers'),
+      includeDeleted: input.includeDeleted,
+    },
     readOnlyTaskAccess,
   )
-  const expand = new Set(input.expand ?? [])
-  const parent =
-    expand.has('parent') && task.parentId
-      ? await getMappedTask(
-          context.workspaceRoot,
-          task.parentId,
-          readOnlyTaskAccess,
-        )
-      : undefined
-  const children = expand.has('children')
-    ? (
-        await listMcpTasks({
-          workspace: context.workspaceRoot,
-          options: {
-            parentId: task.id,
-            includeDeleted: input.includeDeleted,
-            limit: 1000,
-          },
-        })
-      ).tasks
-    : undefined
-  const blockers = expand.has('blockers')
-    ? (
-        await Promise.all(
-          task.blockedBy.map((id) =>
-            getMappedTask(context.workspaceRoot, id, readOnlyTaskAccess),
-          ),
-        )
-      ).filter((item): item is Task => item !== null)
-    : undefined
-  return { workspace: context.workspaceRoot, task, parent, children, blockers }
+  if (!view) throw new ContinuumError('TASK_NOT_FOUND', 'Task not found')
+  return {
+    workspace: context.workspaceRoot,
+    task: map_task(view.task),
+    parent: view.parent ? map_task(view.parent) : view.parent,
+    children: view.children?.map(map_task),
+    blockers: view.blockers?.map(map_task),
+  }
 }
 
 export async function validateMcpTask(input: {
@@ -110,21 +93,13 @@ export async function validateMcpTask(input: {
   openBlockers: string[]
 }> {
   const context = resolveReadOnlyMcpWorkspace(input.workspace)
-  const raw = await get_task_for_directory(
-    context.workspaceRoot,
-    input.id,
-    readOnlyTaskAccess,
-  )
-  if (!raw) throw new ContinuumError('TASK_NOT_FOUND', 'Task not found')
-  const missingFields = validate_status_transition(raw, input.transition)
-  const openBlockers =
-    input.transition === 'completed'
-      ? await get_open_blockers_for_directory(
-          context.workspaceRoot,
-          input.id,
-          readOnlyTaskAccess,
-        )
-      : []
+  const { missingFields, openBlockers } =
+    await validate_task_transition_for_directory(
+      context.workspaceRoot,
+      input.id,
+      input.transition,
+      readOnlyTaskAccess,
+    )
   return {
     workspace: context.workspaceRoot,
     id: input.id,
