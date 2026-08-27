@@ -225,6 +225,7 @@ set +e
 status=${PIPESTATUS[0]}
 set -e
 pi_result=$(tail -n 1 "$run_log")
+pi_previous_result=$(tail -n 2 "$run_log" | head -n 1)
 printf 'run_id=%s exit_status=%s\n' "$run_id" "$status" | tee -a "$run_log"
 
 inquiry_result_pattern='^(INQUIRY_COMPLETE [^[:space:]]+ [0-9]+ [0-9]+|INQUIRY_NO_FINDINGS [^[:space:]]+)$'
@@ -232,13 +233,32 @@ if (( status == 0 )) && [[ $LINEAR_AGENT_ROLE == reviewer ]] && [[ $pi_result =~
   touch "$audit_marker"
 fi
 
+work_complete_pattern='^WORK_COMPLETE [^[:space:]]+ [^[:space:]]+$'
+review_changes_pattern='^REVIEW_CHANGES [^[:space:]]+ [^[:space:]]+$'
+dispatch_profile_for_result() {
+  case "$LINEAR_AGENT_ROLE:$pi_result" in
+    scout:DISPATCH_WORKER)
+      printf '%s\n' "$LINEAR_AGENT_DISPATCH_WORKER_PROFILE"
+      ;;
+    scout:DISPATCH_REVIEWER)
+      printf '%s\n' "$LINEAR_AGENT_DISPATCH_REVIEWER_PROFILE"
+      ;;
+    worker:DISPATCH_REVIEWER)
+      if [[ $pi_previous_result =~ $work_complete_pattern ]]; then
+        printf '%s\n' "$LINEAR_AGENT_DISPATCH_REVIEWER_PROFILE"
+      fi
+      ;;
+    reviewer:DISPATCH_WORKER)
+      if [[ $pi_previous_result =~ $review_changes_pattern ]]; then
+        printf '%s\n' "$LINEAR_AGENT_DISPATCH_WORKER_PROFILE"
+      fi
+      ;;
+  esac
+}
+
 dispatch_profile=
 if (( status == 0 )); then
-  if grep -q 'DISPATCH_REVIEWER' "$run_log"; then
-    dispatch_profile=$LINEAR_AGENT_DISPATCH_REVIEWER_PROFILE
-  elif grep -q 'DISPATCH_WORKER' "$run_log"; then
-    dispatch_profile=$LINEAR_AGENT_DISPATCH_WORKER_PROFILE
-  fi
+  dispatch_profile=$(dispatch_profile_for_result)
 fi
 
 if [[ -n $dispatch_profile && $dispatch_profile != "$profile" ]]; then

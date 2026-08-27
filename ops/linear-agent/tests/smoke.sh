@@ -175,9 +175,39 @@ git -C "$tmp/run/repo" commit -qm init
 git -C "$tmp/run/repo" remote add origin https://example.invalid/repo.git
 cat > "$tmp/run/bin/pi" <<'EOF'
 #!/bin/sh
-case ${LINEAR_AGENT_TEST_PI_RESULT:-scout-dispatch} in
-  scout-dispatch)
+case ${LINEAR_AGENT_TEST_PI_RESULT:-scout-worker-dispatch} in
+  scout-worker-dispatch)
     printf 'SCOUT_READY CHI-TEST\nDISPATCH_WORKER\n'
+    ;;
+  scout-reviewer-dispatch)
+    printf 'DISPATCH_REVIEWER\n'
+    ;;
+  worker-reviewer-dispatch)
+    printf 'WORK_COMPLETE CHI-TEST https://example.test/pull/1\nDISPATCH_REVIEWER\n'
+    ;;
+  reviewer-worker-dispatch)
+    printf 'REVIEW_CHANGES CHI-TEST https://example.test/pull/1\nDISPATCH_WORKER\n'
+    ;;
+  incidental-dispatch-markers)
+    printf 'Review notes quote DISPATCH_WORKER and DISPATCH_REVIEWER but request neither\n'
+    ;;
+  worker-without-completion)
+    printf 'Worker is still processing\nDISPATCH_REVIEWER\n'
+    ;;
+  reviewer-without-changes)
+    printf 'Reviewer is still processing\nDISPATCH_WORKER\n'
+    ;;
+  worker-role-invalid)
+    printf 'DISPATCH_WORKER\n'
+    ;;
+  reviewer-role-invalid)
+    printf 'DISPATCH_REVIEWER\n'
+    ;;
+  worker-dispatch-with-trailing-output)
+    printf 'WORK_COMPLETE CHI-TEST https://example.test/pull/1\nDISPATCH_REVIEWER\nstill processing\n'
+    ;;
+  reviewer-dispatch-with-trailing-output)
+    printf 'REVIEW_CHANGES CHI-TEST https://example.test/pull/1\nDISPATCH_WORKER\nstill processing\n'
     ;;
   inquiry-complete)
     printf 'INQUIRY_COMPLETE control-plane 2 2\n'
@@ -331,15 +361,45 @@ grep -q 'Continuum runtime diagnostic mismatch' "$tmp/database-mismatch.log"
 grep -q 'legacy-continuum.db' "$tmp/database-mismatch.log"
 
 sed -i 's/LINEAR_AGENT_DRY_RUN=1/LINEAR_AGENT_DRY_RUN=0/' "$tmp/run/config/linear-agent/test.env"
-HOME="$tmp/run" \
-XDG_CONFIG_HOME="$tmp/run/config" \
-XDG_STATE_HOME="$tmp/run/state" \
-PATH="$tmp/run/bin:$PATH" \
-  "$root/bin/run-once" test > "$tmp/live-run.log"
-grep -q 'dispatching profile=test-worker' "$tmp/live-run.log"
-grep -q -- '--user start --no-block linear-agent-worker@test-worker.service' "$tmp/run/systemctl.log"
+run_dispatch_case() {
+  local role=$1
+  local result=$2
+  local expected_profile=${3:-}
+  local result_log=$tmp/run/$result.log
 
-sed -i 's/LINEAR_AGENT_ROLE=scout/LINEAR_AGENT_ROLE=reviewer/' "$tmp/run/config/linear-agent/test.env"
+  sed -i "s/^LINEAR_AGENT_ROLE=.*/LINEAR_AGENT_ROLE=$role/" \
+    "$tmp/run/config/linear-agent/test.env"
+  rm -f "$tmp/run/systemctl.log"
+  LINEAR_AGENT_TEST_PI_RESULT=$result \
+  HOME="$tmp/run" \
+  XDG_CONFIG_HOME="$tmp/run/config" \
+  XDG_STATE_HOME="$tmp/run/state" \
+  PATH="$tmp/run/bin:$PATH" \
+    "$root/bin/run-once" test > "$result_log"
+
+  if [[ -n $expected_profile ]]; then
+    grep -q "dispatching profile=$expected_profile" "$result_log"
+    grep -qx -- \
+      "--user start --no-block linear-agent-worker@$expected_profile.service" \
+      "$tmp/run/systemctl.log"
+  else
+    [[ ! -s $tmp/run/systemctl.log ]]
+  fi
+}
+
+run_dispatch_case scout scout-worker-dispatch test-worker
+run_dispatch_case scout scout-reviewer-dispatch test-reviewer
+run_dispatch_case worker worker-reviewer-dispatch test-reviewer
+run_dispatch_case reviewer reviewer-worker-dispatch test-worker
+run_dispatch_case scout incidental-dispatch-markers
+run_dispatch_case worker worker-without-completion
+run_dispatch_case reviewer reviewer-without-changes
+run_dispatch_case worker worker-role-invalid
+run_dispatch_case reviewer reviewer-role-invalid
+run_dispatch_case worker worker-dispatch-with-trailing-output
+run_dispatch_case reviewer reviewer-dispatch-with-trailing-output
+
+sed -i 's/^LINEAR_AGENT_ROLE=.*/LINEAR_AGENT_ROLE=reviewer/' "$tmp/run/config/linear-agent/test.env"
 audit_marker=$tmp/run/state/linear-agent/test/audit.last
 rm -f "$audit_marker"
 LINEAR_AGENT_TEST_PI_RESULT=inquiry-complete \
