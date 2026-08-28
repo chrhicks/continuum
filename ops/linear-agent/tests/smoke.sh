@@ -120,8 +120,13 @@ grep -qx 'continuum_wrapper_verified' "$validation_trace"
 grep -qx 'validate_script_verified' "$validation_trace"
 
 mkdir -p "$tmp/home/bin"
-printf '#!/bin/sh\nexit 0\n' > "$tmp/home/bin/systemctl"
+cat > "$tmp/home/bin/systemctl" <<'EOF'
+#!/bin/sh
+printf '%s\n' "$*" >> "${SYSTEMCTL_TRACE:?}"
+EOF
 chmod +x "$tmp/home/bin/systemctl"
+systemctl_trace=$tmp/systemctl.log
+SYSTEMCTL_TRACE="$systemctl_trace" \
 HOME="$tmp/home" \
 XDG_CONFIG_HOME="$tmp/config" \
 XDG_DATA_HOME="$tmp/data" \
@@ -130,15 +135,44 @@ PATH="$tmp/home/bin:$PATH" \
 [[ $(stat -c '%a' "$tmp/config/linear-agent/continuum-worker.env") == 600 ]]
 [[ -x $tmp/home/.local/libexec/linear-agent/run-once ]]
 [[ -f $tmp/data/linear-agent/reviewer.md ]]
+! grep -q 'enable --now' "$systemctl_trace"
+rm "$systemctl_trace"
+SYSTEMCTL_TRACE="$systemctl_trace" \
 HOME="$tmp/home" \
 XDG_CONFIG_HOME="$tmp/config" \
 XDG_DATA_HOME="$tmp/data" \
 PATH="$tmp/home/bin:$PATH" \
-  "$root/bin/install-user" --profile=continuum-scout --role=scout >/dev/null
+  "$root/bin/install-user" --profile=continuum-scout --role=scout --enable >/dev/null
 grep -q '^LINEAR_AGENT_ROLE=scout$' "$tmp/config/linear-agent/continuum-scout.env"
 grep -q '^LINEAR_AGENT_MODEL=openai-codex/gpt-5.6-luna$' "$tmp/config/linear-agent/continuum-scout.env"
 grep -q '^LINEAR_AGENT_CONTINUUM_BIN=.*/continuum-control/bin/continuum$' \
   "$tmp/config/linear-agent/continuum-scout.env"
+grep -qx -- '--user daemon-reload' "$systemctl_trace"
+grep -qx -- \
+  '--user enable --now linear-agent-worker@continuum-scout.timer' \
+  "$systemctl_trace"
+[[ $(wc -l < "$systemctl_trace") == 2 ]]
+
+for role in worker reviewer; do
+  rm -f "$systemctl_trace"
+  set +e
+  SYSTEMCTL_TRACE="$systemctl_trace" \
+  HOME="$tmp/home" \
+  XDG_CONFIG_HOME="$tmp/config" \
+  XDG_DATA_HOME="$tmp/data" \
+  PATH="$tmp/home/bin:$PATH" \
+    "$root/bin/install-user" \
+      --profile="rejected-$role" --role="$role" --enable \
+      > "$tmp/rejected-$role.log" 2>&1
+  rejected_status=$?
+  set -e
+  [[ $rejected_status == 64 ]]
+  grep -Fqx -- \
+    "--enable is available only for the scout role (got $role)" \
+    "$tmp/rejected-$role.log"
+  [[ ! -e $systemctl_trace ]]
+  [[ ! -e $tmp/config/linear-agent/rejected-$role.env ]]
+done
 
 mkdir -p "$tmp/run/bin" "$tmp/run/config/linear-agent" "$tmp/run/config/mcp"
 mkdir -p "$tmp/run/repo/bin" "$tmp/run/repo/ops/linear-agent/bin"

@@ -20,6 +20,10 @@ if [[ $role != scout && $role != worker && $role != reviewer ]]; then
   printf 'invalid role: %s\n' "$role" >&2
   exit 64
 fi
+if (( enable )) && [[ $role != scout ]]; then
+  printf '%s\n' "--enable is available only for the scout role (got $role)" >&2
+  exit 64
+fi
 
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 config_home=${XDG_CONFIG_HOME:-$HOME/.config}
@@ -55,7 +59,7 @@ printf 'logs: journalctl --user -u linear-agent-worker@%s.service\n' "$profile"
 
 if (( enable )); then
   systemctl --user enable --now "linear-agent-worker@$profile.timer"
-  printf 'enabled timer; config still controls LINEAR_AGENT_DRY_RUN\n'
+  printf 'enabled Scout timer; config still controls LINEAR_AGENT_DRY_RUN\n'
 else
-  printf 'timer not enabled; pass --enable only after a successful dry run\n'
+  printf 'timer not enabled; --enable is Scout-only and requires a successful dry run\n'
 fi
