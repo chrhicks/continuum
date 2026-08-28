@@ -131,14 +131,17 @@ Then set `LINEAR_AGENT_DRY_RUN=0` in all three files and run the Scout manually.
 
 ## Enable polling
 
-Enable only the Scout timer:
+After a successful dry run, explicitly enable only the Scout timer through the
+installer:
 
 ```bash
-systemctl --user enable --now linear-agent-worker@continuum-scout.timer
+ops/linear-agent/bin/install-user \
+  --profile=continuum-scout --role=scout --enable
 systemctl --user disable --now linear-agent-worker@continuum.timer 2>/dev/null || true
 ```
 
-Worker and Reviewer services are dispatched on demand.
+`--enable` is Scout-only; the installer rejects it for Worker and Reviewer
+profiles. Those services are dispatched on demand.
 
 ## Operations
 
