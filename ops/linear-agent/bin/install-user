@@ -20,17 +20,30 @@ if [[ $role != scout && $role != worker && $role != reviewer ]]; then
   printf 'invalid role: %s\n' "$role" >&2
   exit 64
 fi
-if (( enable )) && [[ $role != scout ]]; then
-  printf '%s\n' "--enable is available only for the scout role (got $role)" >&2
-  exit 64
-fi
-
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 config_home=${XDG_CONFIG_HOME:-$HOME/.config}
 data_home=${XDG_DATA_HOME:-$HOME/.local/share}
 libexec_home=$HOME/.local/libexec
 unit_home=$config_home/systemd/user
 config=$config_home/linear-agent/$profile.env
+
+if [[ -e $config ]]; then
+  existing_role=$(
+    unset LINEAR_AGENT_ROLE
+    # shellcheck source=/dev/null
+    source "$config" >/dev/null
+    printf '%s\n' "${LINEAR_AGENT_ROLE:-}"
+  )
+  if [[ $existing_role != "$role" ]]; then
+    printf 'existing profile role mismatch: %s has LINEAR_AGENT_ROLE=%s, got --role=%s\n' \
+      "$config" "${existing_role:-<unset>}" "$role" >&2
+    exit 64
+  fi
+fi
+if (( enable )) && [[ $role != scout ]]; then
+  printf '%s\n' "--enable is available only for the scout role (got $role)" >&2
+  exit 64
+fi
 
 install -Dm755 "$root/bin/run-once" "$libexec_home/linear-agent/run-once"
 install -Dm644 "$root/prompts/worker.md" "$data_home/linear-agent/worker.md"

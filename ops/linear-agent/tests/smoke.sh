@@ -142,16 +142,50 @@ HOME="$tmp/home" \
 XDG_CONFIG_HOME="$tmp/config" \
 XDG_DATA_HOME="$tmp/data" \
 PATH="$tmp/home/bin:$PATH" \
-  "$root/bin/install-user" --profile=continuum-scout --role=scout --enable >/dev/null
+  "$root/bin/install-user" --profile=continuum-scout --role=scout >/dev/null
 grep -q '^LINEAR_AGENT_ROLE=scout$' "$tmp/config/linear-agent/continuum-scout.env"
 grep -q '^LINEAR_AGENT_MODEL=openai-codex/gpt-5.6-luna$' "$tmp/config/linear-agent/continuum-scout.env"
 grep -q '^LINEAR_AGENT_CONTINUUM_BIN=.*/continuum-control/bin/continuum$' \
   "$tmp/config/linear-agent/continuum-scout.env"
 grep -qx -- '--user daemon-reload' "$systemctl_trace"
+! grep -q 'enable --now' "$systemctl_trace"
+
+rm "$systemctl_trace"
+SYSTEMCTL_TRACE="$systemctl_trace" \
+HOME="$tmp/home" \
+XDG_CONFIG_HOME="$tmp/config" \
+XDG_DATA_HOME="$tmp/data" \
+PATH="$tmp/home/bin:$PATH" \
+  "$root/bin/install-user" \
+    --profile=continuum-scout --role=scout --enable \
+    > "$tmp/existing-scout.log"
+grep -Fqx -- \
+  "preserved existing config: $tmp/config/linear-agent/continuum-scout.env" \
+  "$tmp/existing-scout.log"
+grep -qx -- '--user daemon-reload' "$systemctl_trace"
 grep -qx -- \
   '--user enable --now linear-agent-worker@continuum-scout.timer' \
   "$systemctl_trace"
 [[ $(wc -l < "$systemctl_trace") == 2 ]]
+
+rm "$systemctl_trace" "$tmp/home/.local/libexec/linear-agent/run-once"
+set +e
+SYSTEMCTL_TRACE="$systemctl_trace" \
+HOME="$tmp/home" \
+XDG_CONFIG_HOME="$tmp/config" \
+XDG_DATA_HOME="$tmp/data" \
+PATH="$tmp/home/bin:$PATH" \
+  "$root/bin/install-user" \
+    --profile=continuum-worker --role=scout --enable \
+    > "$tmp/mismatched-profile.log" 2>&1
+mismatched_profile_status=$?
+set -e
+[[ $mismatched_profile_status == 64 ]]
+grep -Fqx -- \
+  "existing profile role mismatch: $tmp/config/linear-agent/continuum-worker.env has LINEAR_AGENT_ROLE=worker, got --role=scout" \
+  "$tmp/mismatched-profile.log"
+[[ ! -e $systemctl_trace ]]
+[[ ! -e $tmp/home/.local/libexec/linear-agent/run-once ]]
 
 for role in worker reviewer; do
   rm -f "$systemctl_trace"

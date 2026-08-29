@@ -140,8 +140,10 @@ ops/linear-agent/bin/install-user \
 systemctl --user disable --now linear-agent-worker@continuum.timer 2>/dev/null || true
 ```
 
-`--enable` is Scout-only; the installer rejects it for Worker and Reviewer
-profiles. Those services are dispatched on demand.
+`--enable` is Scout-only. For an existing profile, `--role` must match its
+persisted `LINEAR_AGENT_ROLE`; the installer checks this before installing files
+or calling systemctl. Passing `--role=scout` therefore cannot enable a Worker or
+Reviewer profile. Those services are dispatched on demand.
 
 ## Operations
 
