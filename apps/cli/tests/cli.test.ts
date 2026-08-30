@@ -16,7 +16,7 @@ afterEach(() => {
   }
 })
 
-describe('guide adapter parity', () => {
+describe('CLI and MCP adapter behavior', () => {
   test('returns the core guide through the CLI and a real MCP stdio server', async () => {
     const root = mkdtempSync(join(tmpdir(), 'continuum-guide-'))
     const dataDir = join(root, 'data-that-must-not-be-created')
@@ -88,6 +88,30 @@ describe('guide adapter parity', () => {
     expect(cliExitCode).toBe(0)
     expect(cliOutput).toContain('Usage: continuum')
     expect(cliError).toBe('')
+  })
+
+  test('rejects a missing command with an actionable structured failure', async () => {
+    const cli = Bun.spawn([process.execPath, continuumBin], {
+      cwd: repoRoot,
+      env: processEnvironment({}),
+      stdout: 'pipe',
+      stderr: 'pipe',
+    })
+    const [cliOutput, cliError, cliExitCode] = await Promise.all([
+      new Response(cli.stdout).text(),
+      new Response(cli.stderr).text(),
+      cli.exited,
+    ])
+
+    expect(cliExitCode).toBe(1)
+    expect(cliOutput).toBe('')
+    expect(JSON.parse(cliError)).toEqual({
+      error: {
+        code: 'CLI_ERROR',
+        operation: 'cli',
+        message: 'A command is required; use --help for available commands',
+      },
+    })
   })
 
   test('writes structured CLI failures to stderr', async () => {

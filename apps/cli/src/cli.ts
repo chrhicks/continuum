@@ -27,6 +27,13 @@ export function createProgram(): Command {
 }
 
 export async function runCli(argv: string[] = process.argv): Promise<number> {
+  if (argv.length <= 2) {
+    writeCliError(
+      new Error('A command is required; use --help for available commands'),
+    )
+    return 1
+  }
+
   try {
     await createProgram().parseAsync(argv)
     return 0

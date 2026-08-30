@@ -12,6 +12,7 @@ describe('Continuum guide', () => {
       'continuum_memory_search',
       'continuum_memory_get',
     ])
+    expect(guide.workflow.join('\n')).toContain('before and during work')
     expect(guide.workflow.join('\n')).toContain('supersedes')
     expect(guide.recordKinds.conventional).toContain('decision')
     expect(guide.recordKinds.guidance).toContain('not an enum')

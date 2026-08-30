@@ -20,7 +20,7 @@ const guide: ContinuumGuide = {
     'Continuum preserves durable workspace knowledge so later agents can recover useful context.',
   workflow: [
     'Start with continuum_summary for recent workspace context.',
-    'Search for concepts related to the current work before repeating investigation.',
+    'Search for concepts related to the current work before and during work to avoid repeating investigation.',
     'Record concise, self-contained observations, decisions, preferences, and lessons at useful checkpoints.',
     'Use lowercase tags that will help a later agent retrieve the record.',
     'When knowledge changes, record the current truth and reference the old record with supersedes.',
