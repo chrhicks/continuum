@@ -105,6 +105,7 @@ describe('CLI and MCP adapter behavior', () => {
         },
       })
       expect(result.isError).not.toBe(true)
+      expect(hasSidecars(dataDirectory)).toBe(true)
     } finally {
       await client.close()
     }
@@ -181,6 +182,13 @@ describe('CLI and MCP adapter behavior', () => {
     })
   })
 })
+
+function hasSidecars(dataDirectory: string): boolean {
+  return (
+    existsSync(join(dataDirectory, 'continuum.db-wal')) ||
+    existsSync(join(dataDirectory, 'continuum.db-shm'))
+  )
+}
 
 function processEnvironment(
   overrides: Record<string, string>,

@@ -10,18 +10,33 @@ import { registerContinuumTools } from './tools'
 
 class OwnedContinuumMcpServer extends McpServer {
   readonly #continuum: Continuum
+  #connectionAttempted = false
   #continuumClosed = false
+  #closePromise: Promise<void> | undefined
 
   constructor(continuum: Continuum) {
     super({ name: 'continuum', version: '0.2.0' })
     this.#continuum = continuum
-    this.server.onclose = () => this.closeContinuum()
   }
 
   override async connect(transport: Transport): Promise<void> {
-    if (this.#continuumClosed) {
+    if (this.#continuumClosed || this.#closePromise) {
       throw new Error('The Continuum MCP server is closed.')
     }
+    if (this.#connectionAttempted) {
+      throw new Error('The Continuum MCP server is already connected.')
+    }
+    this.#connectionAttempted = true
+
+    const observedClose = this.server.onclose
+    this.server.onclose = () => {
+      try {
+        observedClose?.()
+      } finally {
+        this.closeContinuum()
+      }
+    }
+
     try {
       await super.connect(transport)
       const protocolClose = transport.onclose
@@ -34,32 +49,42 @@ class OwnedContinuumMcpServer extends McpServer {
       }
     } catch (cause) {
       try {
-        await super.close()
+        await this.close()
       } catch {
-        // Preserve the connection failure; cleanup remains idempotent below.
-      } finally {
-        try {
-          this.closeContinuum()
-        } catch {
-          // The original connection failure remains the actionable cause.
-        }
+        // Preserve the connection failure rather than a secondary cleanup error.
       }
       throw cause
     }
   }
 
-  override async close(): Promise<void> {
-    try {
-      await super.close()
-    } finally {
-      this.closeContinuum()
-    }
+  override close(): Promise<void> {
+    this.#closePromise ??= this.closeOnce()
+    return this.#closePromise
   }
 
   closeContinuum(): void {
     if (this.#continuumClosed) return
     this.#continuumClosed = true
     this.#continuum.close()
+  }
+
+  private async closeOnce(): Promise<void> {
+    let transportFailed = false
+    let transportFailure: unknown
+    try {
+      await super.close()
+    } catch (cause) {
+      transportFailed = true
+      transportFailure = cause
+    }
+
+    try {
+      this.closeContinuum()
+    } catch (cause) {
+      if (!transportFailed) throw cause
+    }
+
+    if (transportFailed) throw transportFailure
   }
 }
 
@@ -80,12 +105,24 @@ export function createContinuumMcpServer(
 
 export async function serveContinuumMcp(): Promise<void> {
   const server = createContinuumMcpServer()
+  let bodyFailed = false
+  let bodyFailure: unknown
+
   try {
     await server.connect(new StdioServerTransport())
     await waitForStdinEnd()
-  } finally {
-    await server.close()
+  } catch (cause) {
+    bodyFailed = true
+    bodyFailure = cause
   }
+
+  try {
+    await server.close()
+  } catch (cause) {
+    if (!bodyFailed) throw cause
+  }
+
+  if (bodyFailed) throw bodyFailure
 }
 
 function waitForStdinEnd(): Promise<void> {

@@ -122,9 +122,8 @@ describe('Continuum MCP tools', () => {
   test('closes a partially started transport and permanently closes the owned core', async () => {
     const root = mkdtempSync(join(tmpdir(), 'continuum-mcp-connect-failure-'))
     temporaryRoots.push(root)
-    const server = createContinuumMcpServer({
-      dataDirectory: join(root, 'data'),
-    })
+    const dataDirectory = join(root, 'data')
+    const server = createContinuumMcpServer({ dataDirectory })
     const transport = new FailingTransport()
     const connectionFailure = new Error('transport start failed')
     transport.startFailure = connectionFailure
@@ -139,9 +138,96 @@ describe('Continuum MCP tools', () => {
     expect(caught).toBe(connectionFailure)
     expect(transport.closeCount).toBe(1)
     await expectRejected(server.connect(new FailingTransport()), 'closed')
-    await server.close()
-    await server.close()
+    const firstClose = server.close()
+    const secondClose = server.close()
+    expect(firstClose).toBe(secondClose)
+    await firstClose
     expect(transport.closeCount).toBe(1)
+    expect(existsSync(dataDirectory)).toBe(false)
+  })
+
+  test('memoizes concurrent, repeated, and rejecting transport closure', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'continuum-mcp-close-once-'))
+    temporaryRoots.push(root)
+
+    const concurrentServer = createContinuumMcpServer({
+      dataDirectory: join(root, 'concurrent-data'),
+    })
+    const concurrentTransport = new DeferredCloseTransport()
+    await concurrentServer.connect(concurrentTransport)
+    const firstClose = concurrentServer.close()
+    const concurrentClose = concurrentServer.close()
+    expect(firstClose).toBe(concurrentClose)
+    expect(concurrentTransport.closeCount).toBe(1)
+    concurrentTransport.finishClose()
+    await Promise.all([firstClose, concurrentClose])
+    expect(concurrentServer.close()).toBe(firstClose)
+    await concurrentServer.close()
+    expect(concurrentTransport.closeCount).toBe(1)
+    await expectRejected(
+      concurrentServer.connect(new FailingTransport()),
+      'closed',
+    )
+
+    const rejectingServer = createContinuumMcpServer({
+      dataDirectory: join(root, 'rejecting-data'),
+    })
+    const rejectingTransport = new FailingTransport()
+    const closeFailure = new Error('transport close failed')
+    rejectingTransport.closeFailure = closeFailure
+    await rejectingServer.connect(rejectingTransport)
+    const rejectingClose = rejectingServer.close()
+    const repeatedRejectingClose = rejectingServer.close()
+    expect(rejectingClose).toBe(repeatedRejectingClose)
+    await expectSameRejection(rejectingClose, closeFailure)
+    await expectSameRejection(rejectingServer.close(), closeFailure)
+    expect(rejectingTransport.closeCount).toBe(1)
+    await expectRejected(
+      rejectingServer.connect(new FailingTransport()),
+      'closed',
+    )
+    expect(existsSync(join(root, 'rejecting-data'))).toBe(false)
+  })
+
+  test('preserves a start failure when attached transport cleanup also rejects', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'continuum-mcp-double-failure-'))
+    temporaryRoots.push(root)
+    const dataDirectory = join(root, 'data')
+    const server = createContinuumMcpServer({ dataDirectory })
+    const transport = new FailingTransport()
+    const startFailure = new Error('primary transport start failure')
+    const closeFailure = new Error('secondary transport close failure')
+    transport.startFailure = startFailure
+    transport.closeFailure = closeFailure
+
+    await expectSameRejection(server.connect(transport), startFailure)
+    await expectSameRejection(server.close(), closeFailure)
+    await expectSameRejection(server.close(), closeFailure)
+    expect(transport.closeCount).toBe(1)
+    await expectRejected(server.connect(new FailingTransport()), 'closed')
+    expect(existsSync(dataDirectory)).toBe(false)
+  })
+
+  test('owns closure during transport start when the close observer was replaced', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'continuum-mcp-start-close-'))
+    temporaryRoots.push(root)
+    const server = createContinuumMcpServer({
+      dataDirectory: join(root, 'data'),
+    })
+    const transport = new ClosingDuringStartTransport()
+    let observedClose = 0
+    server.server.onclose = () => {
+      observedClose += 1
+    }
+
+    await server.connect(transport)
+
+    expect(observedClose).toBe(1)
+    await expectRejected(server.connect(new FailingTransport()), 'closed')
+    await server.close()
+    await server.close()
+    expect(observedClose).toBe(1)
+    expect(transport.closeCount).toBe(0)
   })
 
   test('closes core storage when transport closes despite a replaced close observer', async () => {
@@ -161,6 +247,34 @@ describe('Continuum MCP tools', () => {
 
       expect(observedClose).toBe(1)
       expect(hasSidecars(context.dataDirectory)).toBe(false)
+    } finally {
+      await context.close()
+    }
+  })
+
+  test('does not reopen storage when an in-flight call resumes after transport close', async () => {
+    const context = await mcpContext('in-flight-close')
+    try {
+      await record(context, {
+        workspace: context.workspace,
+        content: 'Open storage before the in-flight shutdown race.',
+      })
+      expect(hasSidecars(context.dataDirectory)).toBe(true)
+
+      const inFlight = call(context.client, 'continuum_memory_record', {
+        workspace: context.workspace,
+        content:
+          'This call may complete or abort, but must never reopen storage.',
+      })
+      await context.client.close()
+      await inFlight.catch(() => undefined)
+      await Bun.sleep(10)
+
+      expect(hasSidecars(context.dataDirectory)).toBe(false)
+      await expectRejected(
+        context.server.connect(new FailingTransport()),
+        'closed',
+      )
     } finally {
       await context.close()
     }
@@ -372,11 +486,53 @@ class FailingTransport implements Transport {
   onclose?: Transport['onclose']
   onerror?: Transport['onerror']
   onmessage?: Transport['onmessage']
-  startFailure: Error = new Error('transport start failed')
+  startFailure: Error | undefined
+  closeFailure: Error | undefined
   closeCount = 0
 
   async start(): Promise<void> {
-    throw this.startFailure
+    if (this.startFailure) throw this.startFailure
+  }
+
+  async send(): Promise<void> {}
+
+  async close(): Promise<void> {
+    this.closeCount += 1
+    if (this.closeFailure) throw this.closeFailure
+    this.onclose?.()
+  }
+}
+
+class DeferredCloseTransport implements Transport {
+  onclose?: Transport['onclose']
+  onerror?: Transport['onerror']
+  onmessage?: Transport['onmessage']
+  closeCount = 0
+  readonly #closed = Promise.withResolvers<void>()
+
+  async start(): Promise<void> {}
+
+  async send(): Promise<void> {}
+
+  close(): Promise<void> {
+    this.closeCount += 1
+    return this.#closed.promise
+  }
+
+  finishClose(): void {
+    this.onclose?.()
+    this.#closed.resolve()
+  }
+}
+
+class ClosingDuringStartTransport implements Transport {
+  onclose?: Transport['onclose']
+  onerror?: Transport['onerror']
+  onmessage?: Transport['onmessage']
+  closeCount = 0
+
+  async start(): Promise<void> {
+    this.onclose?.()
   }
 
   async send(): Promise<void> {}
@@ -385,6 +541,19 @@ class FailingTransport implements Transport {
     this.closeCount += 1
     this.onclose?.()
   }
+}
+
+async function expectSameRejection(
+  promise: Promise<unknown>,
+  expected: unknown,
+): Promise<void> {
+  let caught: unknown
+  try {
+    await promise
+  } catch (cause) {
+    caught = cause
+  }
+  expect(caught).toBe(expected)
 }
 
 async function expectRejected(

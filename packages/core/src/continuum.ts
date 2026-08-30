@@ -1,4 +1,5 @@
 import type { Database } from 'bun:sqlite'
+import { ContinuumError } from './errors'
 import {
   openContinuumDatabase,
   resolveContinuumDataPaths,
@@ -82,15 +83,26 @@ function ownDatabase(options: DataPathOptions): {
 } {
   const paths = resolveContinuumDataPaths(options)
   let database: Database | undefined
+  let closed = false
 
   return {
     get() {
+      if (closed) {
+        throw new ContinuumError({
+          code: 'DATABASE_ERROR',
+          operation: 'access continuum database',
+          message: 'This Continuum instance is closed.',
+        })
+      }
       database ??= openContinuumDatabase(paths)
       return database
     },
     close() {
-      database?.close()
+      if (closed) return
+      closed = true
+      const openDatabase = database
       database = undefined
+      openDatabase?.close()
     },
   }
 }

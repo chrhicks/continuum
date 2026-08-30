@@ -10,7 +10,12 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { createContinuum, resolveContinuumDataPaths } from '@continuum/core'
+import {
+  ContinuumError,
+  createContinuum,
+  createContinuumImporter,
+  resolveContinuumDataPaths,
+} from '@continuum/core'
 import { openContinuumDatabase } from '../src/database/database'
 
 const temporaryRoots: string[] = []
@@ -66,6 +71,52 @@ describe('central Continuum database', () => {
     expect(existsSync(configured)).toBe(false)
     continuum.close()
     expect(existsSync(configured)).toBe(false)
+  })
+
+  test('keeps ordinary and importer facades terminal after close', () => {
+    const root = temporaryRoot()
+    const workspace = makeDirectory(root, 'terminal-workspace')
+    const dataDirectory = join(root, 'terminal-data')
+    const continuum = createContinuum({ dataDirectory })
+
+    continuum.summary({ workspace })
+    expect(hasSidecars(dataDirectory)).toBe(true)
+    continuum.close()
+    continuum.close()
+
+    for (const operation of [
+      () => continuum.resolveWorkspace(workspace),
+      () => continuum.record({ workspace, content: 'Must not reopen.' }),
+      () => continuum.search({ workspace }),
+      () => continuum.get({ workspace, ids: ['missing-record'] }),
+      () => continuum.summary({ workspace }),
+    ]) {
+      expectClosedFacade(operation)
+    }
+    expect(hasSidecars(dataDirectory)).toBe(false)
+
+    const importDataDirectory = join(root, 'terminal-import-data')
+    const importer = createContinuumImporter({
+      dataDirectory: importDataDirectory,
+    })
+    importer.importRecord({
+      workspace,
+      id: 'terminal-import',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      content: 'Canonical imported evidence.',
+    })
+    expect(hasSidecars(importDataDirectory)).toBe(true)
+    importer.close()
+    importer.close()
+    expectClosedFacade(() =>
+      importer.importRecord({
+        workspace,
+        id: 'late-import',
+        createdAt: '2026-01-02T00:00:00.000Z',
+        content: 'Must not reopen after importer close.',
+      }),
+    )
+    expect(hasSidecars(importDataDirectory)).toBe(false)
   })
 
   test('opens, configures, migrates, and reopens one private SQLite database', () => {
@@ -268,6 +319,28 @@ function tableNames(database: Database): string[] {
       )
       .all() as Array<{ name: string }>
   ).map((row) => row.name)
+}
+
+function expectClosedFacade(operation: () => unknown): void {
+  let caught: unknown
+  try {
+    operation()
+  } catch (cause) {
+    caught = cause
+  }
+  expect(caught).toBeInstanceOf(ContinuumError)
+  expect(caught).toMatchObject({
+    code: 'DATABASE_ERROR',
+    operation: 'access continuum database',
+    message: 'This Continuum instance is closed.',
+  })
+}
+
+function hasSidecars(dataDirectory: string): boolean {
+  return (
+    existsSync(join(dataDirectory, 'continuum.db-wal')) ||
+    existsSync(join(dataDirectory, 'continuum.db-shm'))
+  )
 }
 
 function countRows(database: Database, table: string): number {
