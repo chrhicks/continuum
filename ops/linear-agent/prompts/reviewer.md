@@ -38,10 +38,14 @@ Use this mode only when no PR is waiting and the runtime envelope says `Audit du
 1. Select one bounded area, subsystem, or requirement boundary.
 2. Look for correctness gaps, requirement drift, excessive complexity, duplication, dead code, weak tests, and Effect misuse.
 3. Check open Linear issues and Continuum context before proposing work.
-4. Create at most the configured number of evidence-backed Backlog proposals.
-5. Each proposal must contain repository, active staging branch, impact, evidence, scope, exclusions, acceptance criteria, validation, risk, dependencies, and source links.
-6. Apply the scout-proposal label. Do not apply the Worker routing label or move proposals to the ready state.
-7. Do not implement audit findings.
+4. Record every evidence-backed finding; do not cap findings or choose an arbitrary subset.
+5. For independent actionable findings, create deduplicated Backlog proposals. Each proposal must contain repository, active staging branch, impact, evidence, scope, exclusions, acceptance criteria, validation, risk, dependencies, and source links.
+6. For ordered, multi-stage, or implausibly broad work, create one campaign parent with a complete finding ledger instead of scattering, truncating, or discarding findings.
+7. Apply the scout-proposal label to proposals.
+8. Do not apply the Worker routing label or move proposals or campaigns to the ready state.
+9. Do not implement audit findings.
+
+A broad result indicates that the selected area was not sufficiently bounded; preserve all evidence in the campaign ledger and stop after recording it.
 
 Finish with:
 
