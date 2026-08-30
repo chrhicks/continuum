@@ -6,6 +6,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js'
 import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js'
+import { maximumSerializedErrorLength } from '@continuum/core'
 import { createContinuumMcpServer } from '@continuum/mcp'
 
 const temporaryRoots: string[] = []
@@ -85,18 +86,18 @@ describe('Continuum MCP tools', () => {
       const searchProperties = schemaProperties(
         tools.get('continuum_memory_search'),
       )
-      expect(searchProperties.query).toMatchObject({ maxLength: 2_000 })
-      expect(searchProperties.tags).toMatchObject({ maxItems: 50 })
-      expect(searchProperties.kinds).toMatchObject({ maxItems: 50 })
+      expect(searchProperties.query).not.toHaveProperty('maxLength')
+      expect(searchProperties.tags).not.toHaveProperty('maxItems')
+      expect(searchProperties.kinds).not.toHaveProperty('maxItems')
       expect(searchProperties.limit).toMatchObject({
         type: 'integer',
         minimum: 1,
         maximum: 100,
       })
       expect(searchProperties.cursor).toMatchObject({ maxLength: 4_096 })
-      expect(
-        schemaProperties(tools.get('continuum_memory_get')).ids,
-      ).toMatchObject({ minItems: 1, maxItems: 100 })
+      const getIds = schemaProperties(tools.get('continuum_memory_get')).ids
+      expect(getIds).toMatchObject({ minItems: 1 })
+      expect(getIds).not.toHaveProperty('maxItems')
     } finally {
       await context.close()
     }
@@ -461,6 +462,79 @@ describe('Continuum MCP tools', () => {
     }
   })
 
+  test('applies normalized core limits consistently at the MCP boundary', async () => {
+    const context = await mcpContext('normalized-limits')
+    try {
+      const stored = await record(context, {
+        workspace: context.workspace,
+        content: 'Normalized adapter parity anchor.',
+        tags: ['duplicate'],
+      })
+      const whitespaceHeavyQuery = `${' '.repeat(2_100)}parity anchor`
+
+      const duplicateFilters = await call(
+        context.client,
+        'continuum_memory_search',
+        {
+          workspace: context.workspace,
+          query: whitespaceHeavyQuery,
+          tags: Array.from({ length: 51 }, () => ' DUPLICATE '),
+        },
+      )
+      expect(duplicateFilters.isError).not.toBe(true)
+      expect(
+        (
+          duplicateFilters.structuredContent as {
+            records: Array<{ id: string }>
+          }
+        ).records.map(({ id }) => id),
+      ).toEqual([stored.id])
+
+      const duplicateIds = await call(context.client, 'continuum_memory_get', {
+        workspace: context.workspace,
+        ids: Array.from({ length: 101 }, () => stored.id),
+      })
+      expect(duplicateIds.isError).not.toBe(true)
+      expect(duplicateIds.structuredContent).toMatchObject({
+        records: [{ id: stored.id }],
+        missingIds: [],
+      })
+
+      for (const [tool, arguments_] of [
+        [
+          'continuum_memory_search',
+          {
+            workspace: context.workspace,
+            tags: Array.from({ length: 51 }, (_, index) => `tag-${index}`),
+          },
+        ],
+        [
+          'continuum_memory_get',
+          {
+            workspace: context.workspace,
+            ids: Array.from({ length: 101 }, (_, index) => `id-${index}`),
+          },
+        ],
+        [
+          'continuum_memory_search',
+          {
+            workspace: context.workspace,
+            query: `x${' y'.repeat(1_000)}`,
+          },
+        ],
+      ] as const) {
+        const result = await call(context.client, tool, arguments_)
+        expect(result.isError).toBe(true)
+        expect(result.structuredContent).toBeUndefined()
+        expect(JSON.parse(textContent(result))).toMatchObject({
+          error: { code: 'VALIDATION_ERROR' },
+        })
+      }
+    } finally {
+      await context.close()
+    }
+  })
+
   test('rejects privileged or malformed input and maps safe core failures', async () => {
     const context = await mcpContext('errors')
     try {
@@ -506,6 +580,41 @@ describe('Continuum MCP tools', () => {
         },
       })
       expect(textContent(missing)).not.toContain(privateContent)
+
+      const escapeHeavyText = ['"', '\\', '\n'].join('').repeat(5_000)
+      const attackerId = `missing-${escapeHeavyText}`
+      const bounded = await call(context.client, 'continuum_memory_record', {
+        workspace: context.workspace,
+        content: privateContent,
+        supersedes: [attackerId],
+      })
+      const boundedText = textContent(bounded)
+      expect(bounded.isError).toBe(true)
+      expect(bounded.structuredContent).toBeUndefined()
+      expect(boundedText.length).toBeLessThanOrEqual(
+        maximumSerializedErrorLength,
+      )
+      expect(Buffer.byteLength(boundedText, 'utf8')).toBeLessThanOrEqual(
+        maximumSerializedErrorLength,
+      )
+      const boundedError = JSON.parse(boundedText) as {
+        error: { context: { recordId: string } }
+      }
+      expect(boundedError).toMatchObject({
+        error: {
+          code: 'NOT_FOUND',
+          operation: 'record memory',
+          message: 'A superseded memory record was not found.',
+        },
+      })
+      expect(typeof boundedError.error.context.recordId).toBe('string')
+      expect(boundedError.error.context.recordId).not.toBe(attackerId)
+      expect(
+        boundedError.error.context.recordId.length < attackerId.length,
+      ).toBe(true)
+      expect(boundedText).not.toContain(attackerId)
+      expect(boundedText).not.toContain(privateContent)
+      expect(boundedText).not.toMatch(/stack|SELECT|\sat\s/)
     } finally {
       await context.close()
     }

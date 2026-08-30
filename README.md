@@ -8,7 +8,7 @@ Continuum is intentionally not a task manager, session archive, generated Markdo
 
 ## Requirements and installation
 
-Continuum requires [Bun](https://bun.sh/) 1.4 or newer. Git is used when available to identify repositories across clones and worktrees; ordinary non-Git directories are also supported.
+Continuum requires [Bun](https://bun.sh/) 1.4 or newer and the Git executable. A workspace need not itself be a Git repository: Git repositories are identified across clones and worktrees, while ordinary directories use path identity.
 
 ```sh
 bun install

@@ -3,6 +3,7 @@ import { z } from 'zod'
 import {
   ContinuumError,
   getGuide,
+  serializeSafeError,
   type Continuum,
   type ContinuumErrorCode,
 } from '@continuum/core'
@@ -147,19 +148,16 @@ const searchInputSchema = z
     workspace: workspacePathSchema,
     query: z
       .string()
-      .max(2_000)
       .optional()
       .describe(
         'Ordinary text for relevance search; omit or leave blank to browse newest first.',
       ),
     tags: z
       .array(tagSchema)
-      .max(50)
       .optional()
       .describe('Tags that every returned record must contain.'),
     kinds: z
       .array(kindSchema)
-      .max(50)
       .optional()
       .describe('Kinds of which a returned record may match any.'),
     includeHistory: z
@@ -192,7 +190,6 @@ const getInputSchema = z
     ids: z
       .array(recordIdSchema)
       .min(1)
-      .max(100)
       .describe('Record IDs to retrieve exactly, in request order.'),
   })
   .strict()
@@ -335,7 +332,7 @@ function errorResult(cause: unknown, toolName: string): CallToolResult {
           code: cause.code,
           operation: cause.operation,
           message: cause.message,
-          context: safeContext(cause.context),
+          context: cause.context,
         }
       : {
           code: 'DATABASE_ERROR' as ContinuumErrorCode,
@@ -343,37 +340,13 @@ function errorResult(cause: unknown, toolName: string): CallToolResult {
           message: 'Continuum could not complete the MCP operation.',
           context: undefined,
         }
-  const structuredError = {
-    code: error.code,
-    operation: error.operation,
-    message: error.message,
-    ...(error.context ? { context: error.context } : {}),
-  }
-
   return {
     isError: true,
     content: [
       {
         type: 'text',
-        text: JSON.stringify({ error: structuredError }),
+        text: serializeSafeError(error),
       },
     ],
   }
-}
-
-function safeContext(
-  context: Record<string, string> | undefined,
-): Record<string, string> | undefined {
-  if (!context) return undefined
-  const safeKeys = new Set([
-    'workspacePath',
-    'recordId',
-    'conflictingAlias',
-    'databasePath',
-    'dataDirectory',
-  ])
-  const safeEntries = Object.entries(context).filter(([key]) =>
-    safeKeys.has(key),
-  )
-  return safeEntries.length > 0 ? Object.fromEntries(safeEntries) : undefined
 }

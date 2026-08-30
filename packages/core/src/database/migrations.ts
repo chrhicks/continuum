@@ -139,34 +139,53 @@ const migrations = [
 export const latestSchemaVersion = migrations.at(-1)?.version ?? 0
 
 export function applyMigrations(database: Database): void {
-  const currentVersion = readSchemaVersion(database)
-  if (currentVersion > latestSchemaVersion) {
-    throw new ContinuumError({
-      code: 'DATABASE_ERROR',
-      operation: 'migrate database',
-      message: `Database schema version ${currentVersion} is newer than supported version ${latestSchemaVersion}.`,
-    })
-  }
+  let transactionStarted = false
+  let activeMigration: (typeof migrations)[number] | undefined
 
-  for (const migration of migrations) {
-    if (migration.version <= currentVersion) continue
+  try {
+    database.exec('BEGIN IMMEDIATE')
+    transactionStarted = true
 
-    let transactionStarted = false
-    try {
-      database.exec('BEGIN IMMEDIATE')
-      transactionStarted = true
-      database.exec(migration.sql)
-      database.exec(`PRAGMA user_version = ${migration.version}`)
-      database.exec('COMMIT')
-    } catch (cause) {
-      if (transactionStarted) database.exec('ROLLBACK')
+    const currentVersion = readSchemaVersion(database)
+    if (currentVersion > latestSchemaVersion) {
       throw new ContinuumError({
         code: 'DATABASE_ERROR',
         operation: 'migrate database',
-        message: `Failed to apply migration ${migration.version}: ${migration.name}.`,
-        cause,
+        message: `Database schema version ${currentVersion} is newer than supported version ${latestSchemaVersion}.`,
       })
     }
+
+    for (const migration of migrations) {
+      if (migration.version <= currentVersion) continue
+      activeMigration = migration
+      database.exec(migration.sql)
+      database.exec(`PRAGMA user_version = ${migration.version}`)
+    }
+
+    database.exec('COMMIT')
+    transactionStarted = false
+  } catch (cause) {
+    let migrationCause = cause
+    if (transactionStarted) {
+      try {
+        database.exec('ROLLBACK')
+      } catch (rollbackCause) {
+        migrationCause = new AggregateError(
+          [cause, rollbackCause],
+          'Migration and rollback both failed.',
+        )
+      }
+    }
+    if (cause instanceof ContinuumError) throw cause
+
+    throw new ContinuumError({
+      code: 'DATABASE_ERROR',
+      operation: 'migrate database',
+      message: activeMigration
+        ? `Failed to apply migration ${activeMigration.version}: ${activeMigration.name}.`
+        : 'Failed to begin database migrations.',
+      cause: migrationCause,
+    })
   }
 }
 

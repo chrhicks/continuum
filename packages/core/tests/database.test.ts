@@ -7,9 +7,11 @@ import {
   mkdtempSync,
   rmSync,
   statSync,
+  writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import {
   ContinuumError,
   createContinuum,
@@ -17,6 +19,7 @@ import {
   resolveContinuumDataPaths,
 } from '@continuum/core'
 import { openContinuumDatabase } from '../src/database/database'
+import { latestSchemaVersion } from '../src/database/migrations'
 
 const temporaryRoots: string[] = []
 
@@ -206,6 +209,114 @@ describe('central Continuum database', () => {
     }
   })
 
+  test('reports newer schemas and rolls back failed migration sequences', () => {
+    const root = temporaryRoot()
+    const newerDataDirectory = join(root, 'newer-data')
+    const newerPaths = resolveContinuumDataPaths({
+      dataDirectory: newerDataDirectory,
+    })
+    const current = openContinuumDatabase(newerPaths)
+    current.close()
+
+    const newer = new Database(newerPaths.databasePath)
+    newer.exec(`PRAGMA user_version = ${latestSchemaVersion + 1}`)
+    newer.close()
+
+    expectContinuumFailure(() => openContinuumDatabase(newerPaths), {
+      code: 'DATABASE_ERROR',
+      operation: 'migrate database',
+      message: `Database schema version ${latestSchemaVersion + 1} is newer than supported version ${latestSchemaVersion}.`,
+    })
+    const newerAfterFailure = new Database(newerPaths.databasePath)
+    expect(pragmaNumber(newerAfterFailure, 'user_version')).toBe(
+      latestSchemaVersion + 1,
+    )
+    newerAfterFailure.close()
+
+    const failingDataDirectory = makeDirectory(root, 'failing-data')
+    const failingPaths = resolveContinuumDataPaths({
+      dataDirectory: failingDataDirectory,
+    })
+    const conflicting = new Database(failingPaths.databasePath)
+    conflicting.exec('CREATE TABLE workspaces (unexpected TEXT)')
+    conflicting.close()
+
+    expectContinuumFailure(() => openContinuumDatabase(failingPaths), {
+      code: 'DATABASE_ERROR',
+      operation: 'migrate database',
+      message: 'Failed to apply migration 1: canonical memory tables.',
+    })
+    const afterFailure = new Database(failingPaths.databasePath)
+    expect(pragmaNumber(afterFailure, 'user_version')).toBe(0)
+    expect(tableNames(afterFailure)).toEqual(['workspaces'])
+    afterFailure.close()
+  })
+
+  test('serializes concurrent first-open and schema-upgrade migrations', async () => {
+    const root = temporaryRoot()
+    const workspace = makeDirectory(root, 'concurrent-workspace')
+    const freshDataDirectory = join(root, 'fresh-data')
+
+    await openConcurrently(root, freshDataDirectory, workspace, 'fresh')
+
+    const fresh = new Database(join(freshDataDirectory, 'continuum.db'))
+    expect(pragmaNumber(fresh, 'user_version')).toBe(latestSchemaVersion)
+    expect(countRows(fresh, 'workspaces')).toBe(1)
+    expect(tableNames(fresh)).toContain('memory_fts')
+    fresh.close()
+
+    const upgradeDataDirectory = join(root, 'upgrade-data')
+    const upgradePaths = resolveContinuumDataPaths({
+      dataDirectory: upgradeDataDirectory,
+    })
+    const setup = createContinuum({ dataDirectory: upgradeDataDirectory })
+    setup.resolveWorkspace(workspace)
+    setup.close()
+
+    const versionOne = new Database(upgradePaths.databasePath)
+    const storedWorkspace = versionOne
+      .query('SELECT id FROM workspaces LIMIT 1')
+      .get() as { id: string }
+    versionOne
+      .query(
+        `INSERT INTO memory_records
+         (id, workspace_id, kind, content, created_at)
+         VALUES (?, ?, ?, ?, ?)`,
+      )
+      .run(
+        'concurrent-backfill',
+        storedWorkspace.id,
+        'decision',
+        'Concurrent migration backfills searchable evidence.',
+        '2026-01-01T00:00:00.000Z',
+      )
+    versionOne.exec('DROP TABLE memory_fts')
+    versionOne.exec('PRAGMA user_version = 1')
+    versionOne.close()
+
+    await openConcurrently(root, upgradeDataDirectory, workspace, 'upgrade')
+
+    const upgraded = new Database(upgradePaths.databasePath)
+    expect(pragmaNumber(upgraded, 'user_version')).toBe(latestSchemaVersion)
+    expect(
+      upgraded
+        .query(
+          `SELECT rowid FROM memory_fts
+           WHERE memory_fts MATCH 'searchable'`,
+        )
+        .all(),
+    ).toEqual([{ rowid: 1 }])
+    expect(
+      upgraded
+        .query('SELECT content, kind FROM memory_fts WHERE rowid = 1')
+        .get(),
+    ).toEqual({
+      content: 'Concurrent migration backfills searchable evidence.',
+      kind: 'decision',
+    })
+    upgraded.close()
+  })
+
   test('backfills canonical version-one records into the full-text index', () => {
     const root = temporaryRoot()
     const workspace = makeDirectory(root, 'legacy-schema-workspace')
@@ -282,6 +393,81 @@ describe('central Continuum database', () => {
   })
 })
 
+async function openConcurrently(
+  root: string,
+  dataDirectory: string,
+  workspace: string,
+  name: string,
+): Promise<void> {
+  const barrier = join(root, `${name}-migration-barrier`)
+  const coreModule = pathToFileURL(
+    join(import.meta.dir, '..', 'src', 'index.ts'),
+  ).href
+  const script = `
+    import { existsSync } from 'node:fs'
+    import { createContinuum } from ${JSON.stringify(coreModule)}
+
+    while (!existsSync(process.env.CONTINUUM_TEST_BARRIER)) {
+      await Bun.sleep(1)
+    }
+    const continuum = createContinuum({
+      dataDirectory: process.env.CONTINUUM_TEST_DATA,
+    })
+    try {
+      continuum.summary({ workspace: process.env.CONTINUUM_TEST_WORKSPACE })
+    } finally {
+      continuum.close()
+    }
+  `
+  const environment = testProcessEnvironment({
+    CONTINUUM_TEST_BARRIER: barrier,
+    CONTINUUM_TEST_DATA: dataDirectory,
+    CONTINUUM_TEST_WORKSPACE: workspace,
+  })
+  const children = Array.from({ length: 8 }, () =>
+    Bun.spawn([process.execPath, '-e', script], {
+      cwd: join(import.meta.dir, '..', '..', '..'),
+      env: environment,
+      stdout: 'pipe',
+      stderr: 'pipe',
+    }),
+  )
+
+  await Bun.sleep(100)
+  writeFileSync(barrier, '')
+  const results = await Promise.all(
+    children.map(async (child) => {
+      const [exitCode, stdout, stderr] = await Promise.all([
+        child.exited,
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+      ])
+      return { exitCode, stdout, stderr }
+    }),
+  )
+
+  expect(results).toEqual(
+    Array.from({ length: children.length }, () => ({
+      exitCode: 0,
+      stdout: '',
+      stderr: '',
+    })),
+  )
+}
+
+function testProcessEnvironment(
+  overrides: Record<string, string>,
+): Record<string, string> {
+  return {
+    ...Object.fromEntries(
+      Object.entries(process.env).filter(
+        (entry): entry is [string, string] => entry[1] !== undefined,
+      ),
+    ),
+    ...overrides,
+  }
+}
+
 function temporaryRoot(): string {
   const root = mkdtempSync(join(tmpdir(), 'continuum-database-'))
   temporaryRoots.push(root)
@@ -319,6 +505,20 @@ function tableNames(database: Database): string[] {
       )
       .all() as Array<{ name: string }>
   ).map((row) => row.name)
+}
+
+function expectContinuumFailure(
+  operation: () => unknown,
+  expected: Record<string, unknown>,
+): void {
+  let caught: unknown
+  try {
+    operation()
+  } catch (cause) {
+    caught = cause
+  }
+  expect(caught).toBeInstanceOf(ContinuumError)
+  expect(caught).toMatchObject(expected)
 }
 
 function expectClosedFacade(operation: () => unknown): void {

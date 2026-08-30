@@ -5,6 +5,7 @@ import {
   ContinuumError,
   createContinuum,
   getGuide,
+  serializeSafeError,
   type Continuum,
 } from '@continuum/core'
 import { serveContinuumMcp } from '@continuum/mcp'
@@ -250,7 +251,7 @@ async function writeCliError(cause: unknown): Promise<void> {
           code: cause.code,
           operation: cause.operation,
           message: cause.message,
-          context: safeContext(cause.context),
+          context: cause.context,
         }
       : {
           code: 'CLI_ERROR',
@@ -263,17 +264,7 @@ async function writeCliError(cause: unknown): Promise<void> {
         }
 
   try {
-    await writeFinite(
-      process.stderr,
-      `${JSON.stringify({
-        error: {
-          code: error.code,
-          operation: error.operation,
-          message: error.message,
-          ...(error.context ? { context: error.context } : {}),
-        },
-      })}\n`,
-    )
+    await writeFinite(process.stderr, `${serializeSafeError(error)}\n`)
   } catch {
     // There is no remaining structured channel when stderr is unwritable.
   }
@@ -329,23 +320,6 @@ function writeFinite(stream: Writable, text: string): Promise<void> {
       settle(true, cause)
     }
   })
-}
-
-function safeContext(
-  context: Record<string, string> | undefined,
-): Record<string, string> | undefined {
-  if (!context) return undefined
-  const safeKeys = new Set([
-    'workspacePath',
-    'recordId',
-    'conflictingAlias',
-    'databasePath',
-    'dataDirectory',
-  ])
-  const safeEntries = Object.entries(context).filter(([key]) =>
-    safeKeys.has(key),
-  )
-  return safeEntries.length > 0 ? Object.fromEntries(safeEntries) : undefined
 }
 
 class CliUsageError extends Error {}

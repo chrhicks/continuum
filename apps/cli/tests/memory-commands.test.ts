@@ -9,7 +9,7 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { createContinuum } from '@continuum/core'
+import { createContinuum, maximumSerializedErrorLength } from '@continuum/core'
 
 const repoRoot = join(import.meta.dir, '..', '..', '..')
 const continuumBin = join(repoRoot, 'apps', 'cli', 'src', 'index.ts')
@@ -355,6 +355,88 @@ describe('CLI memory command parity', () => {
     expect(hasSidecars(context.dataDirectory)).toBe(false)
   })
 
+  test('applies normalized core limits consistently through CLI arguments', async () => {
+    const context = cliContext('normalized-limits')
+    const storedResult = await executeCli(
+      [
+        'record',
+        '--cwd',
+        context.workspace,
+        '--content',
+        'Normalized adapter parity anchor.',
+        '--tag',
+        'duplicate',
+      ],
+      context,
+    )
+    expectSuccess(storedResult)
+    const stored = JSON.parse(storedResult.stdout) as MemoryRecord
+    const whitespaceHeavyQuery = `${' '.repeat(2_100)}parity anchor`
+
+    const duplicateFilters = await executeCli(
+      [
+        'search',
+        '--cwd',
+        context.workspace,
+        '--query',
+        whitespaceHeavyQuery,
+        ...Array.from({ length: 51 }, () => ['--tag', ' DUPLICATE ']).flat(),
+      ],
+      context,
+    )
+    expectSuccess(duplicateFilters)
+    expect(recordIds(duplicateFilters)).toEqual([stored.id])
+
+    const duplicateIds = await executeCli(
+      [
+        'get',
+        '--cwd',
+        context.workspace,
+        ...Array.from({ length: 101 }, () => stored.id),
+      ],
+      context,
+    )
+    expectSuccess(duplicateIds)
+    expect(JSON.parse(duplicateIds.stdout)).toMatchObject({
+      records: [{ id: stored.id }],
+      missingIds: [],
+    })
+
+    const failures = [
+      [
+        'search',
+        '--cwd',
+        context.workspace,
+        ...Array.from({ length: 51 }, (_, index) => [
+          '--tag',
+          `tag-${index}`,
+        ]).flat(),
+      ],
+      [
+        'get',
+        '--cwd',
+        context.workspace,
+        ...Array.from({ length: 101 }, (_, index) => `id-${index}`),
+      ],
+      [
+        'search',
+        '--cwd',
+        context.workspace,
+        '--query',
+        `x${' y'.repeat(1_000)}`,
+      ],
+    ]
+    for (const args of failures) {
+      const result = await executeCli(args, context)
+      expect(result.exitCode).toBe(1)
+      expect(result.stdout).toBe('')
+      expect(JSON.parse(result.stderr)).toMatchObject({
+        error: { code: 'VALIDATION_ERROR' },
+      })
+    }
+    expect(hasSidecars(context.dataDirectory)).toBe(false)
+  })
+
   test('preserves core failures without leaking content and rejects CLI-only syntax', async () => {
     const context = cliContext('errors')
 
@@ -400,6 +482,64 @@ describe('CLI memory command parity', () => {
       context: { recordId: 'missing-record' },
     })
     expect(missingRecord.stderr).not.toContain(privateContent)
+
+    const escapeHeavyText = ['"', '\\', '\n'].join('').repeat(5_000)
+    const attackerId = `missing-${escapeHeavyText}`
+    const bounded = await executeCli(
+      [
+        'record',
+        '--cwd',
+        context.workspace,
+        '--content',
+        privateContent,
+        '--supersedes',
+        attackerId,
+      ],
+      context,
+    )
+    expect(bounded.exitCode).toBe(1)
+    expect(bounded.stdout).toBe('')
+    expect(bounded.stderr.endsWith('\n')).toBe(true)
+    expect(bounded.stderr.split('\n')).toHaveLength(2)
+    expect(bounded.stderr.length).toBeLessThanOrEqual(
+      maximumSerializedErrorLength + 1,
+    )
+    expect(Buffer.byteLength(bounded.stderr, 'utf8')).toBeLessThanOrEqual(
+      maximumSerializedErrorLength + 1,
+    )
+    const boundedError = JSON.parse(bounded.stderr) as {
+      error: { context: { recordId: string } }
+    }
+    expect(boundedError).toMatchObject({
+      error: {
+        code: 'NOT_FOUND',
+        operation: 'record memory',
+        message: 'A superseded memory record was not found.',
+      },
+    })
+    expect(typeof boundedError.error.context.recordId).toBe('string')
+    expect(boundedError.error.context.recordId).not.toBe(attackerId)
+    expect(boundedError.error.context.recordId.length < attackerId.length).toBe(
+      true,
+    )
+    expect(bounded.stderr).not.toContain(attackerId)
+    expect(bounded.stderr).not.toContain(privateContent)
+    expect(bounded.stderr).not.toMatch(/stack|SELECT|\sat\s/)
+
+    const longUnknownOption = `--${'x'.repeat(10_000)}`
+    const boundedUsage = await executeCli(
+      ['search', longUnknownOption],
+      context,
+    )
+    expect(boundedUsage.exitCode).toBe(1)
+    expect(boundedUsage.stdout).toBe('')
+    expect(boundedUsage.stderr.length).toBeLessThanOrEqual(
+      maximumSerializedErrorLength + 1,
+    )
+    expect(JSON.parse(boundedUsage.stderr)).toMatchObject({
+      error: { code: 'CLI_ERROR', operation: 'cli' },
+    })
+    expect(boundedUsage.stderr).not.toContain(longUnknownOption)
 
     const missingPath = join(context.root, 'missing-workspace')
     const invalidPath = await executeCli(
