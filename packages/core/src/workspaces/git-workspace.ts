@@ -96,6 +96,7 @@ function executeGit(
 ): { status: number | null; stdout: string; stderr: string } {
   const result = spawnSync('git', ['-C', path, ...args], {
     encoding: 'utf8',
+    env: { ...process.env, LC_ALL: 'C' },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
   if (result.error) throw gitInspectionError(result.error.message)

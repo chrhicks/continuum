@@ -1,6 +1,6 @@
 import type { Database } from 'bun:sqlite'
 import { existsSync, statSync } from 'node:fs'
-import { isAbsolute } from 'node:path'
+import { isAbsolute, relative, sep } from 'node:path'
 import { ContinuumError, WorkspaceConflictError } from '../errors'
 import { inspectWorkspace } from './git-workspace'
 
@@ -76,9 +76,14 @@ export function resolveWorkspace(
     )
     const rootPathWorkspace = findWorkspaceByAlias(database, rootPathAlias)
     const remoteOwners = findOwnedAliases(database, remoteAliases)
+    const descendantPathOwners =
+      requestedPathWorkspace || rootPathWorkspace
+        ? []
+        : findDescendantPathOwners(database, rootPathAlias.value)
     const workspace = selectWorkspace({
       requestedPathWorkspace,
       rootPathWorkspace,
+      descendantPathOwners,
       remoteAliases,
       remoteOwners,
       requestedPathAlias,
@@ -140,6 +145,7 @@ function validateWorkspacePath(path: string): void {
 function selectWorkspace(options: {
   requestedPathWorkspace: StoredWorkspace | null
   rootPathWorkspace: StoredWorkspace | null
+  descendantPathOwners: OwnedAlias[]
   remoteAliases: WorkspaceAlias[]
   remoteOwners: OwnedAlias[]
   requestedPathAlias: WorkspaceAlias
@@ -164,6 +170,19 @@ function selectWorkspace(options: {
       options.requestedPathAlias,
     )
     return options.rootPathWorkspace
+  }
+
+  const descendantWorkspace = selectDescendantWorkspace(
+    options.descendantPathOwners,
+    options.requestedPathAlias,
+  )
+  if (descendantWorkspace) {
+    ensureSameWorkspace(
+      descendantWorkspace,
+      options.remoteOwners,
+      options.requestedPathAlias,
+    )
+    return descendantWorkspace
   }
 
   const preferredRemote = options.remoteAliases[0]
@@ -192,6 +211,55 @@ function selectWorkspace(options: {
     options.requestedPathAlias,
   )
   return preferredOwner.workspace
+}
+
+function findDescendantPathOwners(
+  database: Database,
+  rootPath: string,
+): OwnedAlias[] {
+  const aliases = database
+    .query(
+      `SELECT a.kind, a.value, w.id, w.identity_kind, w.identity_value
+       FROM workspace_aliases a
+       JOIN workspaces w ON w.id = a.workspace_id
+       WHERE a.kind = 'path'`,
+    )
+    .all() as Array<WorkspaceAlias & StoredWorkspace>
+
+  return aliases
+    .filter((alias) => isDescendantPath(rootPath, alias.value))
+    .map((alias) => ({
+      alias: { kind: alias.kind, value: alias.value },
+      workspace: {
+        id: alias.id,
+        identity_kind: alias.identity_kind,
+        identity_value: alias.identity_value,
+      },
+    }))
+}
+
+function isDescendantPath(rootPath: string, candidatePath: string): boolean {
+  const pathFromRoot = relative(rootPath, candidatePath)
+  return (
+    pathFromRoot !== '' &&
+    pathFromRoot !== '..' &&
+    !pathFromRoot.startsWith(`..${sep}`) &&
+    !isAbsolute(pathFromRoot)
+  )
+}
+
+function selectDescendantWorkspace(
+  owners: OwnedAlias[],
+  requestedPathAlias: WorkspaceAlias,
+): StoredWorkspace | null {
+  const first = owners[0]
+  if (!first) return null
+
+  const conflict = owners.find(
+    ({ workspace }) => workspace.id !== first.workspace.id,
+  )
+  if (conflict) throwWorkspaceConflict(requestedPathAlias, conflict.alias)
+  return first.workspace
 }
 
 function findOwnedAliases(

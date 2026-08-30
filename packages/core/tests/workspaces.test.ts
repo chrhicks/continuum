@@ -71,6 +71,25 @@ describe('logical workspace identity', () => {
     database.close()
   })
 
+  test('uses path fallback independently of the caller locale', () => {
+    const root = temporaryRoot()
+    const workspacePath = makeDirectory(root, 'localized-non-git')
+    const continuum = createContinuum({ dataDirectory: join(root, 'data') })
+    const previousLocale = process.env.LC_ALL
+    process.env.LC_ALL = 'continuum_invalid_locale'
+
+    try {
+      expect(continuum.resolveWorkspace(workspacePath).identity).toEqual({
+        kind: 'path',
+        value: resolve(workspacePath),
+      })
+    } finally {
+      if (previousLocale === undefined) delete process.env.LC_ALL
+      else process.env.LC_ALL = previousLocale
+      continuum.close()
+    }
+  })
+
   test('normalizes equivalent network and local remote forms without collapsing endpoints', () => {
     expect(normalizeGitRemote('git@GitHub.com:Example/Continuum.git')).toBe(
       'github.com/Example/Continuum',
@@ -337,6 +356,90 @@ describe('logical workspace identity', () => {
 
     const database = new Database(join(dataDirectory, 'continuum.db'))
     expect(countRows(database, 'workspaces')).toBe(1)
+    database.close()
+  })
+
+  test('adopts a registered child when an unregistered sibling resolves first', () => {
+    const root = temporaryRoot()
+    const parentPath = makeDirectory(root, 'sibling-parent')
+    const registeredChild = makeDirectory(parentPath, 'registered')
+    const newSibling = makeDirectory(parentPath, 'new-sibling')
+    const dataDirectory = join(root, 'data')
+    const continuum = createContinuum({ dataDirectory })
+
+    const beforeGit = continuum.resolveWorkspace(registeredChild)
+    git(parentPath, 'init', '--quiet')
+    git(
+      parentPath,
+      'remote',
+      'add',
+      'origin',
+      'https://github.com/team/sibling-parent.git',
+    )
+
+    const sibling = continuum.resolveWorkspace(newSibling)
+    const registered = continuum.resolveWorkspace(registeredChild)
+    continuum.close()
+
+    expect(sibling.identity).toEqual(beforeGit.identity)
+    expect(registered.identity).toEqual(beforeGit.identity)
+    expect(sibling.aliases).toEqual(
+      expect.arrayContaining([
+        { kind: 'path', value: resolve(registeredChild) },
+        { kind: 'path', value: resolve(newSibling) },
+        { kind: 'path', value: resolve(parentPath) },
+        { kind: 'git', value: 'github.com/team/sibling-parent' },
+      ]),
+    )
+
+    const database = new Database(join(dataDirectory, 'continuum.db'))
+    expect(countRows(database, 'workspaces')).toBe(1)
+    database.close()
+  })
+
+  test('rejects a new Git root containing path aliases from multiple workspaces', () => {
+    const root = temporaryRoot()
+    const parentPath = makeDirectory(root, 'conflicting-parent')
+    const firstChild = makeDirectory(parentPath, 'first')
+    const secondChild = makeDirectory(parentPath, 'second')
+    const unregisteredSibling = makeDirectory(parentPath, 'third')
+    const dataDirectory = join(root, 'data')
+    const continuum = createContinuum({ dataDirectory })
+
+    continuum.resolveWorkspace(firstChild)
+    continuum.resolveWorkspace(secondChild)
+    git(parentPath, 'init', '--quiet')
+    git(
+      parentPath,
+      'remote',
+      'add',
+      'origin',
+      'https://github.com/team/conflicting-parent.git',
+    )
+
+    expect(() => continuum.resolveWorkspace(unregisteredSibling)).toThrow(
+      WorkspaceConflictError,
+    )
+    continuum.close()
+
+    const database = new Database(join(dataDirectory, 'continuum.db'))
+    expect(countRows(database, 'workspaces')).toBe(2)
+    expect(
+      database
+        .query(
+          `SELECT workspace_id FROM workspace_aliases
+           WHERE kind = 'path' AND value IN (?, ?)`,
+        )
+        .all(resolve(parentPath), resolve(unregisteredSibling)),
+    ).toEqual([])
+    expect(
+      database
+        .query(
+          `SELECT workspace_id FROM workspace_aliases
+           WHERE kind = 'git' AND value = ?`,
+        )
+        .get('github.com/team/conflicting-parent'),
+    ).toBeNull()
     database.close()
   })
 
