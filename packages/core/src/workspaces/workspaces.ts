@@ -29,10 +29,17 @@ type OwnedAlias = {
   workspace: StoredWorkspace
 }
 
-export function resolveWorkspace(
-  database: Database,
+export type PreparedWorkspace = {
+  requestedPathAlias: WorkspaceAlias
+  rootPathAlias: WorkspaceAlias
+  pathAliases: WorkspaceAlias[]
+  remoteAliases: WorkspaceAlias[]
+  isGitRepository: boolean
+}
+
+export function prepareWorkspaceResolution(
   requestedPath: string,
-): ResolvedWorkspace {
+): PreparedWorkspace {
   validateWorkspacePath(requestedPath)
 
   let inspected: ReturnType<typeof inspectWorkspace>
@@ -56,59 +63,81 @@ export function resolveWorkspace(
     kind: 'path',
     value: inspected.rootPath,
   }
-  const pathAliases =
-    requestedPathAlias.value === rootPathAlias.value
-      ? [requestedPathAlias]
-      : [requestedPathAlias, rootPathAlias]
-  const remoteAliases: WorkspaceAlias[] = inspected.remotes.map((remote) => ({
-    kind: 'git',
-    value: remote.value,
-  }))
 
-  let transactionStarted = false
+  return {
+    requestedPathAlias,
+    rootPathAlias,
+    pathAliases:
+      requestedPathAlias.value === rootPathAlias.value
+        ? [requestedPathAlias]
+        : [requestedPathAlias, rootPathAlias],
+    remoteAliases: inspected.remotes.map((remote) => ({
+      kind: 'git',
+      value: remote.value,
+    })),
+    isGitRepository: inspected.isGitRepository,
+  }
+}
+
+export function resolveWorkspace(
+  database: Database,
+  requestedPath: string,
+): ResolvedWorkspace {
+  const prepared = prepareWorkspaceResolution(requestedPath)
+
   try {
-    database.exec('BEGIN IMMEDIATE')
-    transactionStarted = true
-
-    const requestedPathWorkspace = findWorkspaceByAlias(
-      database,
-      requestedPathAlias,
-    )
-    const rootPathWorkspace = findWorkspaceByAlias(database, rootPathAlias)
-    const remoteOwners = findOwnedAliases(database, remoteAliases)
-    const descendantPathOwners = inspected.isGitRepository
-      ? findDescendantPathOwners(database, rootPathAlias.value)
-      : []
-    const workspace = selectWorkspace({
-      requestedPathWorkspace,
-      rootPathWorkspace,
-      descendantPathOwners,
-      remoteAliases,
-      remoteOwners,
-      requestedPathAlias,
-      rootPathAlias,
-    })
-    const resolved =
-      workspace ?? createWorkspace(database, remoteAliases[0] ?? rootPathAlias)
-
-    for (const alias of [...pathAliases, ...remoteAliases]) {
-      addAlias(database, resolved.id, alias, requestedPathAlias.value)
-    }
-
-    const result = readWorkspaceInfo(database, resolved.id)
-    database.exec('COMMIT')
-    return result
+    return database
+      .transaction(() => registerWorkspaceInTransaction(database, prepared))
+      .immediate()
   } catch (cause) {
-    if (transactionStarted) database.exec('ROLLBACK')
     if (cause instanceof ContinuumError) throw cause
     throw new ContinuumError({
       code: 'DATABASE_ERROR',
       operation: 'resolve workspace',
       message: 'Failed to register the Continuum workspace.',
-      context: { workspacePath: requestedPathAlias.value },
+      context: { workspacePath: prepared.requestedPathAlias.value },
       cause,
     })
   }
+}
+
+export function registerWorkspaceInTransaction(
+  database: Database,
+  prepared: PreparedWorkspace,
+): ResolvedWorkspace {
+  const requestedPathWorkspace = findWorkspaceByAlias(
+    database,
+    prepared.requestedPathAlias,
+  )
+  const rootPathWorkspace = findWorkspaceByAlias(
+    database,
+    prepared.rootPathAlias,
+  )
+  const remoteOwners = findOwnedAliases(database, prepared.remoteAliases)
+  const descendantPathOwners = prepared.isGitRepository
+    ? findDescendantPathOwners(database, prepared.rootPathAlias.value)
+    : []
+  const workspace = selectWorkspace({
+    requestedPathWorkspace,
+    rootPathWorkspace,
+    descendantPathOwners,
+    remoteAliases: prepared.remoteAliases,
+    remoteOwners,
+    requestedPathAlias: prepared.requestedPathAlias,
+    rootPathAlias: prepared.rootPathAlias,
+  })
+  const resolved =
+    workspace ??
+    createWorkspace(
+      database,
+      prepared.remoteAliases[0] ?? prepared.rootPathAlias,
+    )
+
+  for (const alias of [...prepared.pathAliases, ...prepared.remoteAliases]) {
+    addAlias(database, resolved.id, alias, prepared.requestedPathAlias.value)
+  }
+
+  return readWorkspaceInfo(database, resolved.id)
 }
 
 function validateWorkspacePath(path: string): void {

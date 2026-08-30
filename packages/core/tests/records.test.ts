@@ -174,11 +174,20 @@ describe('immutable memory records', () => {
 
   test('rejects missing and cross-workspace supersession without partial writes', () => {
     const context = testContext()
+    const missingWorkspace = makeDirectory(context.root, 'missing-workspace')
     const existing = context.continuum.record({
       workspace: context.firstWorkspace,
       content: 'First workspace evidence',
       tags: ['first'],
     })
+    git(context.firstWorkspace, 'init', '--quiet')
+    git(
+      context.firstWorkspace,
+      'remote',
+      'add',
+      'origin',
+      'https://github.com/team/failed-record.git',
+    )
 
     expect(() =>
       context.continuum.record({
@@ -190,7 +199,7 @@ describe('immutable memory records', () => {
     ).toThrow(ContinuumError)
     try {
       context.continuum.record({
-        workspace: context.firstWorkspace,
+        workspace: missingWorkspace,
         content: 'Must not reference missing evidence',
         tags: ['missing'],
         supersedes: ['missing-record'],
@@ -202,10 +211,31 @@ describe('immutable memory records', () => {
         context: { recordId: 'missing-record' },
       })
     }
+    expect(() =>
+      context.continuum.record({
+        workspace: context.firstWorkspace,
+        content: 'A failed write must not attach the new Git alias.',
+        supersedes: ['missing-record'],
+      }),
+    ).toThrow(ContinuumError)
     context.continuum.close()
 
     const database = context.openDatabase()
-    expect(countRows(database, 'workspaces')).toBe(2)
+    expect(countRows(database, 'workspaces')).toBe(1)
+    expect(countRows(database, 'workspace_aliases')).toBe(1)
+    expect(
+      database
+        .query(
+          `SELECT value FROM workspace_aliases
+           WHERE value IN (?, ?)`,
+        )
+        .all(context.secondWorkspace, missingWorkspace),
+    ).toEqual([])
+    expect(
+      database
+        .query("SELECT value FROM workspace_aliases WHERE kind = 'git'")
+        .all(),
+    ).toEqual([])
     expect(countRows(database, 'memory_records')).toBe(1)
     expect(countRows(database, 'memory_record_tags')).toBe(1)
     expect(countRows(database, 'memory_supersessions')).toBe(0)
@@ -213,9 +243,13 @@ describe('immutable memory records', () => {
     database.close()
   })
 
-  test('rolls back canonical writes when derived FTS maintenance fails', () => {
+  test('rolls back a new workspace when derived FTS maintenance fails', () => {
     const context = testContext()
-    context.continuum.resolveWorkspace(context.firstWorkspace)
+    context.continuum.record({
+      workspace: context.firstWorkspace,
+      content: 'Existing evidence remains canonical.',
+      tags: ['existing'],
+    })
     context.continuum.close()
 
     const brokenDatabase = context.openDatabase()
@@ -225,7 +259,7 @@ describe('immutable memory records', () => {
     const continuum = createContinuum({ dataDirectory: context.dataDirectory })
     expect(() =>
       continuum.record({
-        workspace: context.firstWorkspace,
+        workspace: context.secondWorkspace,
         content: 'This transaction must roll back.',
         tags: ['rollback'],
       }),
@@ -233,8 +267,15 @@ describe('immutable memory records', () => {
     continuum.close()
 
     const database = context.openDatabase()
-    expect(countRows(database, 'memory_records')).toBe(0)
-    expect(countRows(database, 'memory_record_tags')).toBe(0)
+    expect(countRows(database, 'workspaces')).toBe(1)
+    expect(countRows(database, 'workspace_aliases')).toBe(1)
+    expect(
+      database
+        .query('SELECT value FROM workspace_aliases WHERE value = ?')
+        .get(context.secondWorkspace),
+    ).toBeNull()
+    expect(countRows(database, 'memory_records')).toBe(1)
+    expect(countRows(database, 'memory_record_tags')).toBe(1)
     expect(countRows(database, 'memory_supersessions')).toBe(0)
     database.close()
   })
@@ -283,6 +324,12 @@ describe('immutable memory records', () => {
     expect(() =>
       importer.importRecord({ ...importedInput, createdAt: 'not-a-date' }),
     ).toThrow(ContinuumError)
+    expect(() =>
+      importer.importRecord({
+        ...importedInput,
+        createdAt: '2026-08-22T01:00:00+05:00',
+      }),
+    ).toThrow(ContinuumError)
     importer.close()
     context.continuum.close()
 
@@ -296,6 +343,13 @@ describe('immutable memory records', () => {
       supersededBy: [],
     })
     const database = context.openDatabase()
+    expect(countRows(database, 'workspaces')).toBe(1)
+    expect(countRows(database, 'workspace_aliases')).toBe(1)
+    expect(
+      database
+        .query('SELECT value FROM workspace_aliases WHERE value = ?')
+        .get(context.secondWorkspace),
+    ).toBeNull()
     expect(countRows(database, 'memory_records')).toBe(2)
     expect(countRows(database, 'memory_fts')).toBe(2)
     expect(
@@ -303,6 +357,55 @@ describe('immutable memory records', () => {
         .query('SELECT created_at FROM memory_records WHERE id = ?')
         .get(importedInput.id),
     ).toEqual({ created_at: importedInput.createdAt })
+    database.close()
+  })
+
+  test('requires imported timestamps to preserve canonical chronological order', () => {
+    const context = testContext()
+    const importer = createContinuumImporter({
+      dataDirectory: context.dataDirectory,
+    })
+    const earlier = importer.importRecord({
+      workspace: context.firstWorkspace,
+      id: 'earlier-record',
+      createdAt: '2026-08-21T20:00:00.000Z',
+      content: 'Earlier evidence',
+    })
+    const later = importer.importRecord({
+      workspace: context.firstWorkspace,
+      id: 'later-record',
+      createdAt: '2026-08-21T23:00:00.000Z',
+      content: 'Later evidence',
+    })
+
+    for (const createdAt of [
+      '2026-08-22T01:00:00+05:00',
+      '2026-08-21T23:00:00Z',
+      '2026-08-21 23:00:00.000Z',
+      '+010000-01-01T00:00:00.000Z',
+    ]) {
+      expect(() =>
+        importer.importRecord({
+          workspace: context.secondWorkspace,
+          id: `invalid-${createdAt}`,
+          createdAt,
+          content: 'Noncanonical evidence',
+        }),
+      ).toThrow(ContinuumError)
+    }
+    importer.close()
+    context.continuum.close()
+
+    expect(earlier.createdAt).toBe('2026-08-21T20:00:00.000Z')
+    expect(later.createdAt).toBe('2026-08-21T23:00:00.000Z')
+    const database = context.openDatabase()
+    expect(
+      database
+        .query('SELECT id FROM memory_records ORDER BY created_at, id')
+        .all(),
+    ).toEqual([{ id: earlier.id }, { id: later.id }])
+    expect(countRows(database, 'workspaces')).toBe(1)
+    expect(countRows(database, 'workspace_aliases')).toBe(1)
     database.close()
   })
 })
@@ -334,6 +437,16 @@ function makeDirectory(root: string, name: string): string {
   const path = join(root, name)
   mkdirSync(path)
   return path
+}
+
+function git(cwd: string, ...args: string[]): void {
+  const process = Bun.spawnSync(['git', '-C', cwd, ...args], {
+    stdout: 'pipe',
+    stderr: 'pipe',
+  })
+  if (process.exitCode !== 0) {
+    throw new Error(new TextDecoder().decode(process.stderr))
+  }
 }
 
 function countRows(database: Database, table: string): number {

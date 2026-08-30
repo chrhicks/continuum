@@ -1,6 +1,9 @@
 import type { Database } from 'bun:sqlite'
 import { ContinuumError } from '../errors'
-import { resolveWorkspace } from '../workspaces/workspaces'
+import {
+  prepareWorkspaceResolution,
+  registerWorkspaceInTransaction,
+} from '../workspaces/workspaces'
 
 export type MemoryRecord = {
   id: string
@@ -66,9 +69,9 @@ export function prepareImportedMemoryRecord(
       operation,
     )
   }
-  if (!input.createdAt || Number.isNaN(Date.parse(input.createdAt))) {
+  if (!isCanonicalTimestamp(input.createdAt)) {
     throw validationError(
-      'Imported record timestamp must be a valid date.',
+      'Imported record timestamp must use canonical UTC ISO format.',
       operation,
     )
   }
@@ -79,12 +82,16 @@ export function writeMemoryRecord(
   database: Database,
   input: PreparedRecord,
 ): MemoryRecord {
-  const workspace = resolveWorkspace(database, input.workspace)
+  const preparedWorkspace = prepareWorkspaceResolution(input.workspace)
   const operation = input.importMode ? 'import memory record' : 'record memory'
 
   try {
     return database
       .transaction(() => {
+        const workspace = registerWorkspaceInTransaction(
+          database,
+          preparedWorkspace,
+        )
         const existing = findStoredRecord(database, input.id)
         if (existing) {
           return acceptIdempotentImport(database, existing, workspace.id, input)
@@ -288,6 +295,14 @@ function readMemoryRecord(database: Database, rowid: number): MemoryRecord {
     supersedes: supersedes.map(({ id }) => id),
     supersededBy: supersededBy.map(({ id }) => id),
   }
+}
+
+function isCanonicalTimestamp(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)) {
+    return false
+  }
+  const date = new Date(value)
+  return !Number.isNaN(date.getTime()) && date.toISOString() === value
 }
 
 function arraysEqual(left: string[], right: string[]): boolean {
