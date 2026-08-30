@@ -10,6 +10,7 @@ export type GitRemote = {
 export type InspectedWorkspace = {
   requestedPath: string
   rootPath: string
+  isGitRepository: boolean
   remotes: GitRemote[]
 }
 
@@ -17,7 +18,12 @@ export function inspectWorkspace(path: string): InspectedWorkspace {
   const requestedPath = realpathSync(path)
   const gitRoot = findGitRoot(requestedPath)
   if (!gitRoot) {
-    return { requestedPath, rootPath: requestedPath, remotes: [] }
+    return {
+      requestedPath,
+      rootPath: requestedPath,
+      isGitRepository: false,
+      remotes: [],
+    }
   }
 
   const rootPath = realpathSync(resolve(gitRoot))
@@ -39,7 +45,12 @@ export function inspectWorkspace(path: string): InspectedWorkspace {
     return left.name.localeCompare(right.name)
   })
 
-  return { requestedPath, rootPath, remotes: uniqueRemotes(remotes) }
+  return {
+    requestedPath,
+    rootPath,
+    isGitRepository: true,
+    remotes: uniqueRemotes(remotes),
+  }
 }
 
 export function normalizeGitRemote(

@@ -76,10 +76,9 @@ export function resolveWorkspace(
     )
     const rootPathWorkspace = findWorkspaceByAlias(database, rootPathAlias)
     const remoteOwners = findOwnedAliases(database, remoteAliases)
-    const descendantPathOwners =
-      requestedPathWorkspace || rootPathWorkspace
-        ? []
-        : findDescendantPathOwners(database, rootPathAlias.value)
+    const descendantPathOwners = inspected.isGitRepository
+      ? findDescendantPathOwners(database, rootPathAlias.value)
+      : []
     const workspace = selectWorkspace({
       requestedPathWorkspace,
       rootPathWorkspace,
@@ -156,6 +155,7 @@ function selectWorkspace(options: {
       options.requestedPathWorkspace,
       [
         ...ownedAlias(options.rootPathAlias, options.rootPathWorkspace),
+        ...options.descendantPathOwners,
         ...options.remoteOwners,
       ],
       options.requestedPathAlias,
@@ -166,7 +166,7 @@ function selectWorkspace(options: {
   if (options.rootPathWorkspace) {
     ensureSameWorkspace(
       options.rootPathWorkspace,
-      options.remoteOwners,
+      [...options.descendantPathOwners, ...options.remoteOwners],
       options.requestedPathAlias,
     )
     return options.rootPathWorkspace

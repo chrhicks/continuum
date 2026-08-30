@@ -443,6 +443,107 @@ describe('logical workspace identity', () => {
     database.close()
   })
 
+  for (const requestedChild of ['first', 'second'] as const) {
+    test(`rejects multiple descendant owners when the registered ${requestedChild} child resolves first`, () => {
+      const root = temporaryRoot()
+      const parentPath = makeDirectory(root, `direct-${requestedChild}-parent`)
+      const firstChild = makeDirectory(parentPath, 'first')
+      const secondChild = makeDirectory(parentPath, 'second')
+      const dataDirectory = join(root, 'data')
+      const continuum = createContinuum({ dataDirectory })
+
+      const firstBefore = continuum.resolveWorkspace(firstChild)
+      const secondBefore = continuum.resolveWorkspace(secondChild)
+      git(parentPath, 'init', '--quiet')
+      git(
+        parentPath,
+        'remote',
+        'add',
+        'origin',
+        'https://github.com/team/direct-conflict.git',
+      )
+
+      const pathToResolve =
+        requestedChild === 'first' ? firstChild : secondChild
+      expect(() => continuum.resolveWorkspace(pathToResolve)).toThrow(
+        WorkspaceConflictError,
+      )
+      continuum.close()
+
+      const database = new Database(join(dataDirectory, 'continuum.db'))
+      expect(countRows(database, 'workspaces')).toBe(2)
+      expect(
+        database
+          .query(
+            `SELECT kind, value FROM workspace_aliases
+             ORDER BY kind, value`,
+          )
+          .all(),
+      ).toEqual([
+        { kind: 'path', value: resolve(firstChild) },
+        { kind: 'path', value: resolve(secondChild) },
+      ])
+      expect(firstBefore.identity).not.toEqual(secondBefore.identity)
+      expect(
+        database
+          .query(
+            `SELECT workspace_id FROM workspace_aliases
+             WHERE kind = 'git' AND value = ?`,
+          )
+          .get('github.com/team/direct-conflict'),
+      ).toBeNull()
+      database.close()
+    })
+  }
+
+  test('rejects a registered Git root with a different descendant owner', () => {
+    const root = temporaryRoot()
+    const parentPath = makeDirectory(root, 'owned-root-parent')
+    const childPath = makeDirectory(parentPath, 'child')
+    const dataDirectory = join(root, 'data')
+    const continuum = createContinuum({ dataDirectory })
+
+    const parentBefore = continuum.resolveWorkspace(parentPath)
+    const childBefore = continuum.resolveWorkspace(childPath)
+    git(parentPath, 'init', '--quiet')
+    git(
+      parentPath,
+      'remote',
+      'add',
+      'origin',
+      'https://github.com/team/owned-root-conflict.git',
+    )
+
+    expect(() => continuum.resolveWorkspace(parentPath)).toThrow(
+      WorkspaceConflictError,
+    )
+    continuum.close()
+
+    const database = new Database(join(dataDirectory, 'continuum.db'))
+    expect(countRows(database, 'workspaces')).toBe(2)
+    expect(parentBefore.identity).not.toEqual(childBefore.identity)
+    expect(
+      database
+        .query(
+          `SELECT kind, value FROM workspace_aliases
+           ORDER BY kind, value`,
+        )
+        .all(),
+    ).toEqual([
+      { kind: 'path', value: resolve(parentPath) },
+      { kind: 'path', value: resolve(childPath) },
+    ])
+    expect(
+      database
+        .query(
+          `SELECT workspace_id FROM workspace_aliases
+           WHERE kind = 'git' AND value = ?`,
+        )
+        .get('github.com/team/owned-root-conflict'),
+    ).toBeNull()
+    database.close()
+  })
+
   test('does not register a workspace when Git inspection fails', () => {
     const root = temporaryRoot()
     const repo = makeGitRepository(root, 'broken-repo')
