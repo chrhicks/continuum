@@ -33,13 +33,18 @@ const journalTable = 'memory_journal_entries'
 export function readValidatedLegacyRecords(
   sourcePath: string,
 ): ValidatedLegacyRecord[] {
-  const walPath = `${sourcePath}-wal`
-  if (existsSync(walPath) && statSync(walPath).size > 0) {
-    throw sourceValidationError(
-      sourcePath,
-      'The legacy source must be checkpointed before import.',
-      'sourceWal',
-    )
+  const unsafeSidecars = [
+    { path: `${sourcePath}-wal`, field: 'sourceWal' },
+    { path: `${sourcePath}-journal`, field: 'sourceJournal' },
+  ]
+  for (const sidecar of unsafeSidecars) {
+    if (existsSync(sidecar.path) && statSync(sidecar.path).size > 0) {
+      throw sourceValidationError(
+        sourcePath,
+        'The legacy source must be checkpointed before import.',
+        sidecar.field,
+      )
+    }
   }
 
   let database: Database
@@ -295,7 +300,7 @@ function normalizeLegacyTimestamp(value: unknown): string | null {
   if (typeof value !== 'string') return null
 
   const match =
-    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?(Z|[+-]\d{2}:\d{2})$/.exec(
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(Z|[+-]\d{2}:\d{2})$/.exec(
       value,
     )
   if (!match) return null
@@ -306,6 +311,7 @@ function normalizeLegacyTimestamp(value: unknown): string | null {
   const hour = Number(match[4])
   const minute = Number(match[5])
   const second = Number(match[6])
+  const fraction = match[7]
   const offset = match[8] as string
   if (
     month < 1 ||
@@ -314,7 +320,8 @@ function normalizeLegacyTimestamp(value: unknown): string | null {
     day > daysInMonth(year, month) ||
     hour > 23 ||
     minute > 59 ||
-    second > 59
+    second > 59 ||
+    (fraction !== undefined && /[^0]/.test(fraction.slice(3)))
   ) {
     return null
   }
@@ -330,7 +337,9 @@ function normalizeLegacyTimestamp(value: unknown): string | null {
     }
   }
 
-  const date = new Date(value)
+  const canonicalFraction = (fraction ?? '').slice(0, 3).padEnd(3, '0')
+  const parseable = `${match[1]}-${match[2]}-${match[3]}T${match[4]}:${match[5]}:${match[6]}.${canonicalFraction}${offset}`
+  const date = new Date(parseable)
   if (Number.isNaN(date.getTime())) return null
   const canonical = date.toISOString()
   return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(canonical)

@@ -164,10 +164,22 @@ describe('legacy v1 importer', () => {
         ...validRow(5, 'timestamp-short-fraction'),
         createdAt: '2026-01-02T02:00:00.1Z',
       },
+      {
+        ...validRow(6, 'timestamp-trailing-zero'),
+        createdAt: '2026-01-02T03:00:00.1230Z',
+      },
+      {
+        ...validRow(7, 'timestamp-offset-trailing-zeros'),
+        createdAt: '2026-01-02T03:00:00.120000+02:00',
+      },
+      {
+        ...validRow(8, 'timestamp-all-zero-fraction'),
+        createdAt: '2026-01-02T04:00:00.000000000Z',
+      },
     ])
 
-    expect(importV1(context).processed).toBe(5)
-    expect(importV1(context).processed).toBe(5)
+    expect(importV1(context).processed).toBe(8)
+    expect(importV1(context).processed).toBe(8)
 
     const continuum = createContinuum({ dataDirectory: context.dataDirectory })
     const exact = continuum.get({
@@ -178,6 +190,9 @@ describe('legacy v1 importer', () => {
         'timestamp-positive-offset',
         'timestamp-negative-offset',
         'timestamp-short-fraction',
+        'timestamp-trailing-zero',
+        'timestamp-offset-trailing-zeros',
+        'timestamp-all-zero-fraction',
       ],
     })
     expect(exact.records.map(({ createdAt }) => createdAt)).toEqual([
@@ -186,6 +201,9 @@ describe('legacy v1 importer', () => {
       '2026-01-02T01:00:00.000Z',
       '2026-01-02T05:00:00.000Z',
       '2026-01-02T02:00:00.100Z',
+      '2026-01-02T03:00:00.123Z',
+      '2026-01-02T01:00:00.120Z',
+      '2026-01-02T04:00:00.000Z',
     ])
     expect(
       continuum
@@ -193,13 +211,16 @@ describe('legacy v1 importer', () => {
         .records.map(({ id }) => id),
     ).toEqual([
       'timestamp-negative-offset',
+      'timestamp-all-zero-fraction',
+      'timestamp-trailing-zero',
       'timestamp-canonical',
       'timestamp-short-fraction',
+      'timestamp-offset-trailing-zeros',
       'timestamp-positive-offset',
       'timestamp-no-milliseconds',
     ])
     continuum.close()
-    expect(targetCount(context.dataDirectory)).toBe(5)
+    expect(targetCount(context.dataDirectory)).toBe(8)
   })
 
   test('repeated identical runs are idempotent and empty sources stay lazy', () => {
@@ -345,6 +366,11 @@ describe('legacy v1 importer', () => {
         ['invalid offset timestamp', '2026-01-01T01:00:00+14:01'],
         ['excessive offset timestamp', '2026-01-01T01:00:00-15:00'],
         ['lossy fraction timestamp', '2026-01-01T01:00:00.1234Z'],
+        ['lossy offset fraction timestamp', '2026-01-01T01:00:00.120001+02:00'],
+        [
+          'late lossy fraction timestamp',
+          '2026-01-01T01:00:00.12300000000000000001Z',
+        ],
         ['extended year timestamp', '+010000-01-01T00:00:00.000Z'],
       ].map(([name, createdAt]) =>
         invalidRowCase(name as string, { createdAt }, 'created_at'),
@@ -434,6 +460,49 @@ describe('legacy v1 importer', () => {
     )
     expect(symlinkFailure.context).toMatchObject({ sourcePath: realSource })
     expect(existsSync(`${symlinked.source}-shm`)).toBe(false)
+
+    const rollback = testContext('hot-rollback-journal-direct')
+    createLegacySource(rollback.source, [validRow(1, 'rollback-record')])
+    const rollbackJournal = `${rollback.source}-journal`
+    writeFileSync(rollbackJournal, 'synthetic hot rollback journal sentinel')
+    const rollbackFailure = await expectSourceFilesUnchanged(
+      rollback,
+      [rollback.source, rollbackJournal],
+      () => importV1(rollback),
+    )
+    expect(rollbackFailure.context).toMatchObject({
+      sourcePath: rollback.source,
+      field: 'sourceJournal',
+    })
+    expect(existsSync(rollback.dataDirectory)).toBe(false)
+    expect(sourceSidecars(rollback.source)).toEqual([rollbackJournal])
+
+    const symlinkedRollback = testContext('hot-rollback-journal-symlink')
+    const rollbackRealSource = join(
+      symlinkedRollback.root,
+      'real-rollback-legacy.db',
+    )
+    createLegacySource(rollbackRealSource, [
+      validRow(1, 'symlink-rollback-record'),
+    ])
+    symlinkSync(rollbackRealSource, symlinkedRollback.source)
+    const realRollbackJournal = `${rollbackRealSource}-journal`
+    writeFileSync(
+      realRollbackJournal,
+      'synthetic real-path hot rollback journal sentinel',
+    )
+    const symlinkRollbackFailure = await expectSourceFilesUnchanged(
+      symlinkedRollback,
+      [rollbackRealSource, realRollbackJournal],
+      () => importV1(symlinkedRollback),
+    )
+    expect(symlinkRollbackFailure.context).toMatchObject({
+      sourcePath: rollbackRealSource,
+      field: 'sourceJournal',
+    })
+    expect(existsSync(symlinkedRollback.dataDirectory)).toBe(false)
+    expect(sourceSidecars(rollbackRealSource)).toEqual([realRollbackJournal])
+    expect(sourceSidecars(symlinkedRollback.source)).toEqual([])
 
     const hardLinked = testContext('hard-linked-source')
     const canonicalSource = join(hardLinked.root, 'canonical-legacy.db')
@@ -641,7 +710,7 @@ async function hashFile(path: string): Promise<string> {
 }
 
 function sourceSidecars(path: string): string[] {
-  return [`${path}-wal`, `${path}-shm`].filter(existsSync)
+  return [`${path}-wal`, `${path}-shm`, `${path}-journal`].filter(existsSync)
 }
 
 function targetSidecars(dataDirectory: string): string[] {
