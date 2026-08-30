@@ -24,6 +24,11 @@ type StoredWorkspace = {
   identity_value: string
 }
 
+type OwnedAlias = {
+  alias: WorkspaceAlias
+  workspace: StoredWorkspace
+}
+
 export function resolveWorkspace(
   database: Database,
   requestedPath: string,
@@ -43,10 +48,18 @@ export function resolveWorkspace(
     })
   }
 
-  const pathAlias: WorkspaceAlias = {
+  const requestedPathAlias: WorkspaceAlias = {
+    kind: 'path',
+    value: inspected.requestedPath,
+  }
+  const rootPathAlias: WorkspaceAlias = {
     kind: 'path',
     value: inspected.rootPath,
   }
+  const pathAliases =
+    requestedPathAlias.value === rootPathAlias.value
+      ? [requestedPathAlias]
+      : [requestedPathAlias, rootPathAlias]
   const remoteAliases: WorkspaceAlias[] = inspected.remotes.map((remote) => ({
     kind: 'git',
     value: remote.value,
@@ -56,31 +69,26 @@ export function resolveWorkspace(
   try {
     database.exec('BEGIN IMMEDIATE')
     transactionStarted = true
-    const existingPathWorkspace = findWorkspaceByAlias(database, pathAlias)
-    const remoteOwners = remoteAliases
-      .map((alias) => ({
-        alias,
-        workspace: findWorkspaceByAlias(database, alias),
-      }))
-      .filter(
-        (item): item is { alias: WorkspaceAlias; workspace: StoredWorkspace } =>
-          item.workspace !== null,
-      )
 
-    const workspace = existingPathWorkspace
-      ? resolveExistingPathWorkspace(
-          existingPathWorkspace,
-          remoteOwners,
-          pathAlias,
-        )
-      : resolveRemoteWorkspace(remoteOwners, pathAlias)
-
+    const requestedPathWorkspace = findWorkspaceByAlias(
+      database,
+      requestedPathAlias,
+    )
+    const rootPathWorkspace = findWorkspaceByAlias(database, rootPathAlias)
+    const remoteOwners = findOwnedAliases(database, remoteAliases)
+    const workspace = selectWorkspace({
+      requestedPathWorkspace,
+      rootPathWorkspace,
+      remoteAliases,
+      remoteOwners,
+      requestedPathAlias,
+      rootPathAlias,
+    })
     const resolved =
-      workspace ?? createWorkspace(database, remoteAliases[0] ?? pathAlias)
+      workspace ?? createWorkspace(database, remoteAliases[0] ?? rootPathAlias)
 
-    addAlias(database, resolved.id, pathAlias, pathAlias.value)
-    for (const alias of remoteAliases) {
-      addAlias(database, resolved.id, alias, pathAlias.value)
+    for (const alias of [...pathAliases, ...remoteAliases]) {
+      addAlias(database, resolved.id, alias, requestedPathAlias.value)
     }
 
     const result = readWorkspaceInfo(database, resolved.id)
@@ -93,7 +101,7 @@ export function resolveWorkspace(
       code: 'DATABASE_ERROR',
       operation: 'resolve workspace',
       message: 'Failed to register the Continuum workspace.',
-      context: { workspacePath: pathAlias.value },
+      context: { workspacePath: requestedPathAlias.value },
       cause,
     })
   }
@@ -129,37 +137,99 @@ function validateWorkspacePath(path: string): void {
   }
 }
 
-function resolveExistingPathWorkspace(
-  pathWorkspace: StoredWorkspace,
-  remoteOwners: Array<{ alias: WorkspaceAlias; workspace: StoredWorkspace }>,
-  pathAlias: WorkspaceAlias,
-): StoredWorkspace {
-  const conflict = remoteOwners.find(
-    ({ workspace }) => workspace.id !== pathWorkspace.id,
-  )
-  if (conflict) {
-    throw new WorkspaceConflictError({
-      workspacePath: pathAlias.value,
-      alias: conflict.alias.value,
-    })
+function selectWorkspace(options: {
+  requestedPathWorkspace: StoredWorkspace | null
+  rootPathWorkspace: StoredWorkspace | null
+  remoteAliases: WorkspaceAlias[]
+  remoteOwners: OwnedAlias[]
+  requestedPathAlias: WorkspaceAlias
+  rootPathAlias: WorkspaceAlias
+}): StoredWorkspace | null {
+  if (options.requestedPathWorkspace) {
+    ensureSameWorkspace(
+      options.requestedPathWorkspace,
+      [
+        ...ownedAlias(options.rootPathAlias, options.rootPathWorkspace),
+        ...options.remoteOwners,
+      ],
+      options.requestedPathAlias,
+    )
+    return options.requestedPathWorkspace
   }
-  return pathWorkspace
+
+  if (options.rootPathWorkspace) {
+    ensureSameWorkspace(
+      options.rootPathWorkspace,
+      options.remoteOwners,
+      options.requestedPathAlias,
+    )
+    return options.rootPathWorkspace
+  }
+
+  const preferredRemote = options.remoteAliases[0]
+  if (!preferredRemote) return null
+
+  const preferredOwner = options.remoteOwners.find(
+    ({ alias }) => alias.value === preferredRemote.value,
+  )
+  const secondaryOwners = options.remoteOwners.filter(
+    ({ alias }) => alias.value !== preferredRemote.value,
+  )
+
+  if (!preferredOwner) {
+    if (secondaryOwners[0]) {
+      throwWorkspaceConflict(
+        options.requestedPathAlias,
+        secondaryOwners[0].alias,
+      )
+    }
+    return null
+  }
+
+  ensureSameWorkspace(
+    preferredOwner.workspace,
+    secondaryOwners,
+    options.requestedPathAlias,
+  )
+  return preferredOwner.workspace
 }
 
-function resolveRemoteWorkspace(
-  remoteOwners: Array<{ alias: WorkspaceAlias; workspace: StoredWorkspace }>,
-  pathAlias: WorkspaceAlias,
-): StoredWorkspace | null {
-  const workspaces = new Map(
-    remoteOwners.map(({ workspace }) => [workspace.id, workspace]),
-  )
-  if (workspaces.size > 1) {
-    throw new WorkspaceConflictError({
-      workspacePath: pathAlias.value,
-      alias: remoteOwners.map(({ alias }) => alias.value).join(', '),
-    })
+function findOwnedAliases(
+  database: Database,
+  aliases: WorkspaceAlias[],
+): OwnedAlias[] {
+  return aliases.flatMap((alias) => {
+    const workspace = findWorkspaceByAlias(database, alias)
+    return workspace ? [{ alias, workspace }] : []
+  })
+}
+
+function ownedAlias(
+  alias: WorkspaceAlias,
+  workspace: StoredWorkspace | null,
+): OwnedAlias[] {
+  return workspace ? [{ alias, workspace }] : []
+}
+
+function ensureSameWorkspace(
+  expected: StoredWorkspace,
+  owners: OwnedAlias[],
+  requestedPathAlias: WorkspaceAlias,
+): void {
+  const conflict = owners.find(({ workspace }) => workspace.id !== expected.id)
+  if (conflict) {
+    throwWorkspaceConflict(requestedPathAlias, conflict.alias)
   }
-  return workspaces.values().next().value ?? null
+}
+
+function throwWorkspaceConflict(
+  requestedPathAlias: WorkspaceAlias,
+  conflictingAlias: WorkspaceAlias,
+): never {
+  throw new WorkspaceConflictError({
+    workspacePath: requestedPathAlias.value,
+    alias: conflictingAlias.value,
+  })
 }
 
 function findWorkspaceByAlias(

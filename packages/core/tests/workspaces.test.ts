@@ -9,6 +9,7 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import {
   ContinuumError,
   WorkspaceConflictError,
@@ -70,15 +71,36 @@ describe('logical workspace identity', () => {
     database.close()
   })
 
-  test('normalizes common SSH and HTTPS forms to one remote identity', () => {
+  test('normalizes equivalent network and local remote forms without collapsing endpoints', () => {
     expect(normalizeGitRemote('git@GitHub.com:Example/Continuum.git')).toBe(
       'github.com/Example/Continuum',
     )
     expect(
       normalizeGitRemote('ssh://git@github.com/Example/Continuum.git'),
     ).toBe('github.com/Example/Continuum')
+    expect(
+      normalizeGitRemote('ssh://git@github.com:22/Example/Continuum.git'),
+    ).toBe('github.com/Example/Continuum')
     expect(normalizeGitRemote('https://github.com/Example/Continuum.git')).toBe(
       'github.com/Example/Continuum',
+    )
+    expect(
+      normalizeGitRemote('ssh://git@example.test:2222/team/project.git'),
+    ).toBe('example.test:2222/team/project')
+    expect(
+      normalizeGitRemote('ssh://git@example.test:3333/team/project.git'),
+    ).toBe('example.test:3333/team/project')
+
+    const root = temporaryRoot()
+    const plainPath = join(root, 'project')
+    const dotGitPath = join(root, 'project.git')
+    expect(normalizeGitRemote(plainPath)).toBe(`file:${plainPath}`)
+    expect(normalizeGitRemote(pathToFileURL(plainPath).href)).toBe(
+      `file:${plainPath}`,
+    )
+    expect(normalizeGitRemote(dotGitPath)).toBe(`file:${dotGitPath}`)
+    expect(normalizeGitRemote(dotGitPath)).not.toBe(
+      normalizeGitRemote(plainPath),
     )
   })
 
@@ -109,6 +131,97 @@ describe('logical workspace identity', () => {
         { kind: 'path', value: resolve(repo) },
       ]),
     )
+  })
+
+  test('keeps repositories on distinct explicit ports isolated', () => {
+    const root = temporaryRoot()
+    const first = makeGitRepository(root, 'first-port')
+    const second = makeGitRepository(root, 'second-port')
+    git(
+      first,
+      'remote',
+      'add',
+      'origin',
+      'ssh://git@example.test:2222/team/project.git',
+    )
+    git(
+      second,
+      'remote',
+      'add',
+      'origin',
+      'ssh://git@example.test:3333/team/project.git',
+    )
+    const dataDirectory = join(root, 'data')
+    const continuum = createContinuum({ dataDirectory })
+
+    const firstWorkspace = continuum.resolveWorkspace(first)
+    const secondWorkspace = continuum.resolveWorkspace(second)
+    continuum.close()
+
+    expect(firstWorkspace.identity.value).toBe('example.test:2222/team/project')
+    expect(secondWorkspace.identity.value).toBe(
+      'example.test:3333/team/project',
+    )
+    const database = new Database(join(dataDirectory, 'continuum.db'))
+    expect(countRows(database, 'workspaces')).toBe(2)
+    database.close()
+  })
+
+  test('rejects an unowned origin when a shared secondary remote is owned', () => {
+    const root = temporaryRoot()
+    const first = makeGitRepository(root, 'first-fork')
+    const second = makeGitRepository(root, 'second-fork')
+    git(
+      first,
+      'remote',
+      'add',
+      'origin',
+      'https://github.com/team/first-fork.git',
+    )
+    git(
+      second,
+      'remote',
+      'add',
+      'origin',
+      'https://github.com/team/second-fork.git',
+    )
+    for (const path of [first, second]) {
+      git(
+        path,
+        'remote',
+        'add',
+        'upstream',
+        'https://github.com/team/upstream.git',
+      )
+    }
+    const dataDirectory = join(root, 'data')
+    const continuum = createContinuum({ dataDirectory })
+
+    continuum.resolveWorkspace(first)
+    expect(() => continuum.resolveWorkspace(second)).toThrow(
+      WorkspaceConflictError,
+    )
+
+    const afterConflict = new Database(join(dataDirectory, 'continuum.db'))
+    expect(countRows(afterConflict, 'workspaces')).toBe(1)
+    expect(
+      afterConflict
+        .query(
+          `SELECT workspace_id FROM workspace_aliases
+           WHERE kind = 'git' AND value = 'github.com/team/second-fork'`,
+        )
+        .get(),
+    ).toBeNull()
+    afterConflict.close()
+
+    git(second, 'remote', 'remove', 'upstream')
+    const secondWorkspace = continuum.resolveWorkspace(second)
+    continuum.close()
+
+    expect(secondWorkspace.identity.value).toBe('github.com/team/second-fork')
+    const database = new Database(join(dataDirectory, 'continuum.db'))
+    expect(countRows(database, 'workspaces')).toBe(2)
+    database.close()
   })
 
   test('shares one identity across clones and a Git worktree', () => {
@@ -181,6 +294,75 @@ describe('logical workspace identity', () => {
       kind: 'git',
       value: 'github.com/team/growing',
     })
+  })
+
+  test('keeps a registered child path when its parent later becomes a Git root', () => {
+    const root = temporaryRoot()
+    const parentPath = makeDirectory(root, 'parent')
+    const childPath = makeDirectory(parentPath, 'child')
+    const clonePath = makeGitRepository(root, 'parent-clone')
+    const dataDirectory = join(root, 'data')
+    const continuum = createContinuum({ dataDirectory })
+
+    const beforeGit = continuum.resolveWorkspace(childPath)
+    git(parentPath, 'init', '--quiet')
+    git(
+      parentPath,
+      'remote',
+      'add',
+      'origin',
+      'https://github.com/team/parent-project.git',
+    )
+    git(
+      clonePath,
+      'remote',
+      'add',
+      'origin',
+      'git@github.com:team/parent-project.git',
+    )
+
+    const afterGit = continuum.resolveWorkspace(childPath)
+    const clone = continuum.resolveWorkspace(clonePath)
+    continuum.close()
+
+    expect(afterGit.identity).toEqual(beforeGit.identity)
+    expect(clone.identity).toEqual(beforeGit.identity)
+    expect(afterGit.aliases).toEqual(
+      expect.arrayContaining([
+        { kind: 'path', value: resolve(childPath) },
+        { kind: 'path', value: resolve(parentPath) },
+        { kind: 'git', value: 'github.com/team/parent-project' },
+      ]),
+    )
+
+    const database = new Database(join(dataDirectory, 'continuum.db'))
+    expect(countRows(database, 'workspaces')).toBe(1)
+    database.close()
+  })
+
+  test('does not register a workspace when Git inspection fails', () => {
+    const root = temporaryRoot()
+    const repo = makeGitRepository(root, 'broken-repo')
+    const dataDirectory = join(root, 'data')
+    writeFileSync(join(repo, '.git', 'config'), '[broken\n')
+    const continuum = createContinuum({ dataDirectory })
+
+    expect(() => continuum.resolveWorkspace(repo)).toThrow(ContinuumError)
+    try {
+      continuum.resolveWorkspace(repo)
+    } catch (error) {
+      expect(error).toMatchObject({
+        code: 'WORKSPACE_ERROR',
+        operation: 'resolve workspace',
+        message: 'Failed to inspect the workspace path.',
+      })
+    }
+    continuum.close()
+
+    const database = new Database(join(dataDirectory, 'continuum.db'))
+    expect(countRows(database, 'workspaces')).toBe(0)
+    expect(countRows(database, 'workspace_aliases')).toBe(0)
+    database.close()
   })
 
   test('surfaces alias collisions without reassociating either workspace', () => {
