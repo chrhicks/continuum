@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" role="img" aria-labelledby="title desc">
+  <title id="title">Current Linear agent pipeline</title>
+  <desc id="desc">Linear issues flow through a systemd timer and shell preflight into one privileged Pi session, which controls coordination, code, validation, GitHub handoff, and recovery.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#94a3b8"/></marker>
+    <style>
+      .bg{fill:#07111f}.title{fill:#f8fafc;font:700 28px sans-serif}.sub{fill:#94a3b8;font:15px sans-serif}.box{rx:14;stroke-width:2}.h{fill:#f8fafc;font:700 17px sans-serif}.t{fill:#cbd5e1;font:14px sans-serif}.line{stroke:#94a3b8;stroke-width:3;fill:none;marker-end:url(#arrow)}.risk{fill:#7f1d1d;stroke:#f87171}.safe{fill:#0f3d37;stroke:#2dd4bf}.coord{fill:#17366e;stroke:#60a5fa}.code{fill:#422174;stroke:#a78bfa}.note{fill:#3f2b11;stroke:#fbbf24}
+    </style>
+  </defs>
+  <rect class="bg" width="1280" height="720"/>
+  <text class="title" x="52" y="55">Current pipeline: one model session owns dispatch through handoff</text>
+  <text class="sub" x="52" y="82">Solid arrows are runtime calls. Red indicates authority enforced only by prompt.</text>
+
+  <rect class="box coord" x="55" y="150" width="190" height="120"/>
+  <text class="h" x="78" y="182">Linear</text><text class="t" x="78" y="210">Backlog → Todo</text><text class="t" x="78" y="233">labels, blockers, priority</text>
+  <path class="line" d="M245 210 H325"/>
+
+  <rect class="box safe" x="325" y="140" width="210" height="140"/>
+  <text class="h" x="350" y="174">systemd + run-once</text><text class="t" x="350" y="202">5-minute timer</text><text class="t" x="350" y="225">flock, dirty check</text><text class="t" x="350" y="248">90-minute timeout</text>
+  <path class="line" d="M535 210 H615"/>
+
+  <rect class="box risk" x="615" y="115" width="280" height="190"/>
+  <text class="h" x="640" y="150">Privileged Pi session</text><text class="t" x="640" y="179">selects and claims issue</text><text class="t" x="640" y="202">reads issue as instructions</text><text class="t" x="640" y="225">bash/edit across user home</text><text class="t" x="640" y="248">Executor + resume tools</text><text class="t" x="640" y="271">Git and gh credentials</text>
+
+  <path class="line" d="M755 305 V385"/>
+  <rect class="box code" x="615" y="385" width="280" height="150"/>
+  <text class="h" x="640" y="420">Issue worktree</text><text class="t" x="640" y="449">edit, test, commit, push</text><text class="t" x="640" y="472">isolated validation helper</text><text class="t" x="640" y="495">preserved on failure</text>
+
+  <path class="line" d="M895 445 H985"/>
+  <rect class="box coord" x="985" y="385" width="230" height="150"/>
+  <text class="h" x="1010" y="420">GitHub + Linear</text><text class="t" x="1010" y="449">push branch and open PR</text><text class="t" x="1010" y="472">comment evidence</text><text class="t" x="1010" y="495">move to In Review</text>
+
+  <path class="line" d="M615 190 H575 V600 H325"/>
+  <rect class="box note" x="55" y="560" width="270" height="105"/>
+  <text class="h" x="80" y="594">Continuum control ledger</text><text class="t" x="80" y="622">plans, discoveries, outcomes</text><text class="t" x="80" y="645">currently split runtime generations</text>
+
+  <text class="sub" x="55" y="700">Measured NO_WORK cost: $0.354 per poll. The timer has been paused for review.</text>
+</svg>

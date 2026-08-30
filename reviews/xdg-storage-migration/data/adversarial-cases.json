@@ -1,0 +1,28 @@
+[
+  {
+    "case": "canonical-replacement",
+    "status": 0,
+    "warnedRemovable": true,
+    "preservedTask": false,
+    "stderr": "Legacy database /tmp/continuum-review-replacement-njcB7F/workspace/.continuum/continuum.db matches the exact source state recorded by Continuum and may be removed manually. It will never be deleted automatically."
+  },
+  {
+    "case": "workspace-move",
+    "status": 0,
+    "foundTask": false,
+    "oldCanonical": "/tmp/continuum-review-move-irhUYV/data/continuum/projects/beff9ffaf9904c6b1766f34045cbc1c26132787a2201ff3d71354f2ccba7d33c/continuum.db",
+    "newCanonical": "/tmp/continuum-review-move-irhUYV/data/continuum/projects/ad9aeea3092074aa45a5ac8aa5d2621d65e8eee10f297b9d9719597e5b798e73/continuum.db",
+    "createdSecondDatabase": true
+  },
+  {
+    "case": "cross-version-restore",
+    "rejected": true,
+    "error": "Backup application version 0.0.0 is not supported by 0.1.1"
+  },
+  {
+    "case": "crash-after-destination-migrations-before-receipt",
+    "status": 1,
+    "recoverableAutomatically": false,
+    "error": "STORAGE_MIGRATION_CONFLICT: Legacy and canonical databases are divergent (/tmp/continuum-review-crash-frgQRB/workspace/.continuum/continuum.db vs /tmp/continuum-review-crash-frgQRB/data/continuum/projects/0ddcca679dfd4c56bda40ead7deac18362023581b55556084c754b5ac1f4d54d/continuum.db). Neither database was overwritten; reconcile them explicitly before retrying."
+  }
+]

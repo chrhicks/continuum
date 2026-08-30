@@ -1,0 +1,15 @@
+{
+  "statistics": {
+    "clones": 10,
+    "duplicatedLines": 73,
+    "duplicatedTokens": 647,
+    "lines": 16671,
+    "newClones": 0,
+    "newDuplicatedLines": 0,
+    "percentage": 0.4378861496011037,
+    "percentageTokens": 0.7679069491424841,
+    "sources": 132,
+    "tokens": 84255
+  },
+  "duplicates": 10
+}

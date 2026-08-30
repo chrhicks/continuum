@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="680" viewBox="0 0 1280 680" role="img" aria-labelledby="title desc">
+  <title id="title">Measured pipeline costs</title>
+  <desc id="desc">Bar chart comparing the no-work poll, CHI-98 attempts, and CHI-99 parent and subagent costs.</desc>
+  <style>.bg{fill:#07111f}.title{fill:#f8fafc;font:700 28px sans-serif}.sub{fill:#94a3b8;font:15px sans-serif}.axis{stroke:#475569;stroke-width:2}.label{fill:#cbd5e1;font:14px sans-serif}.value{fill:#f8fafc;font:700 15px sans-serif}.bar1{fill:#38bdf8}.bar2{fill:#a78bfa}.bar3{fill:#f59e0b}.risk{fill:#f87171;font:700 18px sans-serif}</style>
+  <rect class="bg" width="1280" height="680"/>
+  <text class="title" x="55" y="55">Measured cost profile</text>
+  <text class="sub" x="55" y="84">Provider-reported session costs from the four live parent runs and CHI-99 child sessions.</text>
+  <line class="axis" x1="250" y1="125" x2="250" y2="555"/><line class="axis" x1="250" y1="555" x2="1190" y2="555"/>
+
+  <text class="label" x="55" y="172">NO_WORK poll</text><rect class="bar1" x="250" y="145" width="27" height="42"/><text class="value" x="290" y="172">$0.35</text>
+  <text class="label" x="55" y="262">CHI-98 blocked run</text><rect class="bar2" x="250" y="235" width="149" height="42"/><text class="value" x="412" y="262">$1.94</text>
+  <text class="label" x="55" y="352">CHI-98 recovery</text><rect class="bar2" x="250" y="325" width="112" height="42"/><text class="value" x="375" y="352">$1.45</text>
+  <text class="label" x="55" y="442">CHI-99 parent</text><rect class="bar3" x="250" y="415" width="194" height="42"/><text class="value" x="457" y="442">$2.52</text>
+  <text class="label" x="55" y="532">CHI-99 subagents</text><rect class="bar3" x="250" y="505" width="770" height="42"/><text class="value" x="1033" y="532">$10.01</text>
+
+  <text class="risk" x="55" y="610">Idle five-minute polling projects to $97-$102/day.</text>
+  <text class="sub" x="55" y="640">Total measured live cost: $16.27. CHI-99 combined parent and children: $12.53.</text>
+</svg>

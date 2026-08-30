@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1450" height="860" viewBox="0 0 1450 860" role="img" aria-labelledby="title desc">
+  <title id="title">Review finding priority map</title><desc id="desc">Ten findings arranged by impact and likelihood, with migration proof at the highest priority.</desc>
+  <style>.bg{fill:#0f172a}.t{fill:#f8fafc;font:700 30px system-ui}.h{fill:#f8fafc;font:700 16px system-ui}.s{fill:#cbd5e1;font:13px system-ui}.axis{stroke:#64748b;stroke-width:2}.grid{stroke:#334155;stroke-width:1}.p0{fill:#991b1b;stroke:#fca5a5;stroke-width:2}.p1{fill:#9a3412;stroke:#fdba74;stroke-width:2}.p2{fill:#1e3a8a;stroke:#93c5fd;stroke-width:2}.tag{fill:#fff;font:700 13px system-ui}.label{fill:#fff;font:12px system-ui}</style>
+  <rect class="bg" width="1450" height="860"/><text class="t" x="55" y="55">Finding map</text>
+  <line class="axis" x1="150" y1="720" x2="1370" y2="720"/><line class="axis" x1="150" y1="720" x2="150" y2="115"/>
+  <line class="grid" x1="150" y1="520" x2="1370" y2="520"/><line class="grid" x1="150" y1="320" x2="1370" y2="320"/><line class="grid" x1="555" y1="115" x2="555" y2="720"/><line class="grid" x1="960" y1="115" x2="960" y2="720"/>
+  <text class="s" x="95" y="725" transform="rotate(-90 95 725)">impact increases upward</text><text class="s" x="650" y="775">likelihood or frequency increases to the right</text>
+  <text class="s" x="140" y="750">low</text><text class="s" x="1325" y="750">high</text><text class="s" x="112" y="700">low</text><text class="s" x="105" y="135">high</text>
+
+  <rect class="p0" x="1030" y="145" width="290" height="82" rx="12"/><text class="tag" x="1050" y="172">F-001 P0</text><text class="label" x="1050" y="196">replacement DB still triggers</text><text class="label" x="1050" y="214">safe-to-delete warning</text>
+  <rect class="p1" x="720" y="245" width="250" height="76" rx="12"/><text class="tag" x="740" y="272">F-002 P1</text><text class="label" x="740" y="296">workspace move hides data</text>
+  <rect class="p1" x="1010" y="265" width="270" height="76" rx="12"/><text class="tag" x="1030" y="292">F-003 P1</text><text class="label" x="1030" y="316">version bump blocks restore</text>
+  <rect class="p1" x="430" y="205" width="250" height="76" rx="12"/><text class="tag" x="450" y="232">F-004 P1</text><text class="label" x="450" y="256">migration crash trap</text>
+  <rect class="p1" x="690" y="365" width="270" height="76" rx="12"/><text class="tag" x="710" y="392">F-005 P1</text><text class="label" x="710" y="416">second non-Effect architecture</text>
+
+  <rect class="p2" x="970" y="470" width="250" height="70" rx="12"/><text class="tag" x="990" y="496">F-006 P2</text><text class="label" x="990" y="520">config redaction and errors</text>
+  <rect class="p2" x="420" y="535" width="250" height="70" rx="12"/><text class="tag" x="440" y="561">F-007 P2</text><text class="label" x="440" y="585">thin adapter and CLI tests</text>
+  <rect class="p2" x="700" y="565" width="250" height="70" rx="12"/><text class="tag" x="720" y="591">F-008 P2</text><text class="label" x="720" y="615">manual parsing and exports</text>
+  <rect class="p2" x="190" y="610" width="220" height="70" rx="12"/><text class="tag" x="210" y="636">F-009 P2</text><text class="label" x="210" y="660">host-specific docs</text>
+  <rect class="p2" x="1010" y="590" width="280" height="70" rx="12"/><text class="tag" x="1030" y="616">F-010 P2</text><text class="label" x="1030" y="640">manual backup has no freshness</text>
+</svg>

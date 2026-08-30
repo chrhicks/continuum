@@ -1,0 +1,134 @@
+[
+  {
+    "id": "PIP-001",
+    "priority": "P0",
+    "title": "Every empty poll launches the full coding model",
+    "evidence": [
+      "ops/linear-agent/systemd/linear-agent-worker@.timer",
+      "ops/linear-agent/bin/run-once",
+      "data/runs.json"
+    ],
+    "impact": "The measured NO_WORK run cost $0.354413. A five-minute idle timer projects to roughly $97-$102 per day and $2,916-$3,062 per 30 days, before any code work.",
+    "remedy": "Put a deterministic, non-LLM Linear dispatcher before Pi. Exit without starting Pi when no eligible issue exists. Prefer webhook wakeup later.",
+    "resumeBlocker": true
+  },
+  {
+    "id": "PIP-002",
+    "priority": "P0",
+    "title": "Prompt rules are the only barrier around broad host and repository authority",
+    "evidence": [
+      "ops/linear-agent/systemd/linear-agent-worker@.service",
+      "ops/linear-agent/bin/run-once",
+      "ops/linear-agent/prompts/worker.md",
+      "deployed ~/.config/mcp/mcp.json",
+      "16 agent-issued Executor resume calls in recorded sessions"
+    ],
+    "impact": "The unattended model has unrestricted bash/edit access to the user's home, SSH and gh credentials with repo scope, Pi auth, and every exposed Executor core/Linear/Continuum tool. It can resume its own approval-paused writes. No machine control prevents merge, force-push, secret reads, policy mutation, or unrelated home changes.",
+    "remedy": "Run the coding model in a dedicated account or container with only one worktree and state directory writable. Give the supervisor, not the model, Linear/GitHub credentials. Restrict MCP tools and remove resume/policy/provider surfaces.",
+    "resumeBlocker": true
+  },
+  {
+    "id": "PIP-003",
+    "priority": "P1",
+    "title": "Issue selection, eligibility, dependency checks, and claiming are model decisions",
+    "evidence": [
+      "ops/linear-agent/prompts/worker.md sections 2 and 3",
+      "ops/linear-agent/bin/run-once contains no Linear query or state parser"
+    ],
+    "impact": "The expensive and nondeterministic component decides whether work exists and whether the issue contract is complete. The shell wrapper cannot prove one issue was selected, that blockers were complete, or that the allowed base was honored.",
+    "remedy": "Implement a deterministic dispatcher that parses exact Linear fields, validates an issue schema and allowlists, claims and re-reads once, then writes a frozen issue envelope for the coding model.",
+    "resumeBlocker": true
+  },
+  {
+    "id": "PIP-004",
+    "priority": "P1",
+    "title": "Linear and repository text are untrusted instructions inside a privileged session",
+    "evidence": [
+      "ops/linear-agent/prompts/worker.md",
+      "Pi is launched with --approve from the control checkout",
+      "Pi loads AGENTS.md, skills, global extensions, and project resources"
+    ],
+    "impact": "An edited issue body, comment, repository instruction, or trusted project resource can redirect the model. The protocol does not explicitly treat issue text as untrusted, and validation commands are copied from issue content rather than selected from a repository policy.",
+    "remedy": "Parse issue data outside the model, pass only schema fields, keep validation commands in reviewed per-repository configuration, launch with a minimal explicit tool/resource set, and deny project extensions unless pinned.",
+    "resumeBlocker": true
+  },
+  {
+    "id": "PIP-005",
+    "priority": "P1",
+    "title": "Wall-clock timeout does not bound model or subagent cost",
+    "evidence": [
+      "ops/linear-agent/bin/run-once has a 90-minute timeout but no token or cost limit",
+      "CHI-99 parent cost $2.519003",
+      "CHI-99 four subagent sessions cost $10.009393"
+    ],
+    "impact": "CHI-99 cost $12.528396 in one run. Ambient global packages enabled subagents without a configured child count, model, thinking level, or budget. A single issue can consume the account limit while remaining within the timeout.",
+    "remedy": "Pin model and thinking, disable ambient subagents by default, set maximum child count, turns, and dollar budget, and terminate or block before the budget is exceeded.",
+    "resumeBlocker": true
+  },
+  {
+    "id": "PIP-006",
+    "priority": "P1",
+    "title": "The control ledger is served by two Continuum runtime generations",
+    "evidence": [
+      "CHI-98 first run",
+      "Linear CHI-100",
+      "legacy .continuum/continuum.db and XDG canonical database were both created"
+    ],
+    "impact": "Executor task tools and shell validation selected different databases, producing STORAGE_MIGRATION_CONFLICT. Validation isolation prevents recurrence during tests but does not make the durable agent ledger single-authority.",
+    "remedy": "Pin one Continuum executable/integration for ledger operations, add a runtime/database identity preflight before claim, and reconcile existing stores only through an explicit reviewed migration.",
+    "resumeBlocker": true
+  },
+  {
+    "id": "PIP-007",
+    "priority": "P1",
+    "title": "The supervisor does not verify outcomes or distinguish NO_WORK, BLOCKED, and HANDOFF",
+    "evidence": [
+      "ops/linear-agent/bin/run-once uses Pi text mode and returns Pi's exit status",
+      "NO_WORK, BLOCKED, and successful runs all exited 0",
+      "systemd Result=success for each outcome"
+    ],
+    "impact": "systemd cannot alert on a blocked issue, missing PR, false handoff, or malformed final response. Linear and Git state may disagree while the service reports success.",
+    "remedy": "Use Pi JSON/RPC output with a versioned result schema. The supervisor must independently verify issue state, branch, commit, PR target, validation evidence, and CI before applying transitions and distinct exit codes.",
+    "resumeBlocker": true
+  },
+  {
+    "id": "PIP-008",
+    "priority": "P2",
+    "title": "Leases are comments interpreted by the model rather than durable coordination state",
+    "evidence": [
+      "ops/linear-agent/COORDINATION.md",
+      "CHI-98 required a human lease-release comment",
+      "single-machine flock does not protect multiple machines"
+    ],
+    "impact": "A crashed run can leave an issue In Progress until model-driven recovery. Polling during the live lease still costs money, heartbeat extensions are prose, and cross-machine claims can race.",
+    "remedy": "Store a local durable run record with PID, issue, branch, expiry, and heartbeat. Use one dispatcher host initially; add an external compare-and-swap lease before multi-machine workers.",
+    "resumeBlocker": false
+  },
+  {
+    "id": "PIP-009",
+    "priority": "P2",
+    "title": "Handoff stops before CI and deployed components can drift",
+    "evidence": [
+      "CHI-98 was moved to In Review while GitHub CI was pending",
+      "installed scripts/prompts are copies of a branch checkout",
+      "model and thinking use ambient Pi defaults"
+    ],
+    "impact": "A later CI failure has no reconciliation path. The installed runner, prompt, control checkout, Pi, MCP adapter, model, and Continuum integration can change independently without a recorded deployment manifest.",
+    "remedy": "Add a CI watcher or define In Review as pre-CI explicitly, block on failed checks, pin runtime versions, and record script/prompt/config digests in each run envelope.",
+    "resumeBlocker": false
+  },
+  {
+    "id": "PIP-010",
+    "priority": "P2",
+    "title": "Operational tests, retention, cleanup, and alerting are incomplete",
+    "evidence": [
+      "ops/linear-agent/tests/smoke.sh",
+      "unbounded runs and sessions directories",
+      "preserved worktrees have no cleanup policy",
+      "no OnFailure notification"
+    ],
+    "impact": "The tests cover syntax, modes, dirty checkout, and dry-run only. Timer behavior, lock races, timeout, selection, recovery, validation helper behavior, structured handoff, and prompt abuse have no automated regression coverage. Logs, sessions, and worktrees accumulate indefinitely.",
+    "remedy": "Add fake Linear/GitHub/Pi integration tests, failure notifications, status tooling, log/session rotation, and human-approved worktree cleanup after merge.",
+    "resumeBlocker": false
+  }
+]

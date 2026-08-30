@@ -1,0 +1,375 @@
+"file","name","kind","exported","start","end","lines","parameters","returnType","decisions","throws","catches","loops"
+"src/backup/config.ts","backupConfigPath","function",true,23,25,3,"workspaceRoot: string","string",0,0,0,0
+"src/backup/config.ts","configureBackup","function",true,27,46,20,"input: ConfigureBackupInput","BackupConfig",4,0,0,0
+"src/backup/config.ts","readBackupConfig","function",true,48,56,9,"workspaceRoot: string","BackupConfig",1,1,0,0
+"src/backup/config.ts","writeConfig","function",false,58,67,10,"path: string; config: BackupConfig","void",0,0,0,0
+"src/backup/config.ts","validateBucket","function",false,69,73,5,"bucket: string","void",1,1,0,0
+"src/backup/config.ts","assertCompatible","function",false,75,90,16,"existing: BackupConfig; input: ConfigureBackupInput","void",5,3,0,0
+"src/backup/contracts.ts","projectPrefix","function",true,46,48,3,"projectId: string","string",0,0,0,0
+"src/backup/contracts.ts","generationPrefix","function",true,50,55,6,"projectId: string; generation: string","string",0,0,0,0
+"src/backup/contracts.ts","databaseObjectKey","function",true,57,62,6,"projectId: string; generation: string","string",0,0,0,0
+"src/backup/contracts.ts","manifestObjectKey","function",true,64,69,6,"projectId: string; generation: string","string",0,0,0,0
+"src/backup/contracts.ts","headObjectKey","function",true,71,73,3,"projectId: string","string",0,0,0,0
+"src/backup/contracts.ts","encodeJson","function",true,75,77,3,"value: unknown","Uint8Array",0,0,0,0
+"src/backup/contracts.ts","decodeBackupConfig","function",true,79,89,11,"bytes: Uint8Array","BackupConfig",0,0,0,0
+"src/backup/contracts.ts","decodeBackupManifest","function",true,91,126,36,"bytes: Uint8Array","BackupManifest",2,1,0,0
+"src/backup/contracts.ts","decodeBackupHead","function",true,128,139,12,"bytes: Uint8Array","BackupHead",0,0,0,0
+"src/backup/contracts.ts","bytesDigest","function",true,141,143,3,"bytes: Uint8Array","string",0,0,0,0
+"src/backup/contracts.ts","parseObject","function",false,145,158,14,"bytes: Uint8Array; label: string","Record<string, unknown>",2,2,1,0
+"src/backup/contracts.ts","assertVersion","function",false,160,166,7,"value: Record<string, unknown>","void",1,1,0,0
+"src/backup/contracts.ts","requiredObject","function",false,168,175,8,"value: Record<string, unknown>; key: string","Record<string, unknown>",1,1,0,0
+"src/backup/contracts.ts","requiredString","function",false,177,183,7,"value: Record<string, unknown>; key: string","string",2,1,0,0
+"src/backup/contracts.ts","optionalString","function",false,185,192,8,"value: Record<string, unknown>; key: string","string | null",1,0,0,0
+"src/backup/contracts.ts","requiredUuid","function",false,194,204,11,"value: Record<string, unknown>; key: string","string",1,1,0,0
+"src/backup/contracts.ts","requiredGeneration","function",false,206,215,10,"value: Record<string, unknown>; key: string","string",1,1,0,0
+"src/backup/contracts.ts","optionalGeneration","function",false,217,223,7,"value: Record<string, unknown>; key: string","string | null",1,0,0,0
+"src/backup/contracts.ts","requiredDate","function",false,225,230,6,"value: Record<string, unknown>; key: string","string",1,1,0,0
+"src/backup/contracts.ts","requiredDigest","function",false,232,236,5,"value: Record<string, unknown>; key: string","string",1,1,0,0
+"src/backup/contracts.ts","requiredNonnegativeInteger","function",false,238,247,10,"value: Record<string, unknown>; key: string","number",3,1,0,0
+"src/backup/contracts.ts","optionalNonnegativeInteger","function",false,249,255,7,"value: Record<string, unknown>; key: string","number | null",1,0,0,0
+"src/backup/contracts.ts","requiredSha256Algorithm","function",false,257,262,6,"value: Record<string, unknown>","'sha256'",1,1,0,0
+"src/backup/contracts.ts","isObject","function",false,264,266,3,"value: unknown","value is Record<string, unknown>",2,0,0,0
+"src/backup/database-metadata.ts","inspectSnapshotMetadata","function",true,20,55,36,"bytes: Uint8Array","BackupDatabaseMetadata",2,0,0,0
+"src/backup/database-metadata.ts","assertSnapshotMetadata","function",true,57,77,21,"expected: BackupDatabaseMetadata; actual: BackupDatabaseMetadata","void",4,3,0,0
+"src/backup/database-metadata.ts","withSnapshotFile","function",false,79,92,14,"bytes: Uint8Array; operation: (path: string) => T","T",0,0,0,0
+"src/backup/database-metadata.ts","assertRequiredTables","function",false,94,101,8,"tables: readonly string[]","void",1,1,0,0
+"src/backup/database-metadata.ts","readApplicationVersion","function",false,103,115,13,"","string",4,1,0,0
+"src/backup/object-store.ts","get","method",false,37,53,17,"key: string","Uint8Array | null",2,1,0,0
+"src/backup/object-store.ts","put","method",false,55,72,18,"key: string; content: Uint8Array; contentType: string","void",1,1,0,0
+"src/backup/object-store.ts","#run","method",false,74,88,15,"args: string[]","CommandResult",3,1,0,0
+"src/backup/object-store.ts","putImmutable","function",true,91,110,20,"store: BackupObjectStore; key: string; content: Uint8Array; contentType: string","void",4,2,0,0
+"src/backup/object-store.ts","withPrivateTempDirectory","function",false,118,126,9,"operation: (path: string) => T","T",0,0,0,0
+"src/backup/object-store.ts","isMissingObject","function",false,128,130,3,"stderr: string","boolean",0,0,0,0
+"src/backup/object-store.ts","commandFailure","function",false,132,139,8,"operation: string; key: string; result: CommandResult","Error",2,0,0,0
+"src/backup/service.ts","createBackup","function",true,38,64,27,"workspaceRoot: string; store: BackupObjectStore; now: Date = new Date()","BackupResult",0,0,0,0
+"src/backup/service.ts","listBackups","function",true,66,90,25,"workspaceRoot: string; store: BackupObjectStore; limit = 100","BackupManifest[]",6,2,0,1
+"src/backup/service.ts","restoreBackup","function",true,92,124,33,"workspaceRoot: string; store: BackupObjectStore; options: { generation?: string; outputPath?: string } = {}","RestoreResult",3,1,0,0
+"src/backup/service.ts","createManifest","function",false,126,146,21,"config: BackupConfig; snapshot: DatabaseSnapshot; generation: string; head: BackupHead | null; now: Date","BackupManifest",1,0,0,0
+"src/backup/service.ts","readHead","function",false,148,168,21,"store: BackupObjectStore; config: BackupConfig","BackupHead | null",4,3,0,0
+"src/backup/service.ts","requireHead","function",false,170,177,8,"store: BackupObjectStore; config: BackupConfig","BackupHead",1,1,0,0
+"src/backup/service.ts","readManifest","function",false,179,203,25,"store: BackupObjectStore; config: BackupConfig; generation: string","BackupManifest",5,4,0,0
+"src/backup/service.ts","assertHeadUnchanged","function",false,205,216,12,"store: BackupObjectStore; config: BackupConfig; initial: BackupHead | null","void",1,1,0,0
+"src/backup/service.ts","publishHead","function",false,218,240,23,"store: BackupObjectStore; config: BackupConfig; manifest: BackupManifest; manifestKey: string; now: Date","void",2,1,0,0
+"src/backup/service.ts","validateDatabaseBytes","function",false,242,254,13,"manifest: BackupManifest; bytes: Uint8Array","void",2,1,0,0
+"src/backup/service.ts","createGeneration","function",false,256,259,4,"now: Date","string",0,0,0,0
+"src/backup/service.ts","validateGenerationInput","function",false,261,265,5,"generation: string","void",1,1,0,0
+"src/backup/service.ts","resultFromManifest","function",false,267,274,8,"manifest: BackupManifest","BackupResult",0,0,0,0
+"src/cli.ts","main","function",true,24,43,20,"options: MainOptions = {}","Promise<void>",3,1,1,0
+"src/cli.ts","createProgram","function",false,45,73,29,"","Command",0,0,0,0
+"src/cli.ts","addInitCommand","function",false,75,105,31,"program: Command","void",1,0,0,0
+"src/cli.ts","registerWorkspaceHooks","function",false,107,148,42,"program: Command","void",5,0,0,1
+"src/cli.ts","parseProgram","function",false,150,157,8,"program: Command","Promise<void>",1,0,0,0
+"src/cli.ts","isMemoryCommand","function",false,159,168,10,"command: Command","boolean",2,0,0,1
+"src/cli/commands/backup.ts","createBackupCommand","function",true,8,20,13,"","Command",0,0,0,0
+"src/cli/commands/backup.ts","addConfigureCommand","function",false,22,43,22,"command: Command","void",0,0,0,0
+"src/cli/commands/backup.ts","addCreateCommand","function",false,45,65,21,"command: Command","void",0,0,0,0
+"src/cli/commands/backup.ts","addListCommand","function",false,67,94,28,"command: Command","void",1,0,0,1
+"src/cli/commands/backup.ts","addRestoreCommand","function",false,96,124,29,"command: Command","void",0,0,0,0
+"src/cli/commands/backup.ts","createStore","function",false,126,132,7,"workspaceRoot: string; executable?: string","WranglerR2ObjectStore",0,0,0,0
+"src/cli/commands/backup.ts","parseLimit","function",false,134,140,7,"value: string","number",3,1,0,0
+"src/cli/commands/memory/recall-basic-handlers.ts","handleRecallStatus","function",true,11,25,15,"command: Command","Promise<void>",0,0,0,0
+"src/cli/commands/memory/recall-basic-handlers.ts","handleRecallImport","function",true,27,56,30,"options: RecallImportOptions; command: Command","Promise<void>",3,0,0,0
+"src/cli/commands/memory/recall-basic-handlers.ts","parseDate","function",false,58,63,6,"value: string","Date",1,1,0,0
+"src/cli/io.ts","getGlobalOptions","function",true,32,60,29,"command: Command","GlobalCliOptions",7,0,0,1
+"src/cli/io.ts","readInput","function",true,62,87,26,"value?: string","Promise<string | undefined>",6,3,0,0
+"src/cli/io.ts","readJsonInput","function",true,89,100,12,"value?: string","Promise<T | undefined>",2,1,1,0
+"src/cli/io.ts","parseIdList","function",true,102,109,8,"value?: string | string[]","string[] | undefined",3,0,0,0
+"src/cli/io.ts","runCommand","function",true,111,147,37,"command: Command; executor: () => Promise<T>; render: (data: T) => void","Promise<void>",3,0,1,0
+"src/cli/io.ts","runMemoryCommand","function",true,149,176,28,"command: Command; effect: Effect.Effect<T, E, MemoryRuntime>; render: (data: T) => void","Promise<void>",1,1,0,0
+"src/cli/io.ts","formatError","function",false,178,200,23,"error: unknown","JsonError['error']",8,0,0,0
+"src/cli/io.ts","readStdin","function",false,202,212,11,"","Promise<string>",0,0,0,0
+"src/db/client.ts","createClient","function",true,21,27,7,"dbPath: string","DbHandle",0,0,0,0
+"src/db/client.ts","getDbClientByPath","function",true,29,43,15,"dbPath: string; options: { migrate?: boolean } = {}","DbHandle",3,0,0,0
+"src/db/client.ts","getDbClient","function",true,45,52,8,"directory: string; options: { migrate?: boolean } = {}","Promise<DbHandle>",0,0,0,0
+"src/db/migrate.ts","migrationsFolder","function",false,7,9,3,"","string",0,0,0,0
+"src/db/migrate.ts","runMigrations","function",true,11,13,3,"sqlite: Database","void",0,0,0,0
+"src/db/migrate.ts","migrateDbSync","function",true,15,23,9,"dbPath: string","void",0,0,0,0
+"src/db/migrate.ts","migrateDb","function",true,25,27,3,"dbPath: string","Promise<void>",0,0,0,0
+"src/db/migrate.ts","applyMigrations","function",false,29,76,48,"sqlite: Database","void",5,1,1,2
+"src/db/migrate.ts","isMigrationStateCurrent","function",false,78,91,14,"sqlite: Database; latestMigrationMillis: number","boolean",2,0,0,0
+"src/db/migrate.ts","hasMigrationsTable","function",false,93,100,8,"sqlite: Database","boolean",0,0,0,0
+"src/db/migrate.ts","ensureMigrationsTable","function",false,102,110,9,"sqlite: Database","void",0,0,0,0
+"src/db/migrate.ts","readLastAppliedMigrationMillis","function",false,112,119,8,"sqlite: Database","number | null",1,0,0,0
+"src/db/migrate.ts","readArg","function",false,121,125,5,"name: string; args: string[]","string | null",2,0,0,0
+"src/db/migrate.ts","main","function",false,127,132,6,"","Promise<void>",1,0,0,0
+"src/db/paths.ts","continuumDir","function",true,15,17,3,"directory: string","string",0,0,0,0
+"src/db/paths.ts","legacyDbFilePath","function",true,19,21,3,"directory: string","string",0,0,0,0
+"src/db/paths.ts","canonicalDataHome","function",true,23,27,5,"options: CanonicalPathOptions = {}","string",3,0,0,0
+"src/db/paths.ts","normalizedWorkspacePath","function",true,29,36,8,"directory: string","string",0,0,1,0
+"src/db/paths.ts","projectStorageId","function",true,38,42,5,"directory: string","string",0,0,0,0
+"src/db/paths.ts","canonicalProjectDir","function",true,44,54,11,"directory: string; options: CanonicalPathOptions = {}","string",0,0,0,0
+"src/db/paths.ts","canonicalDbFilePath","function",true,56,61,6,"directory: string; options: CanonicalPathOptions = {}","string",0,0,0,0
+"src/db/paths.ts","migrationReceiptPath","function",true,63,68,6,"directory: string; options: CanonicalPathOptions = {}","string",0,0,0,0
+"src/db/paths.ts","dbFilePath","function",true,70,72,3,"directory: string","string",0,0,0,0
+"src/db/storage-errors.ts","isCanonicalStorageError","function",true,15,19,5,"error: unknown","error is CanonicalStorageError",0,0,0,0
+"src/db/storage-errors.ts","migrationConflict","function",true,21,30,10,"sourcePath: string; destinationPath: string","CanonicalStorageError",0,0,0,0
+"src/db/storage-errors.ts","sourceChangedDuringMigration","function",true,32,40,9,"sourcePath: string","CanonicalStorageError",0,0,0,0
+"src/db/storage-errors.ts","migrationFailure","function",true,42,49,8,"message: string; cause?: unknown","CanonicalStorageError",0,0,0,0
+"src/db/storage-receipt.ts","createMigrationReceipt","function",true,30,48,19,"workspaceRoot: string; sourcePath: string; destinationPath: string; sourceFingerprint: StorageFingerprint; destinationFingerprint: StorageFingerprint","MigrationReceipt",0,0,0,0
+"src/db/storage-receipt.ts","publishMigrationReceipt","function",true,50,67,18,"path: string; receipt: MigrationReceipt","void",2,1,1,0
+"src/db/storage-receipt.ts","readMigrationReceipt","function",true,69,75,7,"path: string","MigrationReceipt",0,1,1,0
+"src/db/storage-receipt.ts","verifyMigrationReceipt","function",true,77,102,26,"receipt: MigrationReceipt; workspaceRoot: string; sourcePath: string; destinationPath: string; sourceFingerprint: StorageFingerprint","void",6,2,0,0
+"src/db/storage-receipt.ts","warnRemovableLegacySource","function",true,104,116,13,"sourcePath: string; source: StorageFingerprint; warn = true","void",2,0,0,0
+"src/db/storage-receipt.ts","assertEquivalentReceipt","function",false,118,133,16,"actual: MigrationReceipt; expected: MigrationReceipt","void",5,1,0,0
+"src/db/storage-snapshot.ts","readDatabaseSnapshot","function",true,32,45,14,"path: string","DatabaseSnapshot",1,2,1,0
+"src/db/storage-snapshot.ts","publishDatabaseSnapshot","function",true,47,73,27,"path: string; snapshot: DatabaseSnapshot","void",3,3,1,0
+"src/db/storage-snapshot.ts","writeDurably","function",true,75,83,9,"path: string; content: Uint8Array | string","void",0,0,0,0
+"src/db/storage-snapshot.ts","publishWithoutOverwrite","function",false,85,99,15,"staging: string; destination: string; validation: DatabaseSnapshot","void",2,2,1,0
+"src/db/storage-snapshot.ts","assertIntegrity","function",false,101,108,8,"sqlite: Database; path: string","void",2,1,0,0
+"src/db/storage-snapshot.ts","fingerprintStorage","function",false,110,116,7,"bytes: Uint8Array","StorageFingerprint",0,0,0,0
+"src/db/storage.ts","prepareCanonicalDatabase","function",true,43,70,28,"workspaceRoot: string; options: { initialize?: boolean; warn?: boolean } = {}","CanonicalDatabaseState",4,1,0,0
+"src/db/storage.ts","prepareWithoutLegacy","function",false,72,82,11,"paths: StoragePaths; initialize: boolean; destinationExisted: boolean","CanonicalDatabaseState",3,0,0,0
+"src/db/storage.ts","verifyRecordedMigration","function",false,84,105,22,"workspaceRoot: string; paths: StoragePaths; source: DatabaseSnapshot; warn: boolean | undefined","CanonicalDatabaseState",1,1,0,0
+"src/db/storage.ts","adoptEquivalentDestination","function",false,107,126,20,"workspaceRoot: string; paths: StoragePaths; source: DatabaseSnapshot; warn: boolean | undefined","CanonicalDatabaseState",1,1,0,0
+"src/db/storage.ts","migrateLegacyDatabase","function",false,128,146,19,"workspaceRoot: string; paths: StoragePaths; source: DatabaseSnapshot; warn: boolean | undefined","CanonicalDatabaseState",0,0,0,0
+"src/db/storage.ts","assertSourceUnchanged","function",false,148,156,9,"sourcePath: string; expected: DatabaseSnapshot","void",1,1,0,0
+"src/db/storage.ts","recordMigration","function",false,158,172,15,"workspaceRoot: string; paths: StoragePaths; source: DatabaseSnapshot['fingerprint']; destination: DatabaseSnapshot['fingerprint']","void",0,0,0,0
+"src/db/storage.ts","resolveStoragePaths","function",false,174,180,7,"workspaceRoot: string","StoragePaths",0,0,0,0
+"src/db/storage.ts","state","function",false,182,196,15,"paths: StoragePaths; created: boolean; migrated: boolean; legacySource: 'absent' | 'proven-migrated'","CanonicalDatabaseState",0,0,0,0
+"src/mcp/init-tool.ts","initMcpWorkspace","function",true,6,23,18,"input: { workspace: string }","Promise<{
+  workspace: string
+  dbPath: string
+  created: boolean
+  initialized: boolean
+}>",1,0,0,0
+"src/mcp/memory-tools.ts","consolidateMcpMemory","function",true,12,47,36,"input: {
+  workspace: string
+  dryRun?: boolean
+}","Promise<Record<string, unknown>>",2,0,0,0
+"src/mcp/memory-tools.ts","getMcpRecallStatus","function",true,49,63,15,"input: { workspace: string }","{
+  workspace: string
+  sources: number
+  rawMessages: number
+  derivedSummaries: number
+}",0,0,0,0
+"src/mcp/memory-tools.ts","importMcpRecall","function",true,65,95,31,"input: {
+  workspace: string
+  sourceDb?: string
+  projectId?: string
+  sessionId?: string
+  after?: string
+  limit?: number
+  dryRun?: boolean
+}","Promise<Record<string, unknown>>",3,1,0,0
+"src/mcp/memory-tools.ts","parseDate","function",false,97,101,5,"value: string","Date",1,1,0,0
+"src/mcp/tools.ts","getSummary","function",true,25,48,24,"input: {
+  workspace: string
+  taskLimit?: number
+  memoryLimit?: number
+}","Promise<{ workspace: string; output: string }>",2,0,0,0
+"src/mcp/tools.ts","appendMcpMemory","function",true,50,79,30,"input: {
+  workspace: string
+  kind: 'user' | 'agent' | 'tool'
+  content: string
+  tags?: string[]
+}","Promise<{
+  workspace: string
+  id: string
+  sequence: number
+  projectionStale: boolean
+}>",1,0,0,0
+"src/mcp/tools.ts","searchMcpMemory","function",true,81,100,20,"input: {
+  workspace: string
+  query: string
+  limit?: number
+}","Promise<{
+  workspace: string
+  matches: Array<MemoryEvidence & { score: number }>
+}>",1,0,0,0
+"src/mcp/tools.ts","resolveMcpWorkspace","function",true,102,121,20,"workspace: string","McpWorkspace",4,3,0,0
+"src/mcp/tools.ts","resolveInitWorkspace","function",true,123,131,9,"workspace: string","string",3,2,0,0
+"src/memory/application/append.ts","appendMemory","function",true,42,76,35,"options: AppendMemoryOptions","Effect.Effect<AppendMemoryResult, unknown>",4,0,0,0
+"src/memory/application/consolidate.ts","consolidateMemory","function",true,59,134,76,"options: ConsolidateMemoryOptions","Effect.Effect<ConsolidateMemoryResult, unknown>",18,0,0,0
+"src/memory/application/consolidate.ts","defaultSummarizer","function",false,136,143,8,"config: MemoryConfig","",1,0,0,0
+"src/memory/application/consolidate.ts","renderSummaryEntry","function",false,145,150,6,"entry: JournalEntry","string",3,0,0,0
+"src/memory/application/consolidate.ts","regenerateProjections","function",false,152,193,42,"options: {
+  journal: JournalRepositoryService
+  consolidations: ConsolidationRepositoryService
+  memoryDir: string
+  config: MemoryConfig
+  publish: typeof publishMemoryProjections
+}","Effect.Effect<void, unknown>",0,0,0,0
+"src/memory/application/legacy-migrate-persist.ts","persistLegacyArtifacts","function",true,16,49,34,"handle: DbHandle; artifacts: LegacyArtifact[]","boolean",2,0,0,1
+"src/memory/application/legacy-migrate-persist.ts","importArtifact","function",false,51,57,7,"sqlite: Database; artifact: LegacyArtifact","string",2,0,0,0
+"src/memory/application/legacy-migrate-persist.ts","importJournalArtifact","function",false,59,114,56,"sqlite: Database; artifact: LegacyArtifact","string",2,0,0,0
+"src/memory/application/legacy-migrate-persist.ts","importRecallSummary","function",false,116,159,44,"sqlite: Database; artifact: LegacyArtifact","string",1,1,0,0
+"src/memory/application/legacy-migrate-persist.ts","importTranscript","function",false,161,192,32,"sqlite: Database; artifact: LegacyArtifact","string",1,1,0,0
+"src/memory/application/legacy-migrate-persist.ts","upsertRecallSource","function",false,194,239,46,"sqlite: Database; source: {
+    sessionId: string
+    projectId: string | null
+    title: string | null
+    createdAt: string | null
+    updatedAt: string | null
+    checksum: string
+  }","string",1,0,0,0
+"src/memory/application/legacy-migrate-persist.ts","parseNormalizedMessages","function",false,241,257,17,"content: string","Array<{
+  role: 'user' | 'assistant'
+  content: string
+  createdAt: string | null
+}>",2,0,0,0
+"src/memory/application/legacy-migrate-persist.ts","cleanSummaryBody","function",false,259,264,6,"body: string","string",0,0,0,0
+"src/memory/application/legacy-migrate-persist.ts","summaryFrom","function",false,266,281,16,"content: string","MemorySummary",0,0,0,0
+"src/memory/application/legacy-migrate-persist.ts","artifactDate","function",false,283,286,4,"artifact: LegacyArtifact","string | null",1,0,0,0
+"src/memory/application/legacy-migrate-persist.ts","stableId","function",false,288,290,3,"prefix: string; value: string","string",0,0,0,0
+"src/memory/application/legacy-migrate-persist.ts","readString","function",false,292,294,3,"value: unknown","string | null",2,0,0,0
+"src/memory/application/legacy-migrate-persist.ts","readTimestamp","function",false,296,298,3,"value: string | undefined","string | null",2,0,0,0
+"src/memory/application/query-recall.ts","appendRecallEvidence","function",true,33,64,32,"sqlite: Database; evidence: MemoryEvidence[]; includeHistory: boolean","void",5,0,0,1
+"src/memory/application/query-recall.ts","flattenRecallSummary","function",false,66,99,34,"value: string","string",1,1,1,0
+"src/memory/application/query.ts","listMemoryEvidence","function",true,42,128,87,"dbPath: string; options: MemoryQueryOptions = {}; handle?: DbHandle","Effect.Effect<
+  MemoryEvidence[],
+  DatabaseQueryError | DatabaseBusyError | DecodeError
+>",16,0,0,2
+"src/memory/application/query.ts","searchMemoryEvidence","function",true,130,162,33,"dbPath: string; query: string; options: MemoryQueryOptions = {}; handle?: DbHandle","Effect.Effect<
+  Array<MemoryEvidence & { score: number }>,
+  DatabaseQueryError | DatabaseBusyError | DecodeError
+>",2,0,0,0
+"src/memory/application/query.ts","listMemoryEvidenceIncludingRecallHistory","function",false,164,205,42,"dbPath: string; options: MemoryQueryOptions; handle?: DbHandle","Effect.Effect<
+  MemoryEvidence[],
+  DatabaseQueryError | DatabaseBusyError | DecodeError
+>",7,0,0,0
+"src/memory/application/query.ts","decodeJson","function",false,207,217,11,"schema: S; value: string; name: string","S['Type']",0,1,1,0
+"src/memory/application/query.ts","filterEvidence","function",false,219,232,14,"evidence: MemoryEvidence[]; options: MemoryQueryOptions","MemoryEvidence[]",4,0,0,0
+"src/memory/application/query.ts","formatSummary","function",false,234,259,26,"summary: {
+  readonly narrative: string
+  readonly decisions: readonly string[]
+  readonly discoveries: readonly string[]
+  readonly patterns: readonly string[]
+  readonly whatWorked: readonly string[]
+  readonly whatFailed: readonly string[]
+  readonly blockers: readonly string[]
+  readonly openQuestions: readonly string[]
+  readonly nextSteps: readonly string[]
+  readonly tasks: readonly string[]
+  readonly files: readonly string[]
+}","string",0,0,0,0
+"src/memory/application/query.ts","appendSummaryItems","function",false,261,268,8,"lines: string[]; title: string; items: readonly string[]","void",1,0,0,0
+"src/memory/application/query.ts","countOccurrences","function",false,270,272,3,"content: string; term: string","number",0,0,0,0
+"src/memory/application/query.ts","compareDates","function",false,274,276,3,"left: string | null; right: string | null","number",3,0,0,0
+"src/memory/application/recall-import.ts","importCanonicalOpencodeRecall","function",true,55,117,63,"options: CanonicalRecallImportOptions = {}","Effect.Effect<CanonicalRecallImportResult, unknown>",11,0,0,1
+"src/memory/application/recall-import.ts","applySessionFilters","function",false,119,126,8,"sessions: OpencodeSessionBundle[]; afterDate?: Date; limit?: number","OpencodeSessionBundle[]",1,0,0,0
+"src/memory/application/recall-import.ts","isAfter","function",false,128,133,6,"session: OpencodeSessionBundle; afterDate?: Date","boolean",2,0,0,0
+"src/memory/application/recall-import.ts","isRecallMessage","function",false,135,139,5,"message: NormalizedOpencodeMessage","message is NormalizedOpencodeMessage & { role: 'user' | 'assistant' }",1,0,0,0
+"src/memory/application/recall-import.ts","importSession","function",false,141,222,82,"session: OpencodeSessionBundle; projectId: string; repository: RecallRepositoryService; config: ResolvedSummaryConfig | null; options: CanonicalRecallImportOptions; result: CanonicalRecallImportResult","Effect.Effect<void, unknown>",11,0,0,0
+"src/memory/application/recall-import.ts","fingerprintSession","function",false,224,245,22,"session: OpencodeSessionBundle; projectId: string; messages: readonly NormalizedOpencodeMessage[]","string",2,0,0,0
+"src/memory/application/recall-import.ts","toIso","function",false,247,249,3,"value?: number","string | null",1,0,0,0
+"src/memory/collectors/opencode-summary-config.ts","resolveSummaryConfig","function",true,4,19,16,"memory: MemoryConfig","ResolvedSummaryConfig | null",1,0,0,0
+"src/memory/config.ts","readConfigFile","function",false,94,102,9,"path: string","Record<string, unknown> | null",2,0,1,0
+"src/memory/config.ts","normalizeConfig","function",false,104,128,25,"raw: Record<string, unknown> | null; environment: SummaryEnvironment","MemoryConfig",0,0,0,0
+"src/memory/config.ts","resolveConsolidationConfig","function",false,130,176,47,"raw: unknown; environment: SummaryEnvironment","ConsolidationLlmConfig | undefined",13,0,0,0
+"src/memory/config.ts","optionRedacted","function",false,178,184,7,"value: Option.Option<Redacted.Redacted>","string | undefined",2,0,0,0
+"src/memory/config.ts","optionString","function",false,186,188,3,"value: Option.Option<string>","string | undefined",1,0,0,0
+"src/memory/config.ts","readNonEmptyString","function",false,190,194,5,"value: unknown","string | null",2,0,0,0
+"src/memory/config.ts","readPositiveInt","function",false,196,200,5,"value: unknown; fallback: number","number",3,0,0,0
+"src/memory/config.ts","readPositiveNumber","function",false,202,206,5,"value: unknown; fallback: number","number",3,0,0,0
+"src/memory/config.ts","normalizeSections","function",false,208,219,12,"value: unknown","string[]",5,0,0,1
+"src/memory/config.ts","isRecord","function",false,221,223,3,"value: unknown","value is Record<string, unknown>",2,0,0,0
+"src/memory/domain/errors.ts","databaseBusyError","function",true,75,84,10,"operation: string; cause: unknown","DatabaseBusyError | null",5,0,0,0
+"src/memory/repository/consolidation-repository.ts","makeConsolidationRepository","function",true,44,57,14,"handle: DbHandle","ConsolidationRepositoryService",0,0,0,0
+"src/memory/repository/consolidation-repository.ts","complete","function",false,59,121,63,"handle: DbHandle; input: {
+    expectedBoundary: number
+    firstSequence: number
+    lastSequence: number
+    summary: MemorySummary
+    model?: string
+  }","Effect.Effect<CompletedConsolidation, ConsolidationError>",7,2,0,0
+"src/memory/repository/consolidation-repository.ts","selectLatestBoundary","function",false,123,131,9,"handle: DbHandle","number",0,0,0,0
+"src/memory/repository/consolidation-repository.ts","listCompleted","function",false,133,154,22,"handle: DbHandle","Effect.Effect<readonly CompletedConsolidation[], ConsolidationError>",2,0,0,0
+"src/memory/repository/consolidation-repository.ts","selectRange","function",false,167,180,14,"handle: DbHandle; first: number; last: number","StoredRow | null",0,0,0,0
+"src/memory/repository/consolidation-repository.ts","decodeRow","function",false,182,214,33,"row: StoredRow","CompletedConsolidation",0,1,1,0
+"src/memory/repository/journal-repository.ts","makeJournalRepository","function",true,43,63,21,"handle: DbHandle","JournalRepositoryService",0,0,0,0
+"src/memory/repository/journal-repository.ts","maxSequence","function",false,65,79,15,"handle: DbHandle","Effect.Effect<number | null, JournalError>",1,0,0,0
+"src/memory/repository/journal-repository.ts","appendEntry","function",false,81,95,15,"handle: DbHandle; input: unknown","Effect.Effect<JournalEntry, JournalError>",1,0,0,0
+"src/memory/repository/journal-repository.ts","insertOrRead","function",false,97,134,38,"handle: DbHandle; input: JournalAppendInput","StoredJournalRow",10,0,0,0
+"src/memory/repository/journal-repository.ts","selectByIdempotency","function",false,136,145,10,"handle: DbHandle; key: string","StoredJournalRow | null",0,0,0,0
+"src/memory/repository/journal-repository.ts","listPending","function",false,147,174,28,"handle: DbHandle; after: number; through?: number","Effect.Effect<readonly JournalEntry[], JournalError>",2,0,0,0
+"src/memory/repository/journal-repository.ts","latestBoundary","function",false,176,193,18,"handle: DbHandle","Effect.Effect<number | null, JournalError>",1,0,0,0
+"src/memory/repository/journal-repository.ts","decodeAppend","function",false,195,203,9,"input: unknown","Effect.Effect<JournalAppendInput, DecodeError>",0,0,0,0
+"src/memory/repository/journal-repository.ts","decodeRow","function",false,205,228,24,"row: StoredJournalRow","Effect.Effect<JournalEntry, DecodeError>",0,0,0,0
+"src/memory/repository/journal-repository.ts","parseMetadata","function",false,230,245,16,"value: string","Effect.Effect<JournalMetadata, DecodeError>",0,0,0,0
+"src/memory/repository/recall-repository.ts","makeRecallRepository","function",true,47,63,17,"handle: DbHandle","RecallRepositoryService",0,0,0,0
+"src/memory/repository/recall-repository.ts","findSource","function",false,65,86,22,"handle: DbHandle; harness: string; sessionId: string","Effect.Effect<RecallSource | null, RecallSourceError | DatabaseBusyError>",2,0,0,0
+"src/memory/repository/recall-repository.ts","replaceRecall","function",false,88,165,78,"handle: DbHandle; value: RecallReplacement","Effect.Effect<void, RecallIngestionError | DatabaseBusyError>",2,0,0,1
+"src/memory/repository/recall-repository.ts","searchRows","function",false,167,195,29,"handle: DbHandle","Effect.Effect<
+  readonly RecallSearchRow[],
+  RecallSourceError | DatabaseBusyError
+>",1,0,0,0
+"src/memory/repository/recall-repository.ts","mapSource","function",false,210,223,14,"row: StoredSource","RecallSource",0,0,0,0
+"src/memory/repository/recall-repository.ts","mapSearchRow","function",false,225,237,13,"row: Record<string, unknown>","RecallSearchRow",0,0,0,0
+"src/memory/runtime/memory-runtime.ts","memoryRuntimeLayer","function",true,19,28,10,"config: MemoryRuntimeConfig","Layer.Layer<MemoryRuntime, DatabaseOpenError | DatabaseMigrationError>",0,0,0,0
+"src/sdk/graph.ts","list_all_tasks","function",false,9,21,13,"directory: string","Promise<SdkTask[]>",0,0,0,1
+"src/sdk/graph.ts","collect_descendants","function",false,23,42,20,"tasks: SdkTask[]; parentId: string","string[]",5,0,0,2
+"src/sdk/graph.ts","collect_ancestors","function",false,44,53,10,"tasks: SdkTask[]; taskId: string","string[]",0,0,0,1
+"src/sdk/graph.ts","query_task_graph","function",true,55,73,19,"directory: string; query: SdkTaskGraphQuery; taskId: string","Promise<SdkTaskGraphResult>",2,0,0,0
+"src/sdk/index.ts","get_directory","function",false,47,49,3,"","string",0,0,0,0
+"src/task/collection-patch.ts","normalize_id","function",false,4,10,7,"id: number | string; label: string","number",2,1,0,0
+"src/task/collection-patch.ts","patch_collection","function",true,12,83,72,"items: TItem[]; patch: CollectionPatch<TAdd, TUpdate> | undefined; options: {
+    label: string
+    apply_update: (current: TItem, update: TUpdate) => TItem
+    apply_add: (item: TAdd, index: number, nextId: number) => TItem
+  }","{ items: TItem[]; deleted_ids: Set<number> }",10,3,0,3
+"src/task/notes.repository.ts","add_discovery","function",true,13,40,28,"db: DbClient; input: AddDiscoveryInput","Promise<Task>",2,0,0,0
+"src/task/notes.repository.ts","add_decision","function",true,42,70,29,"db: DbClient; input: AddDecisionInput","Promise<Task>",3,0,0,0
+"src/task/steps.repository.ts","add_steps","function",true,15,54,40,"db: DbClient; input: AddStepsInput","Promise<Task>",8,0,0,0
+"src/task/steps.repository.ts","complete_step","function",true,56,115,60,"db: DbClient; input: CompleteStepInput","Promise<CompleteStepResult>",9,2,0,1
+"src/task/steps.repository.ts","update_step","function",true,117,164,48,"db: DbClient; input: UpdateStepInput","Promise<Task>",11,1,0,0
+"src/task/steps.repository.ts","requireStep","function",false,166,172,7,"steps: Step[]; index: number; id: number","Step",1,1,0,0
+"src/task/tasks.repository.list.ts","encode_cursor","function",false,21,30,10,"sortValue: string | number; id: string; secondarySortValue?: string | number","string",0,0,0,0
+"src/task/tasks.repository.list.ts","decode_cursor","function",false,32,55,24,"cursor: string | undefined","{
+  sortValue: string | number
+  id: string
+  secondarySortValue?: string | number
+} | null",5,0,1,0
+"src/task/tasks.repository.list.ts","build_list_where","function",false,57,86,30,"filters: ListTaskFilters","WhereClause[]",6,0,0,0
+"src/task/tasks.repository.list.ts","resolve_list_sort","function",false,88,113,26,"filters: ListTaskFilters","{
+  sortKey: TaskSortKey
+  sortColumn:
+    | typeof tasks.priority
+    | typeof tasks.updated_at
+    | typeof tasks.created_at
+  sortOrder: 'asc' | 'desc'
+  limit: number
+  cursor: ListCursor | null
+}",6,0,0,0
+"src/task/tasks.repository.list.ts","append_cursor_where","function",false,115,143,29,"where: WhereClause[]; cursor: ListCursor; sortOrder: 'asc' | 'desc'; sortKey: TaskSortKey; sortColumn:
+    | typeof tasks.priority
+    | typeof tasks.updated_at
+    | typeof tasks.created_at","void",3,0,0,0
+"src/task/tasks.repository.list.ts","build_next_cursor","function",false,145,166,22,"sortKey: TaskSortKey; last: {
+    id: string
+    priority: number
+    created_at: string | number
+    updated_at: string | number
+  }","string",3,0,0,0
+"src/task/tasks.repository.list.ts","list_tasks","function",true,168,209,42,"db: DbClient; filters: ListTaskFilters = {}","Promise<ListTasksResult>",7,0,0,0
+"src/task/tasks.repository.list.ts","list_tasks_by_statuses","function",true,211,239,29,"db: DbClient; filters: { statuses: TaskStatus[]; parent_id?: string | null }","Promise<Task[]>",3,0,0,0
+"src/task/tasks.repository.ts","task_exists","function",false,24,31,8,"db: DbClient; task_id: string","Promise<boolean>",1,0,0,0
+"src/task/tasks.repository.ts","require_task","function",true,33,43,11,"db: DbClient; task_id: string","Promise<Task>",1,1,0,0
+"src/task/tasks.repository.ts","validate_blockers","function",false,45,59,15,"db: DbClient; blockers: string[]","Promise<string[]>",1,0,0,0
+"src/task/tasks.repository.ts","validate_parent_exists","function",false,61,72,12,"db: DbClient; parent_id: string | null | undefined","Promise<void>",2,1,0,0
+"src/task/tasks.repository.ts","has_open_blockers","function",true,74,87,14,"db: DbClient; task: Task","Promise<string[]>",1,0,0,0
+"src/task/tasks.repository.ts","create_task","function",true,89,142,54,"db: DbClient; input: CreateTaskInput","Promise<Task>",9,2,0,0
+"src/task/tasks.repository.ts","update_task","function",true,144,211,68,"db: DbClient; task_id: string; input: UpdateTaskInput","Promise<Task>",11,3,0,0
+"src/task/tasks.repository.ts","ensure_task","function",false,152,157,6,"","Promise<Task>",1,0,0,0
+"src/task/tasks.repository.ts","get_task","function",true,213,219,7,"db: DbClient; task_id: string","Promise<Task | null>",1,0,0,0
+"src/task/tasks.repository.ts","delete_task","function",true,221,235,15,"db: DbClient; task_id: string","Promise<void>",1,1,0,0
+"src/task/tasks.repository.ts","complete_task","function",true,237,265,29,"db: DbClient; input: CompleteTaskInput","Promise<Task>",1,1,0,0
+"src/task/util.ts","dir_exists","function",true,10,17,8,"directory: string","Promise<boolean>",0,0,1,0
+"src/task/util.ts","file_exists","function",false,19,26,8,"path: string","Promise<boolean>",0,0,1,0
+"src/task/util.ts","init_status","function",true,28,40,13,"{
+  directory,
+}: {
+  directory: string
+}","Promise<InitStatus>",0,0,0,0
+"src/task/util.ts","init_project","function",true,42,51,10,"{
+  directory,
+}: {
+  directory: string
+}","Promise<void>",1,0,0,0
+"src/workspace/resolve.ts","resolveWorkspaceContext","function",true,26,49,24,"options: WorkspaceResolveOptions = {}","WorkspaceContext",3,0,0,0
+"src/workspace/resolve.ts","resolveWorkspaceRoot","function",true,51,55,5,"options: WorkspaceResolveOptions = {}","string",0,0,0,0
+"src/workspace/resolve.ts","resolveFrom","function",true,57,62,6,"baseDir: string; value: string","string",1,0,0,0
+"src/workspace/resolve.ts","findWorkspaceRoot","function",false,64,77,14,"startDir: string","string",2,0,0,1
+"src/workspace/resolve.ts","isWorkspaceRoot","function",false,79,83,5,"directory: string","boolean",1,0,0,0
+"src/workspace/resolve.ts","hasGitMarker","function",false,85,91,7,"directory: string","boolean",1,0,0,0
+"src/workspace/resolve.ts","hasDirectory","function",false,93,99,7,"path: string","boolean",0,0,1,0
+"src/workspace/resolve.ts","resolveDefaultOpencodeDbPath","function",false,101,108,8,"","string",1,0,0,0

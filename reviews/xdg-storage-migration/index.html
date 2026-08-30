@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Continuum branch review</title>
+  <style>
+    :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; background: #020617; color: #e2e8f0; }
+    body { margin: 0; }
+    main { max-width: 1280px; margin: auto; padding: 48px 28px 80px; }
+    h1 { margin: 0 0 8px; font-size: clamp(32px, 5vw, 58px); color: #f8fafc; }
+    h2 { margin-top: 56px; color: #f8fafc; }
+    p { line-height: 1.65; color: #cbd5e1; }
+    .verdict { border: 1px solid #f87171; background: #450a0a; border-radius: 16px; padding: 22px 26px; margin: 28px 0; }
+    .verdict strong { color: #fecaca; font-size: 21px; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
+    .card { border: 1px solid #334155; background: #0f172a; border-radius: 14px; padding: 18px; }
+    .card b { display: block; color: #f8fafc; font-size: 28px; margin-bottom: 5px; }
+    .card span { color: #94a3b8; }
+    img { width: 100%; display: block; border: 1px solid #334155; border-radius: 16px; margin: 22px 0; background: #0f172a; }
+    .findings { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
+    .finding { border: 1px solid #7f1d1d; border-radius: 14px; padding: 18px; background: #1f1115; }
+    .finding.p1 { border-color: #9a3412; background: #1c140d; }
+    .finding h3 { margin: 0 0 8px; color: #f8fafc; }
+    nav { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+    a { color: #7dd3fc; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    nav a { border: 1px solid #334155; background: #0f172a; border-radius: 12px; padding: 14px 16px; }
+    code { color: #c4b5fd; }
+  </style>
+</head>
+<body><main>
+  <h1>Continuum branch review</h1>
+  <p><code>master...feature/xdg-storage-migration</code></p>
+  <div class="verdict"><strong>Do not merge as-is.</strong><p>A replacement canonical database can still produce the safe-to-delete warning. Three more migration and restore defects should also be fixed before merge.</p></div>
+  <section class="cards">
+    <div class="card"><b>105 / 105</b><span>tests passed</span></div>
+    <div class="card"><b>64</b><span>files changed</span></div>
+    <div class="card"><b>+2,808</b><span>added lines</span></div>
+    <div class="card"><b>10</b><span>review findings</span></div>
+    <div class="card"><b>1 P0</b><span>false safety claim</span></div>
+    <div class="card"><b>+24</b><span>anti-slop delta</span></div>
+  </section>
+  <h2>Architecture</h2><img src="diagrams/architecture.svg" alt="Architecture overview">
+  <h2>Merge blockers</h2>
+  <section class="findings">
+    <article class="finding"><h3>F-001 P0</h3><p>A valid replacement canonical DB still triggers the legacy removal warning.</p></article>
+    <article class="finding p1"><h3>F-002 P1</h3><p>Moving a workspace silently selects a new empty path-hash database.</p></article>
+    <article class="finding p1"><h3>F-003 P1</h3><p>Any application version bump makes existing backups unrestorable.</p></article>
+    <article class="finding p1"><h3>F-004 P1</h3><p>A crash before receipt publication strands a valid migrated destination.</p></article>
+    <article class="finding p1"><h3>F-005 P1</h3><p>Storage and backup bypass the new Effect error and service architecture.</p></article>
+  </section>
+  <img src="diagrams/risk-map.svg" alt="Finding risk map">
+  <h2>System paths</h2><img src="diagrams/storage-migration-flow.svg" alt="Storage migration decision tree"><img src="diagrams/backup-protocol.svg" alt="Backup protocol paths">
+  <h2>Effect and quality</h2><img src="diagrams/effect-audit.svg" alt="Effect adherence audit"><img src="diagrams/metrics.svg" alt="Master and branch metrics">
+  <h2>Reports</h2>
+  <nav>
+    <a href="README.md">Executive report</a>
+    <a href="01-architecture.md">Architecture review</a>
+    <a href="02-code-paths.md">Code paths and decisions</a>
+    <a href="03-effect-and-quality.md">Effect and code quality</a>
+    <a href="04-findings.md">Prioritized findings</a>
+    <a href="05-deslop-plan.md">De-slop plan</a>
+    <a href="06-method.md">Method and evidence</a>
+    <a href="data/findings.json">Findings JSON</a>
+    <a href="data/decision-points.csv">Decision inventory CSV</a>
+  </nav>
+</main></body>
+</html>

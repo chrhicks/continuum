@@ -1,0 +1,74 @@
+{
+  "snapshotAt": "2026-08-24T15:13:00Z",
+  "deployed": {
+    "host": "chicks-arch",
+    "controlBranch": "ops/linear-agent-worker",
+    "controlCommit": "c9798b5",
+    "timerEnabledAtSnapshot": false,
+    "serviceActiveAtSnapshot": false,
+    "workerDryRun": false,
+    "piVersion": "0.84.2",
+    "mcpAdapterVersion": "2.24.0",
+    "subagentPackageVersion": "0.48.0",
+    "modelSelection": "ambient default openai-codex/gpt-5.6-sol",
+    "thinkingSelection": "ambient default medium"
+  },
+  "coordination": {
+    "linearIssues": 6,
+    "backlog": 4,
+    "inReview": 2,
+    "openPullRequests": 2,
+    "greenPullRequests": 2,
+    "mergedByWorker": 0
+  },
+  "safetyMechanisms": {
+    "profileFlock": true,
+    "systemdNoOverlap": true,
+    "wallClockLimitMinutes": 90,
+    "leaseMinutes": 120,
+    "heartbeatMinutes": 20,
+    "dirtyControlCheckoutRefusal": true,
+    "separateWorktrees": true,
+    "mode0600Config": true,
+    "mode0600RunArtifacts": true,
+    "isolatedContinuumValidation": true,
+    "deterministicIssueDispatcher": false,
+    "machineEnforcedBranchAllowlist": false,
+    "machineEnforcedNoMerge": false,
+    "machineEnforcedToolAllowlist": false,
+    "costBudget": false,
+    "structuredOutcomeParser": false,
+    "failureNotification": false
+  },
+  "authority": {
+    "executorIntegrations": {
+      "continuumTools": 20,
+      "linearTools": 53,
+      "executorCoreTools": 34
+    },
+    "executorPolicies": 0,
+    "mcpDirectTools": true,
+    "mcpIncludeToolsConfigured": false,
+    "mcpExcludeToolsConfigured": false,
+    "mcpApproveToolsConfigured": false,
+    "githubTokenScopes": ["admin:public_key", "gist", "read:org", "repo"],
+    "systemdProtectHome": false,
+    "systemdSecurityExposure": 7.5,
+    "systemdSecurityRating": "EXPOSED"
+  },
+  "tests": {
+    "shellSyntax": true,
+    "installModes": true,
+    "dirtyTreeRefusal": true,
+    "dryRun": true,
+    "manualNoWork": true,
+    "manualBlockRecovery": true,
+    "manualEndToEndHandoff": true,
+    "automatedLinearStateMachine": false,
+    "automatedClaimRace": false,
+    "automatedTimeout": false,
+    "automatedLeaseRecovery": false,
+    "automatedSystemdTimer": false,
+    "automatedValidationHelper": false
+  }
+}

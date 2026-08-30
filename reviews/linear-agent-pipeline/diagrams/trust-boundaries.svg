@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" role="img" aria-labelledby="title desc">
+  <title id="title">Pipeline trust boundaries</title>
+  <desc id="desc">The current Pi process can reach issue text, project resources, Executor tools, GitHub credentials, user secrets, and source worktrees.</desc>
+  <defs><marker id="a" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#f87171"/></marker><style>.bg{fill:#07111f}.title{fill:#f8fafc;font:700 28px sans-serif}.sub{fill:#94a3b8;font:15px sans-serif}.box{rx:14;stroke-width:2}.h{fill:#f8fafc;font:700 17px sans-serif}.t{fill:#cbd5e1;font:14px sans-serif}.r{fill:#641b2a;stroke:#fb7185}.b{fill:#17366e;stroke:#60a5fa}.g{fill:#0f3d37;stroke:#2dd4bf}.line{stroke:#f87171;stroke-width:3;fill:none;marker-end:url(#a)}</style></defs>
+  <rect class="bg" width="1280" height="720"/>
+  <text class="title" x="50" y="56">Trust review: the coding model runs inside the credential boundary</text>
+  <text class="sub" x="50" y="84">No prompt can replace process-level least privilege.</text>
+
+  <rect class="box r" x="465" y="235" width="350" height="230"/>
+  <text class="h" x="500" y="275">Pi worker process</text>
+  <text class="t" x="500" y="308">built-in bash, read, edit, write</text>
+  <text class="t" x="500" y="335">global extensions and subagents</text>
+  <text class="t" x="500" y="362">Executor direct tools and resume</text>
+  <text class="t" x="500" y="389">project trust enabled with --approve</text>
+  <text class="t" x="500" y="416">full home access under user account</text>
+
+  <rect class="box b" x="60" y="140" width="255" height="115"/>
+  <text class="h" x="88" y="175">Linear input</text><text class="t" x="88" y="204">issue body and comments</text><text class="t" x="88" y="228">editable instructions</text>
+  <path class="line" d="M315 205 L465 290"/>
+
+  <rect class="box b" x="60" y="450" width="255" height="115"/>
+  <text class="h" x="88" y="485">Repository input</text><text class="t" x="88" y="514">AGENTS and trusted resources</text><text class="t" x="88" y="538">branch-controlled code</text>
+  <path class="line" d="M315 505 L465 405"/>
+
+  <rect class="box r" x="965" y="90" width="250" height="110"/>
+  <text class="h" x="992" y="125">User credentials</text><text class="t" x="992" y="153">SSH, gh, Pi auth</text><text class="t" x="992" y="177">Cloudflare secrets readable</text>
+  <path class="line" d="M815 285 L965 165"/>
+
+  <rect class="box r" x="965" y="260" width="250" height="110"/>
+  <text class="h" x="992" y="295">Executor authority</text><text class="t" x="992" y="323">87 Linear/Continuum tools</text><text class="t" x="992" y="347">34 core/policy tools</text>
+  <path class="line" d="M815 335 H965"/>
+
+  <rect class="box r" x="965" y="430" width="250" height="110"/>
+  <text class="h" x="992" y="465">GitHub authority</text><text class="t" x="992" y="493">repo-scoped token and SSH</text><text class="t" x="992" y="517">no technical no-merge rule</text>
+  <path class="line" d="M815 405 L965 485"/>
+
+  <rect class="box g" x="965" y="600" width="250" height="78"/>
+  <text class="h" x="992" y="632">Target boundary</text><text class="t" x="992" y="658">one worktree, no credentials</text>
+</svg>

@@ -1,0 +1,87 @@
+{
+  "snapshotAt": "2026-08-24T15:13:00Z",
+  "model": "openai-codex/gpt-5.6-sol",
+  "thinking": "medium",
+  "runs": [
+    {
+      "runId": "c4357830-2d36-41c9-b598-22723bbadb6b",
+      "purpose": "live no-work check",
+      "durationSeconds": 71,
+      "assistantTurns": 9,
+      "toolCalls": 10,
+      "inputTokens": 51367,
+      "outputTokens": 1563,
+      "cacheReadTokens": 101376,
+      "totalTokens": 154306,
+      "costUsd": 0.354413,
+      "outcome": "NO_WORK"
+    },
+    {
+      "runId": "93d7e767-9ac7-4a65-aa4a-8e23887f76f2",
+      "purpose": "CHI-98 first attempt",
+      "durationSeconds": 424,
+      "assistantTurns": 54,
+      "toolCalls": 64,
+      "inputTokens": 102206,
+      "outputTokens": 9382,
+      "cacheReadTokens": 2289152,
+      "totalTokens": 2400740,
+      "costUsd": 1.937066,
+      "outcome": "BLOCKED",
+      "reason": "Control-ledger Continuum runtime divergence during validation"
+    },
+    {
+      "runId": "0537574b-692f-4e47-bd0b-ea90d64f8e75",
+      "purpose": "CHI-98 recovery and handoff",
+      "durationSeconds": 264,
+      "assistantTurns": 39,
+      "toolCalls": 46,
+      "inputTokens": 87914,
+      "outputTokens": 7198,
+      "cacheReadTokens": 1592320,
+      "totalTokens": 1687432,
+      "costUsd": 1.45167,
+      "outcome": "IN_REVIEW",
+      "pullRequest": 7
+    },
+    {
+      "runId": "627083de-8e1f-4d27-808f-963eb5160a89",
+      "purpose": "CHI-99 implementation and handoff",
+      "durationSeconds": 2397,
+      "assistantTurns": 53,
+      "toolCalls": 69,
+      "inputTokens": 170305,
+      "outputTokens": 9989,
+      "cacheReadTokens": 2735616,
+      "totalTokens": 2915910,
+      "costUsd": 2.519003,
+      "subagents": {
+        "sessions": 4,
+        "assistantTurns": 149,
+        "toolCalls": 249,
+        "inputTokens": 548131,
+        "outputTokens": 69551,
+        "cacheReadTokens": 10364416,
+        "totalTokens": 10982098,
+        "costUsd": 10.009393
+      },
+      "combinedCostUsd": 12.528396,
+      "outcome": "IN_REVIEW",
+      "pullRequest": 8
+    }
+  ],
+  "totals": {
+    "liveCostUsd": 16.271545,
+    "parentToolCalls": 189,
+    "subagentToolCalls": 249,
+    "allToolCalls": 438
+  },
+  "noWorkProjection": {
+    "timerMinutes": 5,
+    "randomJitterSecondsMaximum": 30,
+    "costPerPollUsd": 0.354413,
+    "dailyCostUsdWithoutJitter": 102.070944,
+    "dailyCostUsdAtAverageJitter": 97.210423,
+    "thirtyDayCostUsdRange": [2916.31, 3062.13]
+  }
+}

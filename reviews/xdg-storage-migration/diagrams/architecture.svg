@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="920" viewBox="0 0 1500 920" role="img" aria-labelledby="title desc">
+  <title id="title">Continuum branch architecture</title>
+  <desc id="desc">Inputs from CLI, SDK, and MCP resolve a workspace and canonical XDG database. Memory uses an Effect runtime. Backup uses a separate synchronous service and Wrangler adapter to R2.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#64748b"/></marker>
+    <style>
+      .bg{fill:#0f172a}.title{fill:#f8fafc;font:700 32px system-ui}.sub{fill:#94a3b8;font:16px system-ui}.box{stroke-width:2;rx:14}.label{fill:#f8fafc;font:700 18px system-ui}.small{fill:#cbd5e1;font:14px system-ui}.edge{stroke:#64748b;stroke-width:3;fill:none;marker-end:url(#arrow)}.good{fill:#0f766e;stroke:#2dd4bf}.io{fill:#1d4ed8;stroke:#60a5fa}.store{fill:#6d28d9;stroke:#c4b5fd}.warn{fill:#9a3412;stroke:#fb923c}.local{fill:#334155;stroke:#94a3b8}.dash{stroke-dasharray:9 7}
+    </style>
+  </defs>
+  <rect class="bg" width="1500" height="920"/>
+  <text class="title" x="60" y="58">Branch architecture: two runtime styles around one canonical database</text>
+  <text class="sub" x="60" y="88">Solid lines are runtime calls. Dashed lines are local metadata or generated projections.</text>
+
+  <rect class="box io" x="60" y="150" width="190" height="90"/><text class="label" x="155" y="187" text-anchor="middle">CLI</text><text class="small" x="155" y="214" text-anchor="middle">Commander commands</text>
+  <rect class="box io" x="60" y="285" width="190" height="90"/><text class="label" x="155" y="322" text-anchor="middle">SDK</text><text class="small" x="155" y="349" text-anchor="middle">Task API</text>
+  <rect class="box io" x="60" y="420" width="190" height="90"/><text class="label" x="155" y="457" text-anchor="middle">MCP</text><text class="small" x="155" y="484" text-anchor="middle">Typed agent tools</text>
+
+  <rect class="box good" x="360" y="210" width="250" height="110"/><text class="label" x="485" y="250" text-anchor="middle">Workspace resolver</text><text class="small" x="485" y="278" text-anchor="middle">git or .continuum root</text><text class="small" x="485" y="299" text-anchor="middle">normalized absolute path</text>
+  <rect class="box good" x="360" y="390" width="250" height="130"/><text class="label" x="485" y="430" text-anchor="middle">Storage coordinator</text><text class="small" x="485" y="458" text-anchor="middle">snapshot, migrate, receipt</text><text class="small" x="485" y="480" text-anchor="middle">no-overwrite publication</text><text class="small" x="485" y="502" text-anchor="middle">warning and conflicts</text>
+
+  <rect class="box store" x="730" y="225" width="310" height="120"/><text class="label" x="885" y="265" text-anchor="middle">Canonical XDG SQLite</text><text class="small" x="885" y="293" text-anchor="middle">projects/&lt;path-sha256&gt;/continuum.db</text><text class="small" x="885" y="316" text-anchor="middle">tasks and memory</text>
+  <rect class="box local" x="730" y="410" width="310" height="145"/><text class="label" x="885" y="450" text-anchor="middle">Project-local .continuum</text><text class="small" x="885" y="478" text-anchor="middle">legacy database input</text><text class="small" x="885" y="500" text-anchor="middle">memory config and projections</text><text class="small" x="885" y="522" text-anchor="middle">R2 identity config</text>
+
+  <rect class="box good" x="1110" y="145" width="320" height="150"/><text class="label" x="1270" y="185" text-anchor="middle">Effect memory runtime</text><text class="small" x="1270" y="213" text-anchor="middle">Context.Service + Layer.effect</text><text class="small" x="1270" y="235" text-anchor="middle">scoped SQLite handle</text><text class="small" x="1270" y="257" text-anchor="middle">named Effect.fn repositories</text>
+  <rect class="box warn" x="1110" y="360" width="320" height="165"/><text class="label" x="1270" y="400" text-anchor="middle">Backup runtime</text><text class="small" x="1270" y="428" text-anchor="middle">synchronous functions</text><text class="small" x="1270" y="450" text-anchor="middle">generic thrown Error</text><text class="small" x="1270" y="472" text-anchor="middle">manual JSON parsing</text><text class="small" x="1270" y="494" text-anchor="middle">Wrangler spawnSync adapter</text>
+  <rect class="box store" x="1110" y="650" width="320" height="120"/><text class="label" x="1270" y="690" text-anchor="middle">Cloudflare R2</text><text class="small" x="1270" y="718" text-anchor="middle">immutable generations</text><text class="small" x="1270" y="741" text-anchor="middle">mutable head.json</text>
+
+  <path class="edge" d="M250 195 C305 195 305 245 360 255"/><path class="edge" d="M250 330 L360 275"/><path class="edge" d="M250 465 L360 295"/>
+  <path class="edge" d="M485 320 L485 390"/><path class="edge" d="M610 445 C665 445 665 310 730 290"/>
+  <path class="edge dash" d="M610 480 L730 480"/>
+  <path class="edge" d="M1040 280 C1080 280 1080 220 1110 220"/>
+  <path class="edge" d="M1040 305 C1080 330 1080 420 1110 430"/>
+  <path class="edge dash" d="M1040 485 L1110 455"/>
+  <path class="edge" d="M1270 525 L1270 650"/>
+
+  <rect x="60" y="810" width="1370" height="65" rx="12" fill="#111827" stroke="#475569"/>
+  <circle cx="92" cy="842" r="9" fill="#2dd4bf"/><text class="small" x="112" y="848">Effect-aligned</text>
+  <circle cx="285" cy="842" r="9" fill="#fb923c"/><text class="small" x="305" y="848">architectural split to resolve</text>
+  <circle cx="570" cy="842" r="9" fill="#c4b5fd"/><text class="small" x="590" y="848">persistent state</text>
+  <text class="small" x="820" y="848">Main review concern: proof of migration lives beside the database, not inside it.</text>
+</svg>

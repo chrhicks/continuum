@@ -1,0 +1,7 @@
+- Finding files
+Processed 128 files (439ms) (1 warning)
+
+✖ Found 1 circular dependency!
+
+1) memory/application/query.ts > memory/application/query-recall.ts
+

@@ -1,0 +1,243 @@
+$ bun run typecheck && bun run scripts/run-tests-for-validate.ts && bun run verify:goal
+$ tsc --noEmit
+bun test v1.4.0 (34cbb9a40)
+
+tests/consolidation-projection-render.test.ts:
+(pass) consolidation projection rendering > renders linked RECENT, daily MEMORY, and index projections [0.92ms]
+
+tests/frontmatter.test.ts:
+(pass) parseFrontmatter > returns no frontmatter when missing [0.06ms]
+(pass) parseFrontmatter > parses simple frontmatter values [0.11ms]
+
+tests/llm-client.test.ts:
+(pass) LlmClient.call > sends correct request shape [0.41ms]
+(pass) LlmClient.call > returns content and finishReason [0.06ms]
+(pass) LlmClient.call > per-call maxTokens overrides config default [0.05ms]
+(pass) LlmClient.call > throws on non-ok HTTP response [0.07ms]
+(pass) LlmClient.call > throws when response content is missing [0.05ms]
+(pass) LlmClient.call > sends structured output schema to chat completions [0.09ms]
+(pass) LlmClient.call > routes zen gpt models to responses endpoint [0.18ms]
+(pass) LlmClient.callWithRetry > returns immediately on stop [0.14ms]
+(pass) LlmClient.callWithRetry > bumps max_tokens and retries on length finish reason [0.07ms]
+(pass) LlmClient.callWithRetry > stops retrying when maxTokensCap is reached [0.04ms]
+(pass) LlmClient.callWithRetry > config is frozen and not mutated by retry [0.05ms]
+(pass) LlmClient.callWithRetry > retries responses requests when max_output_tokens is reached [0.10ms]
+(pass) extractJsonObject > returns clean JSON object unchanged [0.03ms]
+(pass) extractJsonObject > strips surrounding text [0.02ms]
+(pass) extractJsonObject > strips markdown json fence
+(pass) extractJsonObject > strips plain markdown fence
+(pass) extractJsonObject > throws when no object found [0.01ms]
+(pass) extractJsonObject > handles nested objects [0.01ms]
+(pass) parseJsonResponse > parses and validates a well-formed response [0.03ms]
+(pass) parseJsonResponse > throws when validate rejects the shape [0.01ms]
+(pass) parseJsonResponse > throws on invalid JSON [0.02ms]
+
+tests/memory-append-application.test.ts:
+(pass) memory append application > appends without a session and renders kinds in canonical order [8.95ms]
+(pass) memory append application > is idempotent and regenerates a deleted projection [2.28ms]
+(pass) memory append application > reports stale projection after the row commits [2.35ms]
+
+tests/memory-content-builders.test.ts:
+(pass) extractRecentEntries > recognizes Session headings [0.05ms]
+(pass) extractRecentEntries > recognizes Recall Import headings (seestar regression) [0.02ms]
+(pass) extractRecentEntries > recognizes Task and OpenCode Session headings [0.01ms]
+(pass) isClearedNowBody > returns true for empty body [0.02ms]
+(pass) isClearedNowBody > returns true for header-only body with ended session [0.02ms]
+(pass) isClearedNowBody > returns true when frontmatter has consolidated flag
+(pass) isClearedNowBody > returns false for header-only body with fresh session
+(pass) isClearedNowBody > returns false for body with actual content
+(pass) buildClearedNowContent > adds consolidated flag to frontmatter [0.11ms]
+(pass) meaningfulness scoring > isPlaceholderNarrative detects known placeholders [0.02ms]
+(pass) meaningfulness scoring > scoreEntryMeaningfulness rewards list items and sections [0.07ms]
+(pass) meaningfulness scoring > isMeaningfulEntry identifies rich vs sparse entries [0.04ms]
+(pass) upsertRecent meaningful retention > preserves rich Recall Import entries across updates (seestar regression) [0.14ms]
+(pass) upsertRecent meaningful retention > deduplication prefers richer entry for same anchor [0.03ms]
+(pass) upsertRecent meaningful retention > keeps newest entries first across repeated upserts [0.02ms]
+(pass) upsertRecent meaningful retention > retains at least the configured number of meaningful entries when possible [0.12ms]
+
+tests/memory-file-io.test.ts:
+(pass) memory file I/O > atomically replaces an existing file [0.07ms]
+(pass) memory file I/O > cleans up its temporary file when replacement fails [0.07ms]
+
+tests/memory-state.test.ts:
+(pass) memory state repository > stores and retrieves checkpoints by source and scope [0.07ms]
+(pass) memory state repository > lists and deletes checkpoints deterministically [0.27ms]
+
+tests/memory-summary-mechanical.test.ts:
+(pass) mechanical memory summary > retains agent content for search without an LLM [0.18ms]
+
+tests/opencode-extract-integration.test.ts:
+(pass) real OpenCode SQLite extraction > resolves a stale worktree and applies --after before --limit [3.13ms]
+
+tests/recall-summary-chunks.test.ts:
+(pass) recall summary chunk planner > splits blocks by character and line limits [0.14ms]
+(pass) recall summary chunk planner > retains an oversized block as one chunk [0.01ms]
+
+tests/recall-summary-schema.test.ts:
+(pass) recall summary schema > accepts null keywords from strict structured output [0.58ms]
+(pass) recall summary schema > accepts populated keyword blocks [0.08ms]
+
+tests/sdk.test.ts:
+(pass) sdk flows > smoke flow: init, create, list, delete [8.58ms]
+(pass) sdk flows > lifecycle flow: steps, notes, complete with outcome [4.54ms]
+(pass) sdk flows > completion enforces blockers [3.71ms]
+(pass) sdk flows > steps complete warns on duplicate completion [3.35ms]
+
+tests/workspace.test.ts:
+(pass) resolveWorkspaceContext > walks upward to nearest .continuum directory [0.10ms]
+(pass) resolveWorkspaceContext > falls back to nearest .git directory before creating .continuum [0.05ms]
+(pass) resolveWorkspaceContext > uses explicit target cwd before walking upward [0.06ms]
+(pass) resolveWorkspaceContext > falls back to the start directory when no markers exist [0.05ms]
+
+tests/legacy-memory-migrate.test.ts:
+(pass) legacy memory migration > dry-run inventories hierarchy without creating or changing the database [0.93ms]
+(pass) legacy memory migration > imports once, records every artifact, and preserves source files [2.36ms]
+(pass) legacy memory migration > does not reimport generated projections after consolidation [9.06ms]
+(pass) legacy memory migration > keeps every uncleared NOW after the completed legacy prefix [3.42ms]
+
+tests/mcp-server.test.ts:
+(pass) Continuum MCP server > exposes the MVP tools and preserves formatted memory content [181.61ms]
+
+tests/memory-cli-cutover.test.ts:
+(pass) canonical memory CLI > migration dry-run leaves an empty workspace untouched [108.99ms]
+(pass) canonical memory CLI > registers only the approved core surface [109.94ms]
+(pass) canonical memory CLI > summary and search work without Markdown projections [9.87ms]
+(pass) canonical memory CLI > summary renders complete memory without legacy storage markup [3.82ms]
+(pass) canonical memory CLI > summary shows all pending entries and three full consolidations [0.08ms]
+(pass) canonical memory CLI > renders human and JSON append, consolidate, search, and summary contracts [820.55ms]
+
+tests/memory-config.test.ts:
+(pass) memory config > auto-enables consolidation from an Effect ConfigProvider [3.42ms]
+(pass) memory config > config file values override runtime Config values [4.37ms]
+(pass) memory config > explicit memory directory does not read config from cwd [0.42ms]
+
+tests/memory-consolidate-application.test.ts:
+(pass) memory consolidate application > returns no pending without writing projections [1.49ms]
+(pass) memory consolidate application > dry run summarizes the snapshot without database or file writes [2.25ms]
+(pass) memory consolidate application > excludes entries appended after the range snapshot [2.66ms]
+(pass) memory consolidate application > rejects an overlapping completion raced through two connections [3.96ms]
+(pass) memory consolidate application > does not alter source rows and failed summaries create no completion [2.22ms]
+(pass) memory consolidate application > persists an exact range idempotently [1.43ms]
+(pass) memory consolidate application > regenerates projections from previously persisted summaries [2.96ms]
+(pass) memory consolidate application > reports stale projection after canonical completion [2.25ms]
+
+tests/memory-journal-repository.test.ts:
+(pass) memory journal migration > upgrades 0000, 0001, and 0002 fixtures without changing rows [4.34ms]
+(pass) memory journal migration > upgrades an existing database additively and configures SQLite [1.75ms]
+(pass) memory journal repository > returns the original entry for an idempotent retry [1.42ms]
+(pass) memory journal repository > orders concurrent appends by unique SQLite sequence [2.65ms]
+
+tests/memory-multiprocess-append.test.ts:
+(pass) multi-process memory append > serializes independent CLI writers into unique canonical sequences [309.74ms]
+(pass) multi-process memory append > keeps NOW and consolidation projections fresh across concurrent commands [416.22ms]
+
+tests/memory-query.test.ts:
+(pass) canonical memory query > orders globally, filters before limiting, and ranks before limiting [2.35ms]
+(pass) canonical memory query > returns tagged decode failures for malformed persisted JSON [1.49ms]
+
+tests/memory-recall-application.test.ts:
+(pass) canonical recall application > unchanged reimport skips summarization and retains provenance [2.11ms]
+(pass) canonical recall application > changed sessions atomically refresh messages and summary [1.75ms]
+(pass) canonical recall application > failed changed summary leaves canonical rows untouched [1.74ms]
+(pass) canonical recall application > search rows preserve exact raw and derived summary evidence [1.54ms]
+
+tests/r2-backup.test.ts:
+(pass) R2 backup service > uploads a WAL-aware immutable generation and walks lineage [5.14ms]
+(pass) R2 backup service > leaves interrupted uploads unreferenced and reports a stale head [4.36ms]
+(pass) R2 backup service > rejects writer conflicts before uploading a generation [1.71ms]
+(pass) R2 backup service > restores through checksum and SQLite validation without overwriting [5.25ms]
+(pass) R2 backup service > keeps portable identity explicit and configuration idempotent [1.14ms]
+
+tests/recall-summary-merge.test.ts:
+[merge] Pass 1: merging 3 items...
+[merge] Pass 1, group 1/2 (budgeted) - merging 2 items...
+[merge] Pass 1 complete: 2 groups -> 2 items
+[merge] Pass 2: merging 2 items...
+[merge] Pass 2, group 1/1 (pair-fallback) - merging 2 items...
+[merge] Pass 2 complete: 1 groups -> 1 items
+(pass) recall summary merge reducer > uses budgeted grouping before pairing [0.33ms]
+[merge] Pass 1: merging 4 items...
+[merge] Pass 1, group 1/2 (pair-fallback) - merging 2 items...
+[merge] Pass 1, group 2/2 (pair-fallback) - merging 2 items...
+[merge] Pass 1 complete: 2 groups -> 2 items
+[merge] Pass 2: merging 2 items...
+[merge] Pass 2, group 1/1 (pair-fallback) - merging 2 items...
+[merge] Pass 2 complete: 1 groups -> 1 items
+(pass) recall summary merge reducer > pairs summaries when each exceeds the budget [0.07ms]
+
+tests/storage-migration.test.ts:
+(pass) XDG canonical database migration > migrates WAL-visible task and memory data and keeps new writes off legacy storage [351.13ms]
+(pass) XDG canonical database migration > refuses to call a changed legacy source removable [224.53ms]
+(pass) XDG canonical database migration > fails safely when legacy and canonical databases diverge without a receipt [120.46ms]
+
+ 105 pass
+ 0 fail
+ 388 expect() calls
+Ran 105 tests across 25 files. [2.93s]
+$ bun run scripts/verify-goal-invariants.ts
+
+## File Length (src <= 300 lines)
+- pass
+
+## Function Length (src <= 80 lines)
+- pass
+
+## Generic Catch-All File Names
+- pass
+
+## Exported Functions With Explicit Return Types
+- pass
+
+## 'as any' Casts (src)
+- pass
+
+## Duplication Sentinel Counts
+- require_task definitions: 1
+- src/task/tasks.repository.ts:33 export async function require_task(
+- normalizeLimit definitions: 1
+- src/memory/opencode/recall-util.ts:3 export function normalizeLimit(
+- SUMMARY_PREFIX assignments: 1
+- src/memory/opencode/paths.ts:19 export const SUMMARY_PREFIX = `${ARTIFACT_PREFIXES.summary}-`
+
+## Consolidation Sentinel Checks
+- PASS: formatStepMarker boundary
+  src/cli/commands/task/render.ts definition: expected 1, found 1
+  formatStepMarker definitions (all src): expected 1, found 1
+  src/cli/commands/task/steps.ts import: expected 1, found 1
+- PASS: buildSummaryLines boundary
+  src/memory/memory-summary-lines.ts definition: expected 1, found 1
+  buildSummaryLines definitions (all src): expected 1, found 1
+  src/memory/memory-content-builders.ts import: expected 1, found 1
+- PASS: patch_collection boundary
+  src/task/collection-patch.ts definition: expected 1, found 1
+  patch_collection definitions (all src): expected 1, found 1
+  src/task/tasks.repository.update.ts import: expected 1, found 1
+  src/task/tasks.repository.update.ts call: expected 1, found 1
+- PASS: createTaskCommand decomposition boundary
+  src/cli/commands/task.ts createTaskCommand definition: expected 1, found 1
+  src/cli/commands/task.ts registerTaskListCommand definition: expected 1, found 1
+  src/cli/commands/task.ts registerTaskGetCommand definition: expected 1, found 1
+  src/cli/commands/task.ts registerTaskValidateCommand definition: expected 1, found 1
+  src/cli/commands/task.ts registerTaskGraphCommand definition: expected 1, found 1
+  src/cli/commands/task.ts registerTaskTemplatesCommand definition: expected 1, found 1
+  src/cli/commands/task.ts registerCrudCommands import: expected 1, found 1
+  src/cli/commands/task.ts registerCrudCommands call: expected 1, found 1
+  src/cli/commands/task.ts registerStepsCommands import: expected 1, found 1
+  src/cli/commands/task.ts registerStepsCommands call: expected 1, found 1
+  src/cli/commands/task.ts registerNoteCommands import: expected 1, found 1
+  src/cli/commands/task.ts registerNoteCommands call: expected 1, found 1
+- PASS: parsePositiveInteger shared utility boundary
+  src/cli/commands/shared.ts parsePositiveInteger definition: expected 1, found 1
+  parsePositiveInteger definitions (all src): expected 1, found 1
+  src/cli/commands/task/parse.ts parsePositiveInteger import: expected 1, found 1
+  src/cli/commands/memory/option-parsers.ts parsePositiveInteger import: expected 1, found 1
+
+## Validation Commands
+- PASS: bun run typecheck
+- PASS: bun test
+- PASS: continuum task list --json
+- PASS: continuum summary --no-tasks
+- PASS: continuum memory recall status
+
+## Result
+- PASS
