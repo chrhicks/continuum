@@ -80,7 +80,7 @@ describe('central Continuum database', () => {
     const dataPaths = resolveContinuumDataPaths({ dataDirectory })
     const databasePath = dataPaths.databasePath
     const database = openContinuumDatabase(dataPaths)
-    expect(pragmaNumber(database, 'user_version')).toBe(2)
+    expect(pragmaNumber(database, 'user_version')).toBe(3)
     expect(pragmaNumber(database, 'foreign_keys')).toBe(1)
     expect(pragmaNumber(database, 'busy_timeout', 'timeout')).toBe(5_000)
     expect(pragmaText(database, 'journal_mode')).toBe('wal')
@@ -153,6 +153,81 @@ describe('central Continuum database', () => {
       expect(statSync(dataDirectory).mode & 0o777).toBe(0o700)
       expect(statSync(databasePath).mode & 0o777).toBe(0o600)
     }
+  })
+
+  test('backfills canonical version-one records into the full-text index', () => {
+    const root = temporaryRoot()
+    const workspace = makeDirectory(root, 'legacy-schema-workspace')
+    const dataDirectory = join(root, 'data')
+    const dataPaths = resolveContinuumDataPaths({ dataDirectory })
+
+    const continuum = createContinuum({ dataDirectory })
+    continuum.resolveWorkspace(workspace)
+    continuum.close()
+
+    const versionOne = new Database(dataPaths.databasePath)
+    const storedWorkspace = versionOne
+      .query('SELECT id FROM workspaces LIMIT 1')
+      .get() as { id: string }
+    versionOne
+      .query(
+        `INSERT INTO memory_records
+         (id, workspace_id, kind, content, created_at)
+         VALUES (?, ?, ?, ?, ?)`,
+      )
+      .run(
+        'pre-fts-record',
+        storedWorkspace.id,
+        'decision',
+        'Backfill preserves a concrete migration anchor.',
+        '2026-01-01T00:00:00.000Z',
+      )
+    const record = versionOne
+      .query('SELECT rowid FROM memory_records WHERE id = ?')
+      .get('pre-fts-record') as { rowid: number }
+    versionOne
+      .query('INSERT INTO memory_record_tags (record_rowid, tag) VALUES (?, ?)')
+      .run(record.rowid, 'migration-anchor')
+    versionOne.exec('DROP TABLE memory_fts')
+    versionOne.exec('PRAGMA user_version = 1')
+    versionOne.close()
+
+    const migrated = openContinuumDatabase(dataPaths)
+    expect(pragmaNumber(migrated, 'user_version')).toBe(3)
+    expect(
+      migrated
+        .query(
+          `SELECT rowid FROM memory_fts
+           WHERE memory_fts MATCH 'migration'`,
+        )
+        .all(),
+    ).toEqual([{ rowid: record.rowid }])
+    expect(
+      migrated
+        .query('SELECT content, kind, tags FROM memory_fts WHERE rowid = ?')
+        .get(record.rowid),
+    ).toEqual({
+      content: 'Backfill preserves a concrete migration anchor.',
+      kind: 'decision',
+      tags: 'migration-anchor',
+    })
+    migrated.close()
+
+    const reopened = createContinuum({ dataDirectory })
+    expect(
+      reopened.search({ workspace, query: 'migration-anchor' }).records,
+    ).toEqual([
+      {
+        id: 'pre-fts-record',
+        kind: 'decision',
+        content: 'Backfill preserves a concrete migration anchor.',
+        tags: ['migration-anchor'],
+        createdAt: '2026-01-01T00:00:00.000Z',
+        supersedes: [],
+        supersededBy: [],
+      },
+    ])
+    reopened.close()
   })
 })
 

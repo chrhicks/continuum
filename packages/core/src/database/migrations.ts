@@ -109,6 +109,31 @@ const migrations = [
       );
     `,
   },
+  {
+    version: 3,
+    name: 'backfill memory full text index',
+    sql: `
+      INSERT INTO memory_fts (rowid, content, kind, tags)
+      SELECT
+        r.rowid,
+        r.content,
+        r.kind,
+        COALESCE((
+          SELECT group_concat(tag, ' ')
+          FROM (
+            SELECT tag
+            FROM memory_record_tags
+            WHERE record_rowid = r.rowid
+            ORDER BY tag
+          )
+        ), '')
+      FROM memory_records r
+      WHERE NOT EXISTS (
+        SELECT 1 FROM memory_fts
+        WHERE memory_fts.rowid = r.rowid
+      );
+    `,
+  },
 ] as const
 
 export const latestSchemaVersion = migrations.at(-1)?.version ?? 0

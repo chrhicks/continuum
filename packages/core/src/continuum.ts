@@ -5,6 +5,17 @@ import {
   type DataPathOptions,
 } from './database/database'
 import {
+  getMemory,
+  searchMemory,
+  summarizeWorkspace,
+  type GetMemoryInput,
+  type GetMemoryResult,
+  type MemorySearchResult,
+  type SearchMemoryInput,
+  type WorkspaceSummaryInput,
+  type WorkspaceSummaryResult,
+} from './memory/retrieval'
+import {
   prepareImportedMemoryRecord,
   prepareMemoryRecord,
   writeMemoryRecord,
@@ -17,6 +28,9 @@ import { resolveWorkspace, type WorkspaceInfo } from './workspaces/workspaces'
 export type Continuum = {
   resolveWorkspace(workspacePath: string): WorkspaceInfo
   record(input: RecordMemoryInput): MemoryRecord
+  search(input: SearchMemoryInput): MemorySearchResult
+  get(input: GetMemoryInput): GetMemoryResult
+  summary(input: WorkspaceSummaryInput): WorkspaceSummaryResult
   close(): void
 }
 
@@ -35,6 +49,15 @@ export function createContinuum(options: DataPathOptions = {}): Continuum {
     record(input) {
       const prepared = prepareMemoryRecord(input)
       return writeMemoryRecord(database.get(), prepared)
+    },
+    search(input) {
+      return searchMemory(database.get(), input)
+    },
+    get(input) {
+      return getMemory(database.get(), input)
+    },
+    summary(input) {
+      return summarizeWorkspace(database.get(), input)
     },
     close: database.close,
   }

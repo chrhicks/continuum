@@ -101,31 +101,19 @@ export function resolveWorkspace(
   }
 }
 
+export function lookupPreparedWorkspace(
+  database: Database,
+  prepared: PreparedWorkspace,
+): ResolvedWorkspace | null {
+  const workspace = selectPreparedWorkspace(database, prepared)
+  return workspace ? readWorkspaceInfo(database, workspace.id) : null
+}
+
 export function registerWorkspaceInTransaction(
   database: Database,
   prepared: PreparedWorkspace,
 ): ResolvedWorkspace {
-  const requestedPathWorkspace = findWorkspaceByAlias(
-    database,
-    prepared.requestedPathAlias,
-  )
-  const rootPathWorkspace = findWorkspaceByAlias(
-    database,
-    prepared.rootPathAlias,
-  )
-  const remoteOwners = findOwnedAliases(database, prepared.remoteAliases)
-  const descendantPathOwners = prepared.isGitRepository
-    ? findDescendantPathOwners(database, prepared.rootPathAlias.value)
-    : []
-  const workspace = selectWorkspace({
-    requestedPathWorkspace,
-    rootPathWorkspace,
-    descendantPathOwners,
-    remoteAliases: prepared.remoteAliases,
-    remoteOwners,
-    requestedPathAlias: prepared.requestedPathAlias,
-    rootPathAlias: prepared.rootPathAlias,
-  })
+  const workspace = selectPreparedWorkspace(database, prepared)
   const resolved =
     workspace ??
     createWorkspace(
@@ -138,6 +126,34 @@ export function registerWorkspaceInTransaction(
   }
 
   return readWorkspaceInfo(database, resolved.id)
+}
+
+function selectPreparedWorkspace(
+  database: Database,
+  prepared: PreparedWorkspace,
+): StoredWorkspace | null {
+  const requestedPathWorkspace = findWorkspaceByAlias(
+    database,
+    prepared.requestedPathAlias,
+  )
+  const rootPathWorkspace = findWorkspaceByAlias(
+    database,
+    prepared.rootPathAlias,
+  )
+  const remoteOwners = findOwnedAliases(database, prepared.remoteAliases)
+  const descendantPathOwners = prepared.isGitRepository
+    ? findDescendantPathOwners(database, prepared.rootPathAlias.value)
+    : []
+
+  return selectWorkspace({
+    requestedPathWorkspace,
+    rootPathWorkspace,
+    descendantPathOwners,
+    remoteAliases: prepared.remoteAliases,
+    remoteOwners,
+    requestedPathAlias: prepared.requestedPathAlias,
+    rootPathAlias: prepared.rootPathAlias,
+  })
 }
 
 function validateWorkspacePath(path: string): void {

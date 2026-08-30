@@ -7,6 +7,14 @@ export type { ContinuumErrorCode } from './errors'
 export { getGuide } from './guide/guide'
 export type { ContinuumGuide, GuideOperation } from './guide/guide'
 export type {
+  GetMemoryInput,
+  GetMemoryResult,
+  MemorySearchResult,
+  SearchMemoryInput,
+  WorkspaceSummaryInput,
+  WorkspaceSummaryResult,
+} from './memory/retrieval'
+export type {
   ImportMemoryRecordInput,
   MemoryRecord,
   RecordMemoryInput,

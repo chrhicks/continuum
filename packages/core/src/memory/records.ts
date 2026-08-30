@@ -69,7 +69,7 @@ export function prepareImportedMemoryRecord(
       operation,
     )
   }
-  if (!isCanonicalTimestamp(input.createdAt)) {
+  if (!isCanonicalMemoryTimestamp(input.createdAt)) {
     throw validationError(
       'Imported record timestamp must use canonical UTC ISO format.',
       operation,
@@ -257,47 +257,89 @@ function findStoredRecord(database: Database, id: string): StoredRecord | null {
 }
 
 function readMemoryRecord(database: Database, rowid: number): MemoryRecord {
-  const record = database
-    .query(
-      `SELECT rowid, id, workspace_id, kind, content, created_at
-       FROM memory_records WHERE rowid = ?`,
-    )
-    .get(rowid) as StoredRecord
-  const tags = database
-    .query(
-      `SELECT tag FROM memory_record_tags
-       WHERE record_rowid = ? ORDER BY tag`,
-    )
-    .all(rowid) as Array<{ tag: string }>
-  const supersedes = database
-    .query(
-      `SELECT old.id
-       FROM memory_supersessions s
-       JOIN memory_records old ON old.rowid = s.superseded_record_rowid
-       WHERE s.record_rowid = ? ORDER BY old.id`,
-    )
-    .all(rowid) as Array<{ id: string }>
-  const supersededBy = database
-    .query(
-      `SELECT replacement.id
-       FROM memory_supersessions s
-       JOIN memory_records replacement ON replacement.rowid = s.record_rowid
-       WHERE s.superseded_record_rowid = ? ORDER BY replacement.id`,
-    )
-    .all(rowid) as Array<{ id: string }>
-
-  return {
-    id: record.id,
-    kind: record.kind,
-    content: record.content,
-    tags: tags.map(({ tag }) => tag),
-    createdAt: record.created_at,
-    supersedes: supersedes.map(({ id }) => id),
-    supersededBy: supersededBy.map(({ id }) => id),
+  const record = readMemoryRecords(database, [rowid]).get(rowid)
+  if (!record) {
+    throw new ContinuumError({
+      code: 'DATABASE_ERROR',
+      operation: 'read memory record',
+      message: 'A stored memory record could not be read.',
+    })
   }
+  return record
 }
 
-function isCanonicalTimestamp(value: string): boolean {
+export function readMemoryRecords(
+  database: Database,
+  rowids: number[],
+): Map<number, MemoryRecord> {
+  if (rowids.length === 0) return new Map()
+
+  const placeholders = rowids.map(() => '?').join(', ')
+  const rows = database
+    .query(
+      `SELECT rowid, id, workspace_id, kind, content, created_at
+       FROM memory_records
+       WHERE rowid IN (${placeholders})`,
+    )
+    .all(...rowids) as StoredRecord[]
+  const records = new Map<number, MemoryRecord>()
+  for (const row of rows) {
+    records.set(row.rowid, {
+      id: row.id,
+      kind: row.kind,
+      content: row.content,
+      tags: [],
+      createdAt: row.created_at,
+      supersedes: [],
+      supersededBy: [],
+    })
+  }
+
+  const tags = database
+    .query(
+      `SELECT record_rowid, tag
+       FROM memory_record_tags
+       WHERE record_rowid IN (${placeholders})
+       ORDER BY record_rowid, tag`,
+    )
+    .all(...rowids) as Array<{ record_rowid: number; tag: string }>
+  for (const tag of tags) records.get(tag.record_rowid)?.tags.push(tag.tag)
+
+  const supersedes = database
+    .query(
+      `SELECT s.record_rowid, old.id
+       FROM memory_supersessions s
+       JOIN memory_records old ON old.rowid = s.superseded_record_rowid
+       WHERE s.record_rowid IN (${placeholders})
+       ORDER BY s.record_rowid, old.id`,
+    )
+    .all(...rowids) as Array<{ record_rowid: number; id: string }>
+  for (const relationship of supersedes) {
+    records.get(relationship.record_rowid)?.supersedes.push(relationship.id)
+  }
+
+  const supersededBy = database
+    .query(
+      `SELECT s.superseded_record_rowid, replacement.id
+       FROM memory_supersessions s
+       JOIN memory_records replacement ON replacement.rowid = s.record_rowid
+       WHERE s.superseded_record_rowid IN (${placeholders})
+       ORDER BY s.superseded_record_rowid, replacement.id`,
+    )
+    .all(...rowids) as Array<{
+    superseded_record_rowid: number
+    id: string
+  }>
+  for (const relationship of supersededBy) {
+    records
+      .get(relationship.superseded_record_rowid)
+      ?.supersededBy.push(relationship.id)
+  }
+
+  return records
+}
+
+export function isCanonicalMemoryTimestamp(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)) {
     return false
   }
