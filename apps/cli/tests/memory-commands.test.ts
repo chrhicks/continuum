@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import {
+  closeSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  openSync,
+  rmSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createContinuum } from '@continuum/core'
@@ -42,6 +49,33 @@ describe('CLI memory command parity', () => {
       expect(help.stdout).toContain('--cwd <path>')
     }
     expect(existsSync(context.dataDirectory)).toBe(false)
+  })
+
+  test('returns one generic structured failure when finite stdout is unwritable', async () => {
+    // Linux /dev/full deterministically accepts the descriptor and fails writes.
+    if (process.platform !== 'linux' || !existsSync('/dev/full')) return
+
+    const context = cliContext('stdout-failure')
+    for (const args of [
+      ['guide'],
+      ['--help'],
+      ['--version'],
+      ['summary', '--cwd', context.workspace],
+    ]) {
+      const result = await executeCliWithFailingStdout(args, context)
+      expect(result.exitCode).toBe(1)
+      expect(result.stderr.endsWith('\n')).toBe(true)
+      expect(result.stderr.split('\n')).toHaveLength(2)
+      expect(JSON.parse(result.stderr)).toEqual({
+        error: {
+          code: 'CLI_ERROR',
+          operation: 'cli',
+          message: 'Continuum could not complete the CLI operation.',
+        },
+      })
+      expect(result.stderr).not.toMatch(/EPIPE|ENOSPC|errno|syscall|\sat\s/)
+    }
+    expect(hasSidecars(context.dataDirectory)).toBe(false)
   })
 
   test('uses default and relative cwd and returns default and custom summary pages', async () => {
@@ -460,6 +494,28 @@ async function executeCli(
     child.exited,
   ])
   return { exitCode, stdout, stderr }
+}
+
+async function executeCliWithFailingStdout(
+  args: string[],
+  context: CliContext,
+): Promise<{ exitCode: number; stderr: string }> {
+  const stdout = openSync('/dev/full', 'w')
+  try {
+    const child = Bun.spawn([process.execPath, continuumBin, ...args], {
+      cwd: context.workingDirectory,
+      env: processEnvironment({ CONTINUUM_DATA_DIR: context.dataDirectory }),
+      stdout,
+      stderr: 'pipe',
+    })
+    const [stderr, exitCode] = await Promise.all([
+      new Response(child.stderr).text(),
+      child.exited,
+    ])
+    return { exitCode, stderr }
+  } finally {
+    closeSync(stdout)
+  }
 }
 
 function expectSuccess(result: CliExecution): void {

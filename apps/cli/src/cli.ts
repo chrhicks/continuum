@@ -1,4 +1,5 @@
 import { resolve } from 'node:path'
+import type { Writable } from 'node:stream'
 import { Command, CommanderError } from 'commander'
 import {
   ContinuumError,
@@ -32,7 +33,14 @@ type SearchOptions = WorkspaceOptions & {
   cursor?: string
 }
 
-export function createProgram(): Command {
+type SerializedOutput = {
+  write(text: string): Promise<void>
+  drain(): Promise<void>
+}
+
+export function createProgram(
+  output: SerializedOutput = createSerializedOutput(process.stdout),
+): Command {
   const program = new Command()
     .name('continuum')
     .description('Durable workspace memory for coding agents')
@@ -40,14 +48,16 @@ export function createProgram(): Command {
     .addHelpCommand(false)
     .exitOverride()
     .configureOutput({
-      writeOut: (text) => process.stdout.write(text),
+      writeOut: (text) => {
+        void output.write(text)
+      },
       writeErr: () => {},
     })
 
   program
     .command('guide')
     .description('Return version-matched Continuum usage guidance')
-    .action(() => writeJson(getGuide()))
+    .action(() => writeJson(output, getGuide()))
 
   program
     .command('summary')
@@ -61,7 +71,7 @@ export function createProgram(): Command {
           limit: options.limit,
         }),
       )
-      writeJson(result)
+      return writeJson(output, result)
     })
 
   program
@@ -95,7 +105,7 @@ export function createProgram(): Command {
           supersedes: options.supersedes,
         }),
       )
-      writeJson(result)
+      return writeJson(output, result)
     })
 
   program
@@ -120,7 +130,7 @@ export function createProgram(): Command {
           cursor: options.cursor,
         }),
       )
-      writeJson(result)
+      return writeJson(output, result)
     })
 
   program
@@ -135,7 +145,7 @@ export function createProgram(): Command {
           ids,
         }),
       )
-      writeJson(result)
+      return writeJson(output, result)
     })
 
   program
@@ -148,7 +158,7 @@ export function createProgram(): Command {
 
 export async function runCli(argv: string[] = process.argv): Promise<number> {
   if (argv.length <= 2) {
-    writeCliError(
+    await writeCliError(
       new CliUsageError(
         'A command is required; use --help for available commands',
       ),
@@ -156,20 +166,42 @@ export async function runCli(argv: string[] = process.argv): Promise<number> {
     return 1
   }
 
+  const output = createSerializedOutput(process.stdout)
+  let commandFailed = false
+  let commandFailure: unknown
   try {
-    await createProgram().parseAsync(argv)
-    return 0
+    await createProgram(output).parseAsync(argv)
   } catch (cause) {
-    if (
-      cause instanceof CommanderError &&
-      (cause.code === 'commander.helpDisplayed' ||
-        cause.code === 'commander.version')
-    ) {
-      return 0
-    }
-    writeCliError(cause)
+    commandFailed = true
+    commandFailure = cause
+  }
+
+  let outputFailed = false
+  let outputFailure: unknown
+  try {
+    await output.drain()
+  } catch (cause) {
+    outputFailed = true
+    outputFailure = cause
+  }
+
+  if (outputFailed) {
+    await writeCliError(outputFailure)
     return 1
   }
+  if (
+    commandFailed &&
+    commandFailure instanceof CommanderError &&
+    (commandFailure.code === 'commander.helpDisplayed' ||
+      commandFailure.code === 'commander.version')
+  ) {
+    return 0
+  }
+  if (commandFailed) {
+    await writeCliError(commandFailure)
+    return 1
+  }
+  return 0
 }
 
 function useContinuum<T>(operation: (continuum: Continuum) => T): T {
@@ -207,11 +239,11 @@ function collect(value: string, previous: string[]): string[] {
   return [...previous, value]
 }
 
-function writeJson(value: unknown): void {
-  process.stdout.write(`${JSON.stringify(value)}\n`)
+function writeJson(output: SerializedOutput, value: unknown): Promise<void> {
+  return output.write(`${JSON.stringify(value)}\n`)
 }
 
-function writeCliError(cause: unknown): void {
+async function writeCliError(cause: unknown): Promise<void> {
   const error =
     cause instanceof ContinuumError
       ? {
@@ -230,16 +262,73 @@ function writeCliError(cause: unknown): void {
           context: undefined,
         }
 
-  process.stderr.write(
-    `${JSON.stringify({
-      error: {
-        code: error.code,
-        operation: error.operation,
-        message: error.message,
-        ...(error.context ? { context: error.context } : {}),
-      },
-    })}\n`,
-  )
+  try {
+    await writeFinite(
+      process.stderr,
+      `${JSON.stringify({
+        error: {
+          code: error.code,
+          operation: error.operation,
+          message: error.message,
+          ...(error.context ? { context: error.context } : {}),
+        },
+      })}\n`,
+    )
+  } catch {
+    // There is no remaining structured channel when stderr is unwritable.
+  }
+}
+
+function createSerializedOutput(stream: Writable): SerializedOutput {
+  let pending = Promise.resolve()
+
+  return {
+    write(text) {
+      pending = pending.then(() => writeFinite(stream, text))
+      // Commander output callbacks cannot await; attach a handler immediately.
+      void pending.catch(() => {})
+      return pending
+    },
+    drain() {
+      return pending
+    },
+  }
+}
+
+function writeFinite(stream: Writable, text: string): Promise<void> {
+  return new Promise((resolveWrite, rejectWrite) => {
+    let settled = false
+    let callbackFailure: Error | null | undefined
+
+    const cleanup = () => stream.off('error', onError)
+    const settle = (failed: boolean, cause?: unknown) => {
+      if (settled) return
+      settled = true
+      cleanup()
+      if (failed) rejectWrite(cause)
+      else resolveWrite()
+    }
+    const onError = (cause: Error) => settle(true, cause)
+    const onWrite = (cause?: Error | null) => {
+      if (!cause) {
+        settle(false)
+        return
+      }
+
+      callbackFailure = cause
+      // Writable streams normally emit error after the write callback. Keep the
+      // temporary listener through that turn, with a fallback for callback-only
+      // implementations.
+      setImmediate(() => settle(true, callbackFailure))
+    }
+
+    stream.once('error', onError)
+    try {
+      stream.write(text, onWrite)
+    } catch (cause) {
+      settle(true, cause)
+    }
+  })
 }
 
 function safeContext(
