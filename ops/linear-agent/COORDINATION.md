@@ -82,7 +82,9 @@ Blocking findings return the issue to Todo with evidence. Optional findings may 
 
 ## Audits
 
-When no PR is waiting and the configured interval has elapsed, the Reviewer may inspect one bounded area. It creates at most three Backlog proposals, applies `scout-proposal`, and does not route or implement them.
+When no PR is waiting and the configured interval has elapsed, the Reviewer may inspect one bounded area. It records every evidence-backed finding without a numeric cap and deduplicates against Linear and Continuum.
+
+Independent findings become Backlog proposals carrying `scout-proposal`. Ordered, multi-stage, or implausibly broad work becomes one campaign parent with a complete finding ledger. The Reviewer does not route or implement its findings.
 
 ## Retained limits
 

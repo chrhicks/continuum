@@ -12,6 +12,10 @@ bash -n \
   "$root/bin/verify-continuum-runtime"
 grep -Fq 'Record every evidence-backed finding' "$root/prompts/reviewer.md"
 grep -Fq 'complete finding ledger' "$root/prompts/reviewer.md"
+grep -Fq 'records every evidence-backed finding without a numeric cap' \
+  "$root/COORDINATION.md"
+grep -Fq 'complete finding ledger' "$root/COORDINATION.md"
+! grep -Fq 'at most three Backlog proposals' "$root/COORDINATION.md"
 ! grep -Rq 'AUDIT_PROPOSAL_LIM[I]T' "$root"
 set +e
 "$root/bin/validate-continuum-worktree" >/dev/null 2>&1
