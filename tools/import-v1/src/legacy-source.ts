@@ -192,10 +192,8 @@ function validateLegacyRows(
         sequence,
       )
     }
-    if (
-      typeof row.created_at !== 'string' ||
-      !isCanonicalTimestamp(row.created_at)
-    ) {
+    const createdAt = normalizeLegacyTimestamp(row.created_at)
+    if (!createdAt) {
       throw sourceValidationError(
         sourcePath,
         'A legacy journal record has an invalid creation timestamp.',
@@ -211,7 +209,7 @@ function validateLegacyRows(
       kind: row.kind,
       content: row.content,
       tags,
-      createdAt: row.created_at,
+      createdAt,
     })
   }
 
@@ -293,12 +291,59 @@ function parseTags(
   return tags as string[]
 }
 
-function isCanonicalTimestamp(value: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)) {
-    return false
+function normalizeLegacyTimestamp(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+
+  const match =
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?(Z|[+-]\d{2}:\d{2})$/.exec(
+      value,
+    )
+  if (!match) return null
+
+  const year = Number(match[1])
+  const month = Number(match[2])
+  const day = Number(match[3])
+  const hour = Number(match[4])
+  const minute = Number(match[5])
+  const second = Number(match[6])
+  const offset = match[8] as string
+  if (
+    month < 1 ||
+    month > 12 ||
+    day < 1 ||
+    day > daysInMonth(year, month) ||
+    hour > 23 ||
+    minute > 59 ||
+    second > 59
+  ) {
+    return null
   }
+  if (offset !== 'Z') {
+    const offsetHour = Number(offset.slice(1, 3))
+    const offsetMinute = Number(offset.slice(4, 6))
+    if (
+      offsetHour > 14 ||
+      offsetMinute > 59 ||
+      (offsetHour === 14 && offsetMinute !== 0)
+    ) {
+      return null
+    }
+  }
+
   const date = new Date(value)
-  return !Number.isNaN(date.getTime()) && date.toISOString() === value
+  if (Number.isNaN(date.getTime())) return null
+  const canonical = date.toISOString()
+  return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(canonical)
+    ? canonical
+    : null
+}
+
+function daysInMonth(year: number, month: number): number {
+  if (month === 2) {
+    const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0)
+    return leapYear ? 29 : 28
+  }
+  return [4, 6, 9, 11].includes(month) ? 30 : 31
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {

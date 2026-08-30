@@ -106,6 +106,40 @@ describe('legacy v1 importer CLI', () => {
     expect(sourceSidecars(context.source)).toEqual([])
   })
 
+  test('reports an invalid workspace with workspace context', async () => {
+    const context = cliContext('invalid-workspace')
+    createSource(context.source, [])
+    const missingWorkspace = join(context.root, 'missing-workspace')
+
+    const result = await runImporter(
+      [
+        '--source',
+        context.source,
+        '--workspace',
+        missingWorkspace,
+        '--data-dir',
+        context.dataDirectory,
+      ],
+      context.root,
+    )
+
+    expect(result.exitCode).toBe(1)
+    expect(result.stdout).toBe('')
+    expect(JSON.parse(result.stderr)).toEqual({
+      error: {
+        code: 'VALIDATION_ERROR',
+        operation: 'import v1',
+        message: 'The target workspace must be an existing directory.',
+        context: {
+          workspacePath: missingWorkspace,
+          field: 'workspace',
+        },
+      },
+    })
+    expect(result.stderr).not.toContain(context.source)
+    expect(existsSync(context.dataDirectory)).toBe(false)
+  })
+
   test('rejects missing, duplicate, unknown, and positional arguments safely', async () => {
     const context = cliContext('arguments')
     createSource(context.source, [])

@@ -68,66 +68,68 @@ function validateImportPaths(options: ImportV1Options): {
   workspace: string
   dataDirectory: string
 } {
-  const source = requiredPath(options.source, 'source')
+  const requestedSource = requiredPath(options.source, 'source')
   const workspace = requiredPath(options.workspace, 'workspace')
   const dataDirectory =
     options.dataDirectory === undefined
       ? resolveContinuumDataPaths().dataDirectory
       : requiredPath(options.dataDirectory, 'dataDirectory')
 
+  let source: string
+  let sourceStat: ReturnType<typeof statSync>
   try {
-    if (!statSync(source).isFile()) {
-      throw pathValidationError(
-        'The legacy source must be an existing regular file.',
-        source,
-        'source',
-      )
+    if (!statSync(requestedSource).isFile()) {
+      throw new Error('not a regular file')
     }
-  } catch (cause) {
-    if (cause instanceof ContinuumError) throw cause
-    throw pathValidationError(
+    source = realpathSync(requestedSource)
+    sourceStat = statSync(source)
+  } catch {
+    throw sourcePathValidationError(
       'The legacy source must be an existing regular file.',
-      source,
-      'source',
+      requestedSource,
     )
   }
+  if (sourceStat.nlink > 1) {
+    throw sourcePathValidationError(
+      'The legacy source must be a stable copy with a single filesystem name.',
+      source,
+    )
+  }
+
   try {
     if (!statSync(workspace).isDirectory()) {
-      throw pathValidationError(
-        'The target workspace must be an existing directory.',
-        source,
-        'workspace',
-      )
+      throw new Error('not a directory')
     }
-  } catch (cause) {
-    if (cause instanceof ContinuumError) throw cause
-    throw pathValidationError(
+  } catch {
+    throw workspacePathValidationError(
       'The target workspace must be an existing directory.',
-      source,
-      'workspace',
+      workspace,
     )
   }
 
   const targetDatabase = resolveContinuumDataPaths({
     dataDirectory,
   }).databasePath
-  const sourceStat = statSync(source)
-  const targetStat = existsSync(targetDatabase)
-    ? statSync(targetDatabase)
-    : undefined
-  const sameFile =
-    targetStat !== undefined &&
-    sourceStat.dev === targetStat.dev &&
-    sourceStat.ino === targetStat.ino
-  if (
-    sameFile ||
-    realpathSync(source) === canonicalPotentialPath(targetDatabase)
-  ) {
-    throw pathValidationError(
-      'The legacy source and target Continuum database must be different files.',
-      source,
-      'source',
-    )
+  const reservedTargetPaths = [
+    targetDatabase,
+    `${targetDatabase}-wal`,
+    `${targetDatabase}-shm`,
+    `${targetDatabase}-journal`,
+  ]
+  for (const reservedPath of reservedTargetPaths) {
+    const targetStat = existsSync(reservedPath)
+      ? statSync(reservedPath)
+      : undefined
+    const sameFile =
+      targetStat !== undefined &&
+      sourceStat.dev === targetStat.dev &&
+      sourceStat.ino === targetStat.ino
+    if (sameFile || source === canonicalPotentialPath(reservedPath)) {
+      throw sourcePathValidationError(
+        'The legacy source must not use a target Continuum database or sidecar path.',
+        source,
+      )
+    }
   }
 
   return { source, workspace, dataDirectory }
@@ -157,15 +159,26 @@ function canonicalPotentialPath(path: string): string {
   return resolve(realpathSync(existing), ...missing)
 }
 
-function pathValidationError(
+function sourcePathValidationError(
   message: string,
   sourcePath: string,
-  field: string,
 ): ContinuumError {
   return new ContinuumError({
     code: 'VALIDATION_ERROR',
     operation: 'import v1',
     message,
-    context: { sourcePath, field },
+    context: { sourcePath, field: 'source' },
+  })
+}
+
+function workspacePathValidationError(
+  message: string,
+  workspacePath: string,
+): ContinuumError {
+  return new ContinuumError({
+    code: 'VALIDATION_ERROR',
+    operation: 'import v1',
+    message,
+    context: { workspacePath, field: 'workspace' },
   })
 }

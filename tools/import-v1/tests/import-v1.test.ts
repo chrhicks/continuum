@@ -6,8 +6,10 @@ import {
   linkSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -139,6 +141,67 @@ describe('legacy v1 importer', () => {
     target.close()
   })
 
+  test('normalizes valid legacy timestamp instants and preserves chronological order', () => {
+    const context = testContext('timestamps')
+    createLegacySource(context.source, [
+      {
+        ...validRow(1, 'timestamp-canonical'),
+        createdAt: '2026-01-02T03:00:00.123Z',
+      },
+      {
+        ...validRow(2, 'timestamp-no-milliseconds'),
+        createdAt: '2026-01-01T00:00:00Z',
+      },
+      {
+        ...validRow(3, 'timestamp-positive-offset'),
+        createdAt: '2026-01-02T03:00:00+02:00',
+      },
+      {
+        ...validRow(4, 'timestamp-negative-offset'),
+        createdAt: '2026-01-02T03:00:00-02:00',
+      },
+      {
+        ...validRow(5, 'timestamp-short-fraction'),
+        createdAt: '2026-01-02T02:00:00.1Z',
+      },
+    ])
+
+    expect(importV1(context).processed).toBe(5)
+    expect(importV1(context).processed).toBe(5)
+
+    const continuum = createContinuum({ dataDirectory: context.dataDirectory })
+    const exact = continuum.get({
+      workspace: context.workspace,
+      ids: [
+        'timestamp-canonical',
+        'timestamp-no-milliseconds',
+        'timestamp-positive-offset',
+        'timestamp-negative-offset',
+        'timestamp-short-fraction',
+      ],
+    })
+    expect(exact.records.map(({ createdAt }) => createdAt)).toEqual([
+      '2026-01-02T03:00:00.123Z',
+      '2026-01-01T00:00:00.000Z',
+      '2026-01-02T01:00:00.000Z',
+      '2026-01-02T05:00:00.000Z',
+      '2026-01-02T02:00:00.100Z',
+    ])
+    expect(
+      continuum
+        .search({ workspace: context.workspace })
+        .records.map(({ id }) => id),
+    ).toEqual([
+      'timestamp-negative-offset',
+      'timestamp-canonical',
+      'timestamp-short-fraction',
+      'timestamp-positive-offset',
+      'timestamp-no-milliseconds',
+    ])
+    continuum.close()
+    expect(targetCount(context.dataDirectory)).toBe(5)
+  })
+
   test('repeated identical runs are idempotent and empty sources stay lazy', () => {
     const context = testContext('idempotent')
     createLegacySource(context.source, [validRow(1, 'same-record')])
@@ -156,6 +219,26 @@ describe('legacy v1 importer', () => {
       processed: 0,
     })
     expect(existsSync(empty.dataDirectory)).toBe(false)
+  })
+
+  test('reports and reads a safe symlink source by its canonical path', async () => {
+    const context = testContext('canonical-symlink')
+    const canonicalSource = join(context.root, 'canonical-legacy.db')
+    createLegacySource(canonicalSource, [validRow(1, 'canonical-source')])
+    symlinkSync(canonicalSource, context.source)
+    const sourceHash = await hashFile(canonicalSource)
+    const sourceMtime = statSync(canonicalSource).mtimeMs
+
+    expect(importV1(context)).toEqual({
+      source: canonicalSource,
+      workspace: context.workspace,
+      processed: 1,
+    })
+    expect(await hashFile(canonicalSource)).toBe(sourceHash)
+    expect(statSync(canonicalSource).mtimeMs).toBe(sourceMtime)
+    expect(sourceSidecars(canonicalSource)).toEqual([])
+    expect(sourceSidecars(context.source)).toEqual([])
+    expect(targetCount(context.dataDirectory)).toBe(1)
   })
 
   test('keeps a safe resumable prefix when a target collision stops a run', () => {
@@ -254,10 +337,17 @@ describe('legacy v1 importer', () => {
       invalidRowCase('blank content', { content: '   ' }, 'content'),
       invalidRowCase('trimmed ID', { id: ' padded-id ' }, 'id'),
       invalidRowCase('blank kind', { kind: ' ' }, 'kind'),
-      invalidRowCase(
-        'timestamp',
-        { createdAt: '2026-01-01T01:00:00+01:00' },
-        'created_at',
+      ...[
+        ['ambiguous local timestamp', '2026-01-01T01:00:00'],
+        ['non-ISO timestamp', 'January 1, 2026 01:00 UTC'],
+        ['invalid calendar timestamp', '2026-02-30T01:00:00Z'],
+        ['invalid hour timestamp', '2026-01-01T24:00:00Z'],
+        ['invalid offset timestamp', '2026-01-01T01:00:00+14:01'],
+        ['excessive offset timestamp', '2026-01-01T01:00:00-15:00'],
+        ['lossy fraction timestamp', '2026-01-01T01:00:00.1234Z'],
+        ['extended year timestamp', '+010000-01-01T00:00:00.000Z'],
+      ].map(([name, createdAt]) =>
+        invalidRowCase(name as string, { createdAt }, 'created_at'),
       ),
       invalidRowCase('metadata JSON', { metadata: '{private' }, 'metadata'),
       invalidRowCase('metadata object', { metadata: '[]' }, 'metadata'),
@@ -322,50 +412,76 @@ describe('legacy v1 importer', () => {
     }
   })
 
-  test('rejects an uncheckpointed source without touching its WAL', async () => {
-    const context = testContext('uncheckpointed')
-    createLegacySource(context.source, [validRow(1, 'wal-record')])
-    const walPath = `${context.source}-wal`
-    writeFileSync(walPath, 'synthetic uncheckpointed WAL sentinel')
-    const sourceHash = await hashFile(context.source)
-    const walHash = await hashFile(walPath)
-    const sourceMtime = statSync(context.source).mtimeMs
-    const walMtime = statSync(walPath).mtimeMs
+  test('rejects direct, symlinked, and hard-linked unsafe sources without mutation', async () => {
+    const direct = testContext('uncheckpointed-direct')
+    createLegacySource(direct.source, [validRow(1, 'direct-wal-record')])
+    const directWal = `${direct.source}-wal`
+    writeFileSync(directWal, 'synthetic uncheckpointed WAL sentinel')
+    await expectSourceFilesUnchanged(direct, [direct.source, directWal], () =>
+      importV1(direct),
+    )
 
-    expect(() => importV1(context)).toThrow(ContinuumError)
-    expect(existsSync(context.dataDirectory)).toBe(false)
-    expect(await hashFile(context.source)).toBe(sourceHash)
-    expect(await hashFile(walPath)).toBe(walHash)
-    expect(statSync(context.source).mtimeMs).toBe(sourceMtime)
-    expect(statSync(walPath).mtimeMs).toBe(walMtime)
-    expect(existsSync(`${context.source}-shm`)).toBe(false)
+    const symlinked = testContext('uncheckpointed-symlink')
+    const realSource = join(symlinked.root, 'real-legacy.db')
+    createLegacySource(realSource, [validRow(1, 'symlink-wal-record')])
+    symlinkSync(realSource, symlinked.source)
+    const realWal = `${realSource}-wal`
+    writeFileSync(realWal, 'synthetic real-path WAL sentinel')
+    const symlinkFailure = await expectSourceFilesUnchanged(
+      symlinked,
+      [realSource, realWal],
+      () => importV1(symlinked),
+    )
+    expect(symlinkFailure.context).toMatchObject({ sourcePath: realSource })
+    expect(existsSync(`${symlinked.source}-shm`)).toBe(false)
+
+    const hardLinked = testContext('hard-linked-source')
+    const canonicalSource = join(hardLinked.root, 'canonical-legacy.db')
+    createLegacySource(canonicalSource, [validRow(1, 'hard-link-record')])
+    linkSync(canonicalSource, hardLinked.source)
+    const hardLinkFailure = await expectSourceFilesUnchanged(
+      hardLinked,
+      [canonicalSource, hardLinked.source],
+      () => importV1(hardLinked),
+    )
+    expect(hardLinkFailure.message).toBe(
+      'The legacy source must be a stable copy with a single filesystem name.',
+    )
   })
 
-  test('rejects source and target aliases before opening either database', () => {
-    const context = testContext('same-path')
-    createLegacySource(context.source, [validRow(1, 'alias-record')])
-    const dataDirectory = context.root
-    const target = targetPath(dataDirectory)
-    // Recreate the source at the target filename to exercise direct aliasing.
-    rmSync(context.source)
-    createLegacySource(target, [validRow(1, 'alias-record')])
+  test('rejects every reserved target database path and file alias before opening', async () => {
+    for (const suffix of ['', '-wal', '-shm', '-journal']) {
+      const context = testContext(`reserved-${suffix || 'database'}`)
+      mkdirSync(context.dataDirectory)
+      const reserved = `${targetPath(context.dataDirectory)}${suffix}`
+      createLegacySource(reserved, [validRow(1, `reserved-${suffix || 'db'}`)])
+      await expectSourceFilesUnchanged(
+        { ...context, source: reserved },
+        [reserved],
+        () => importV1({ ...context, source: reserved }),
+      )
+    }
 
-    expect(() =>
-      importV1({
-        source: target,
-        workspace: context.workspace,
-        dataDirectory,
-      }),
-    ).toThrow(ContinuumError)
-    expect(sourceSidecars(target)).toEqual([])
+    const symlinked = testContext('reserved-symlink')
+    mkdirSync(symlinked.dataDirectory)
+    const reservedSymlink = `${targetPath(symlinked.dataDirectory)}-shm`
+    symlinkSync(symlinked.source, reservedSymlink)
+    createLegacySource(symlinked.source, [validRow(1, 'reserved-symlink')])
+    await expectSourceFilesUnchanged(symlinked, [symlinked.source], () =>
+      importV1(symlinked),
+    )
+    expect(statSync(reservedSymlink).ino).toBe(statSync(symlinked.source).ino)
 
-    const hardLink = testContext('hard-link')
-    createLegacySource(hardLink.source, [validRow(1, 'hard-link-record')])
-    mkdirSync(hardLink.dataDirectory)
-    const linkedTarget = targetPath(hardLink.dataDirectory)
-    linkSync(hardLink.source, linkedTarget)
-    expect(() => importV1(hardLink)).toThrow(ContinuumError)
-    expect(targetCountFromPath(linkedTarget, 'memory_journal_entries')).toBe(1)
+    const hardLinked = testContext('reserved-hard-link')
+    createLegacySource(hardLinked.source, [validRow(1, 'reserved-hard-link')])
+    mkdirSync(hardLinked.dataDirectory)
+    const reservedHardLink = `${targetPath(hardLinked.dataDirectory)}-journal`
+    linkSync(hardLinked.source, reservedHardLink)
+    await expectSourceFilesUnchanged(
+      hardLinked,
+      [hardLinked.source, reservedHardLink],
+      () => importV1(hardLinked),
+    )
   })
 })
 
@@ -480,6 +596,42 @@ function invalidRowCase(
     },
     field,
   }
+}
+
+async function expectSourceFilesUnchanged(
+  context: ImportV1OptionsWithRoot,
+  paths: string[],
+  operation: () => unknown,
+): Promise<ContinuumError> {
+  const beforeEntries = readdirSync(context.root, { recursive: true }).sort()
+  const before = await Promise.all(
+    paths.map(async (path) => ({
+      path,
+      hash: await hashFile(path),
+      mtimeMs: statSync(path).mtimeMs,
+    })),
+  )
+
+  let caught: unknown
+  try {
+    operation()
+  } catch (cause) {
+    caught = cause
+  }
+  expect(caught).toBeInstanceOf(ContinuumError)
+  expect(caught).toMatchObject({
+    code: 'VALIDATION_ERROR',
+    operation: 'import v1',
+  })
+  expect(JSON.stringify(caught)).not.toContain('synthetic')
+  expect(readdirSync(context.root, { recursive: true }).sort()).toEqual(
+    beforeEntries,
+  )
+  for (const file of before) {
+    expect(await hashFile(file.path)).toBe(file.hash)
+    expect(statSync(file.path).mtimeMs).toBe(file.mtimeMs)
+  }
+  return caught as ContinuumError
 }
 
 async function hashFile(path: string): Promise<string> {
