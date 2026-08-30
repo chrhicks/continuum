@@ -189,6 +189,36 @@ describe('Continuum MCP tools', () => {
     expect(existsSync(join(root, 'rejecting-data'))).toBe(false)
   })
 
+  test('preinstalls the close promise before a rejecting transport reenters close', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'continuum-mcp-reentrant-close-'))
+    temporaryRoots.push(root)
+    const dataDirectory = join(root, 'data')
+    const server = createContinuumMcpServer({ dataDirectory })
+    const closeFailure = new Error('transport notified close then failed')
+    const transport = new NotifyThenRejectTransport(closeFailure)
+    let observedClose = 0
+    let reentrantClose: Promise<void> | undefined
+    server.server.onclose = () => {
+      observedClose += 1
+      reentrantClose = server.close()
+    }
+    await server.connect(transport)
+
+    const outerClose = server.close()
+    const concurrentClose = server.close()
+
+    expect(observedClose).toBe(1)
+    expect(reentrantClose).toBe(outerClose)
+    expect(concurrentClose).toBe(outerClose)
+    await expectSameRejection(outerClose, closeFailure)
+    await expectSameRejection(reentrantClose as Promise<void>, closeFailure)
+    expect(server.close()).toBe(outerClose)
+    await expectSameRejection(server.close(), closeFailure)
+    expect(transport.closeCount).toBe(1)
+    await expectRejected(server.connect(new FailingTransport()), 'closed')
+    expect(existsSync(dataDirectory)).toBe(false)
+  })
+
   test('preserves a start failure when attached transport cleanup also rejects', async () => {
     const root = mkdtempSync(join(tmpdir(), 'continuum-mcp-double-failure-'))
     temporaryRoots.push(root)
@@ -500,6 +530,25 @@ class FailingTransport implements Transport {
     this.closeCount += 1
     if (this.closeFailure) throw this.closeFailure
     this.onclose?.()
+  }
+}
+
+class NotifyThenRejectTransport implements Transport {
+  onclose?: Transport['onclose']
+  onerror?: Transport['onerror']
+  onmessage?: Transport['onmessage']
+  closeCount = 0
+
+  constructor(readonly closeFailure: Error) {}
+
+  async start(): Promise<void> {}
+
+  async send(): Promise<void> {}
+
+  async close(): Promise<void> {
+    this.closeCount += 1
+    this.onclose?.()
+    throw this.closeFailure
   }
 }
 

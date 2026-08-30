@@ -58,7 +58,16 @@ class OwnedContinuumMcpServer extends McpServer {
   }
 
   override close(): Promise<void> {
-    this.#closePromise ??= this.closeOnce()
+    if (this.#closePromise) return this.#closePromise
+
+    // Transports may synchronously reenter close through their onclose callback.
+    let completeClose!: () => void
+    let failClose!: (cause: unknown) => void
+    this.#closePromise = new Promise<void>((resolve, reject) => {
+      completeClose = resolve
+      failClose = reject
+    })
+    void this.closeOnce().then(completeClose, failClose)
     return this.#closePromise
   }
 
