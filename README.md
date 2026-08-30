@@ -1,181 +1,211 @@
 # Continuum
 
-Continuum is a local Bun CLI and TypeScript SDK for durable project tasks and agent memory. SQLite at `.continuum/continuum.db` is canonical; Markdown memory files are generated, non-authoritative projections.
+Continuum gives coding agents durable, workspace-scoped memory. It stores complete observations, decisions, preferences, and lessons so later agents can recover useful context instead of repeating investigation.
 
-## Requirements
+MCP is the primary interface. The CLI exposes the same product behavior for scripting, testing, and recovery.
 
-- Bun
-- A local filesystem with SQLite support
+Continuum is intentionally not a task manager, session archive, generated Markdown memory system, summarization pipeline, embedding service, deletion interface, or cross-workspace search service.
 
-## Install
+## Requirements and installation
+
+Continuum requires [Bun](https://bun.sh/) 1.4 or newer. Git is used when available to identify repositories across clones and worktrees; ordinary non-Git directories are also supported.
 
 ```sh
+bun install
 bun run setup
+continuum --help
 ```
 
-This private package is linked locally as `continuum`.
-
-## Quick Start
+`bun run setup` installs dependencies and links the local `continuum` executable. During development, commands can also be run without a global link:
 
 ```sh
-continuum init
-continuum memory append agent "SQLite is canonical memory"
-continuum memory consolidate
-continuum summary
-continuum memory search "canonical memory"
-continuum guide
+bun run continuum --help
 ```
 
-No memory session lifecycle is required. An append succeeds without a harness or session ID.
+## MCP
+
+Start the stdio server with:
+
+```sh
+continuum mcp
+```
+
+A typical MCP client configuration is:
+
+```json
+{
+  "mcpServers": {
+    "continuum": {
+      "command": "continuum",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+The server exposes exactly five tools:
+
+| Tool                      | Purpose                                                                        | Key annotations                                                           |
+| ------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
+| `continuum_guide`         | Return version-matched usage guidance.                                         | `readOnlyHint: true`, `idempotentHint: true`                              |
+| `continuum_summary`       | Return the newest current records and logical workspace metadata.              | `readOnlyHint: false`, `idempotentHint: true`; may register the workspace |
+| `continuum_memory_record` | Store one complete immutable record, optionally superseding older records.     | `readOnlyHint: false`, `idempotentHint: false`                            |
+| `continuum_memory_search` | Search by ordinary text or browse chronologically with filters and pagination. | `readOnlyHint: true`, `idempotentHint: true`                              |
+| `continuum_memory_get`    | Retrieve several exact record IDs and report missing IDs.                      | `readOnlyHint: true`, `idempotentHint: true`                              |
+
+All tools have `destructiveHint: false` and `openWorldHint: false`. Inputs and successful structured outputs have strict schemas. The memory inputs are:
+
+```ts
+continuum_summary({ workspace, limit? })
+continuum_memory_record({ workspace, content, kind?, tags?, supersedes? })
+continuum_memory_search({
+  workspace,
+  query?,
+  tags?,
+  kinds?,
+  includeHistory?,
+  limit?,
+  cursor?,
+})
+continuum_memory_get({ workspace, ids })
+```
+
+MCP `workspace` is an absolute existing directory path. Successful calls return their data in `structuredContent`. Application failures set `isError: true` and return a compact safe JSON error envelope in text content; this avoids the pinned MCP SDK validating an error against the tool's success-only output schema. Invalid tool arguments use the MCP SDK's standard validation error result.
+
+### Practical workflow
+
+1. Call `continuum_guide` when orienting to the installed contract.
+2. Call `continuum_summary` with the absolute checkout path to recover recent current context.
+3. Search for concepts relevant to the work before and during investigation.
+4. Record concise, self-contained durable knowledge at useful checkpoints.
+5. When knowledge changes, record the replacement with the old IDs in `supersedes`.
+6. Browse chronologically when targeted search is insufficient, and use `continuum_memory_get` to follow exact historical references.
 
 ## CLI
 
-Global options must precede the command:
+Successful product commands write one compact JSON value and a newline to stdout. Failures write one safe JSON error envelope to stderr and exit nonzero. Help and version output remain human-readable.
 
-- `--cwd <path>` resolves and operates on another workspace.
-- `--json` emits `{ ok, data, meta }` envelopes.
-- `--quiet` suppresses human output.
-
-Workspace resolution walks upward from the effective working directory to the nearest `.continuum` or `.git` directory.
-
-### MCP
-
-`continuum mcp` serves the primary agent interface over local stdio MCP. It
-provides typed tools for:
-
-- workspace initialization and summary
-- task CRUD, validation, graph queries, steps, and notes
-- memory append, search, and consolidation
-- OpenCode recall status and import
-
-Each tool requires an absolute `workspace` path. Tool arguments are structured,
-so multiline Markdown and shell-special characters are passed without shell
-quoting. Configure an MCP client or gateway such as Executor to launch
-`continuum mcp`.
-
-When using Executor, read successful tool data from
-`result.data.structuredContent`. Do not return the raw MCP response when
-batching calls: it contains both a compact text status and the structured data.
-Discover the connection-specific full tool path with `tools.search()` before
-calling it; bare names such as `continuum_summary` are MCP names, not Executor
-paths. Initialize only with the absolute repository root because initialization
-does not search parent directories.
-
-The CLI remains the human, scripting, and recovery interface.
-
-### Tasks
-
-`continuum task` provides persistent task planning and execution:
-
-- `task list`, `task get`, `task create`, `task update`, `task complete`, and `task delete`
-- `task steps add|update|complete|list`
-- `task note add` and `task notes flush`
-- `task validate`, `task graph`, and `task templates list`
-
-Run `continuum guide task` or `continuum task --help` for current options and workflows.
-
-### Memory
-
-The supported memory workflow is:
+The CLI exposes exactly these commands:
 
 ```text
-append -> consolidate -> summary/search
-                 ^
-                 |
-       explicit recall import
+continuum guide
+continuum summary [--cwd <path>] [--limit <number>]
+continuum record --content <text> [--cwd <path>] [--kind <kind>]
+                 [--tag <tag>]... [--supersedes <id>]...
+continuum search [--cwd <path>] [--query <text>] [--tag <tag>]...
+                 [--kind <kind>]... [--include-history]
+                 [--limit <number>] [--cursor <cursor>]
+continuum get [--cwd <path>] <ids...>
+continuum mcp
 ```
 
-- `memory append <user|agent|tool> <text...>` inserts one immutable journal row and refreshes `NOW.md`.
-- `memory consolidate [--dry-run]` summarizes a stable pending sequence range, retains every source row, and refreshes generated projections.
-- `memory search <query...>` searches raw journal and recall messages plus derived consolidations and recall summaries.
-- `memory recall status` reports canonical recall inventory.
-- `memory recall import [--db <path>] [--project <id>] [--session <id>] [--after <date>] [--limit <n>] [--dry-run]` manually imports OpenCode history.
-- `memory migrate [--dry-run]` explicitly imports legacy Markdown, preserves source files, records each artifact, and records each completed migration run.
+`--cwd` defaults to the process working directory. Relative values are resolved against that directory. Repeat `--tag`, `--kind`, or `--supersedes` for multiple values.
 
-Search filters:
+Examples:
 
-- `--tier <NOW|MEMORY|all>` selects pending raw journal evidence or derived history.
-- `--source <memory|recall|all>` selects canonical source families.
-- `--tags <comma-separated>` requires all listed journal tags.
-- `--after <ISO date>` filters by evidence time.
-- `--limit <n>` limits results after filtering and ranking.
+```sh
+continuum summary --cwd /work/project
 
-### Summary
+continuum record \
+  --cwd /work/project \
+  --content 'The cache key includes the schema version.' \
+  --kind decision \
+  --tag cache \
+  --tag schema
 
-`continuum summary` queries tasks and canonical SQLite memory directly. It does not read `NOW.md`, `RECENT.md`, or `MEMORY.md` to construct the briefing.
+continuum search --cwd /work/project --query 'cache schema' --tag cache
+continuum search --cwd /work/project --include-history --limit 20
+continuum get --cwd /work/project <record-id> <older-record-id>
+```
 
-Useful options are `--no-tasks`, `--no-memory`, `--limit <n>`, and `--memory-lines <n>`.
+CLI results use the same core shapes as MCP: complete records contain `id`, `kind`, `content`, `tags`, `createdAt`, `supersedes`, and `supersededBy`; paged results contain `records`, `hasMore`, and `nextCursor`; exact retrieval also contains `missingIds`.
+
+## Memory behavior
+
+### Logical workspaces
+
+Every memory operation identifies a workspace by path. Core normalizes the path and resolves it to one logical workspace in a central database.
+
+An already registered path keeps its identity. Otherwise Continuum inspects Git remotes, prefers normalized `origin`, records other remotes as aliases, and falls back to the canonical path when no Git identity exists. Equivalent common SSH and HTTPS remote forms share identity. Re-clones and Git worktrees for the same remote therefore recover the same memory.
+
+Continuum never silently merges or reassigns workspaces when path, descendant, or remote ownership conflicts. It returns a structured `WORKSPACE_ERROR` instead.
+
+### Immutable evidence and supersession
+
+Records retain complete content and are immutable. Omitted kind defaults to `observation`; kinds are open-ended, trimmed, and lowercased. Tags are trimmed, lowercased, deduplicated, and sorted.
+
+`supersedes` may reference only records in the same logical workspace. It adds relationships without rewriting old evidence. Search and summary hide superseded records by default. `includeHistory: true` includes them, and complete records show both `supersedes` and `supersededBy` IDs.
+
+Canonical records, tags, supersession relationships, and FTS updates commit atomically.
+
+### Search, browse, summary, and get
+
+An omitted or whitespace-only search query browses newest records by `createdAt DESC, id DESC`. A nonempty query is treated as ordinary text, escaped from FTS syntax, matched with SQLite FTS5, and ranked with BM25. Tags are weighted as strong retrieval anchors. A nonempty query with no searchable token returns an empty page rather than the unfiltered corpus.
+
+Tag filters require every requested normalized tag. Kind filters accept any requested normalized kind. Superseded history is excluded unless `includeHistory` is true. Search defaults to 20 records and accepts limits from 1 through 100.
+
+`nextCursor` is an opaque, versioned continuation token bound to the logical workspace, retrieval mode, normalized query and filters, history mode, and an internal record anchor. Page size may change between requests. Pagination is deterministic for an unchanged corpus; it is not a snapshot guarantee across concurrent writes, which may change BM25 ranking or current/history status.
+
+`continuum_summary` registers or resolves the workspace and returns workspace identity metadata plus the newest current records. Its default limit is 10. Its cursor continues through an otherwise unfiltered chronological search.
+
+Exact get accepts several IDs, returns complete records regardless of supersession, preserves first-request order after deduplication, and reports unavailable or wrong-workspace IDs in `missingIds`. Search and get do not register a truly unknown workspace; search returns an empty page and get reports its requested IDs missing.
+
+## Storage and failures
+
+Continuum stores one local database at the first applicable location:
+
+```text
+$CONTINUUM_DATA_DIR/continuum.db
+$XDG_DATA_HOME/continuum/continuum.db
+~/.local/share/continuum/continuum.db
+```
+
+The data directory and database are user-private on supported platforms. SQLite uses foreign keys, a 5-second busy timeout, WAL journal mode, `synchronous = NORMAL`, short transactions, and numbered migrations tracked with `PRAGMA user_version`. Canonical records remain authoritative; FTS is a rebuildable access path.
+
+Core failures use the small code set `WORKSPACE_ERROR`, `VALIDATION_ERROR`, `DATABASE_ERROR`, and `NOT_FOUND`. They identify the failed operation and include only safe diagnostic context, never record content, SQL, or stack traces in adapter output.
+
+## Legacy v1 importer
+
+`tools/import-v1` is a separate one-time operational utility, not part of the MCP or main CLI surface.
+
+Use a stable, checkpointed copy of the old SQLite database:
+
+```sh
+bun run tools/import-v1/src/index.ts \
+  --source /safe-copy/legacy.db \
+  --workspace /work/project \
+  [--data-dir /isolated/continuum-data]
+```
+
+The importer opens the source through immutable read-only SQLite, rejects nonempty WAL or rollback-journal sidecars, and rejects hard-linked or target-aliasing source files. It reads only raw journal rows. It preserves IDs and content, preserves canonical timestamps or losslessly normalizes equivalent explicit-timezone timestamps to UTC milliseconds, preserves kind semantics, and normalizes tags through core.
+
+It ignores task data, consolidations and summaries, recall/session data, checkpoints, migration bookkeeping, provenance fields, and generated Markdown files. The entire source is structurally validated before target construction.
+
+Repeated identical imports are idempotent. Reusing an ID for different canonical evidence or another workspace fails without overwrite. Imports are transactional per record rather than for the whole run: a safe prefix may remain after a later collision, and rerunning safely accepts that prefix before retrying the unresolved row.
 
 ## Architecture
 
-Commander is a thin argument adapter. Each memory or summary command creates one scoped Effect runtime containing explicit workspace, memory directory, database path, and one configured `bun:sqlite` handle. Application functions return Effects; the CLI boundary runs them and centrally renders success or tagged operational errors.
+Continuum is a Bun workspace with explicit dependency direction:
 
-SQLite uses:
+```text
+apps/cli ───────→ packages/core
+    │
+    └───────────→ packages/mcp ───────→ packages/core
 
-- `busy_timeout = 5000`
-- `foreign_keys = ON`
-- WAL journal mode for concurrent local CLI readers and writers
-- `synchronous = NORMAL`
-- short synchronous write transactions with no LLM or filesystem work inside them
-
-Canonical tables include:
-
-- `tasks`
-- `memory_checkpoints`, retained for legacy checkpoint migration
-- immutable `memory_journal_entries`
-- range-based `memory_consolidations`
-- `memory_recall_sources`, versioned raw `memory_recall_messages`, and current `memory_recall_summaries`
-- `memory_legacy_migrations` per-artifact audit records
-- `memory_legacy_migration_runs` completed-run markers
-
-Changed OpenCode sessions retain prior raw message versions indefinitely. Normal queries expose messages matching the source's current fingerprint and its current summary. Tool output is not imported as raw recall evidence.
-
-Generated files under `.continuum/memory/` are compatibility and portability projections:
-
-- `NOW.md` contains pending journal entries.
-- `RECENT.md`, `MEMORY-YYYY-MM-DD.md`, and `MEMORY.md` render completed consolidations.
-
-Deleting projections does not delete canonical memory. Normal append and consolidation operations regenerate the relevant output.
-
-## Configuration
-
-The database path and workspace are resolved explicitly for each CLI runtime. Optional consolidation and recall summarization settings are read from `.continuum/memory/config.yml` when present.
-
-LLM environment fallbacks include:
-
-- API key: `OPENCODE_ZEN_API_KEY`, then `CONSOLIDATION_API_KEY`, then `OPENAI_API_KEY`
-- Model: `SUMMARY_MODEL`, then `CONSOLIDATION_MODEL`, then the built-in default
-
-`XDG_DATA_HOME` changes automatic OpenCode database discovery from the default `~/.local/share/opencode/opencode.db`.
-
-## SDK
-
-The public SDK currently exposes task operations only:
-
-```ts
-import continuum from 'continuum-memory-mvp'
-
-await continuum.task.init()
-const task = await continuum.task.create({ title: 'Ship', type: 'feature' })
-await continuum.task.complete(task.id, { outcome: 'Shipped' })
+tools/import-v1 ──────────────────────→ packages/core
 ```
 
-Memory remains CLI-only; there is no public memory SDK compatibility contract.
+- `packages/core` owns workspace identity, records, supersession, retrieval, summary, migrations, and SQLite persistence.
+- `packages/mcp` owns strict Zod schemas, MCP tool registration, result mapping, lifecycle, and stdio transport behavior.
+- `apps/cli` owns Commander parsing, finite JSON output, direct CLI composition, and the `mcp` command.
+- `tools/import-v1` owns the isolated legacy source reader and import command.
+
+The workspace packages are private architectural boundaries, not a published embedding SDK.
 
 ## Development
 
-```sh
-bun run format
-bun run typecheck
-bun test
-bun run validate
-git diff --check
-```
-
-`bun run validate` runs typechecking, the full test suite, and goal-invariant verification. Migrations are additive SQL files under `drizzle/` and are applied by `src/db/migrate.ts`.
-
-See `CONTRIBUTING.md`, `AGENTS.md`, and `PLAN/CHECKLIST.md` for repository workflows and release scope.
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for setup, focused test commands, migration guidance, privacy rules, and the full validation workflow. Product and architectural values live in [AGENTS.md](./AGENTS.md); coding defaults live in [CODING_STANDARDS.md](./CODING_STANDARDS.md).
 
 ## License
 
-MIT. See `LICENSE`.
+MIT. See [LICENSE](./LICENSE).

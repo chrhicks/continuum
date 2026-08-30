@@ -4,7 +4,7 @@ Continuum gives coding agents durable, long-term memory. It preserves useful obs
 
 MCP is the primary interface. The CLI mirrors the same capabilities as a parity, scripting, and recovery surface rather than becoming a separate product.
 
-The repository is undergoing an intentional rebuild. Existing behavior reflects an earlier product that accumulated an SDK, task management, CLI workflows, memory projections, consolidation, and session recall over time. That history is not an architectural requirement. Preserve the value of Continuum, not every mechanism it has used.
+The repository intentionally implements a small memory product rather than a general agent workflow platform. Preserve the value of durable memory without adding adjacent systems that obscure the critical path.
 
 ## What Continuum should protect
 

@@ -2,19 +2,15 @@
 node_modules/
 dist/
 .env
+.env.*
 .tmp/
-
 .continuum/
-.continuum/memory/
-.continuum/continuum.db
-
-.opencode/
-
 .agents/
 
-runs/
-task-loop-opencode.json
-
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
 *.tmp
 *.lock
 !bun.lock

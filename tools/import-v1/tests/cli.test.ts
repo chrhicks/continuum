@@ -266,7 +266,7 @@ function countTargetRecords(dataDirectory: string): number {
 }
 
 function sourceSidecars(path: string): string[] {
-  return [`${path}-wal`, `${path}-shm`].filter(existsSync)
+  return [`${path}-wal`, `${path}-shm`, `${path}-journal`].filter(existsSync)
 }
 
 function targetSidecars(dataDirectory: string): string[] {
