@@ -24,8 +24,26 @@ class OwnedContinuumMcpServer extends McpServer {
     }
     try {
       await super.connect(transport)
+      const protocolClose = transport.onclose
+      transport.onclose = () => {
+        try {
+          protocolClose?.()
+        } finally {
+          this.closeContinuum()
+        }
+      }
     } catch (cause) {
-      this.closeContinuum()
+      try {
+        await super.close()
+      } catch {
+        // Preserve the connection failure; cleanup remains idempotent below.
+      } finally {
+        try {
+          this.closeContinuum()
+        } catch {
+          // The original connection failure remains the actionable cause.
+        }
+      }
       throw cause
     }
   }
@@ -64,8 +82,34 @@ export async function serveContinuumMcp(): Promise<void> {
   const server = createContinuumMcpServer()
   try {
     await server.connect(new StdioServerTransport())
-  } catch (cause) {
+    await waitForStdinEnd()
+  } finally {
     await server.close()
-    throw cause
   }
+}
+
+function waitForStdinEnd(): Promise<void> {
+  if (process.stdin.readableEnded || process.stdin.destroyed) {
+    return Promise.resolve()
+  }
+
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      process.stdin.off('end', onEnd)
+      process.stdin.off('close', onEnd)
+      process.stdin.off('error', onError)
+    }
+    const onEnd = () => {
+      cleanup()
+      resolve()
+    }
+    const onError = (cause: Error) => {
+      cleanup()
+      reject(cause)
+    }
+
+    process.stdin.once('end', onEnd)
+    process.stdin.once('close', onEnd)
+    process.stdin.once('error', onError)
+  })
 }

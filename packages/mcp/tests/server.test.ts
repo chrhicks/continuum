@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
+import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js'
 import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js'
 import { createContinuumMcpServer } from '@continuum/mcp'
 
@@ -116,6 +117,53 @@ describe('Continuum MCP tools', () => {
     await context.close()
     await context.server.close()
     expect(existsSync(context.dataDirectory)).toBe(false)
+  })
+
+  test('closes a partially started transport and permanently closes the owned core', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'continuum-mcp-connect-failure-'))
+    temporaryRoots.push(root)
+    const server = createContinuumMcpServer({
+      dataDirectory: join(root, 'data'),
+    })
+    const transport = new FailingTransport()
+    const connectionFailure = new Error('transport start failed')
+    transport.startFailure = connectionFailure
+
+    let caught: unknown
+    try {
+      await server.connect(transport)
+    } catch (cause) {
+      caught = cause
+    }
+
+    expect(caught).toBe(connectionFailure)
+    expect(transport.closeCount).toBe(1)
+    await expectRejected(server.connect(new FailingTransport()), 'closed')
+    await server.close()
+    await server.close()
+    expect(transport.closeCount).toBe(1)
+  })
+
+  test('closes core storage when transport closes despite a replaced close observer', async () => {
+    const context = await mcpContext('transport-close')
+    let observedClose = 0
+    try {
+      await record(context, {
+        workspace: context.workspace,
+        content: 'Transport lifecycle evidence.',
+      })
+      expect(hasSidecars(context.dataDirectory)).toBe(true)
+      context.server.server.onclose = () => {
+        observedClose += 1
+      }
+
+      await context.client.close()
+
+      expect(observedClose).toBe(1)
+      expect(hasSidecars(context.dataDirectory)).toBe(false)
+    } finally {
+      await context.close()
+    }
   })
 
   test('shares one isolated core across record, summary, search, and get', async () => {
@@ -272,6 +320,8 @@ describe('Continuum MCP tools', () => {
   test('rejects privileged or malformed input and maps safe core failures', async () => {
     const context = await mcpContext('errors')
     try {
+      await context.client.listTools()
+
       for (const arguments_ of [
         {
           workspace: context.workspace,
@@ -302,7 +352,8 @@ describe('Continuum MCP tools', () => {
         supersedes: ['missing-record'],
       })
       expect(missing.isError).toBe(true)
-      expect(missing.structuredContent).toEqual({
+      expect(missing.structuredContent).toBeUndefined()
+      expect(JSON.parse(textContent(missing))).toEqual({
         error: {
           code: 'NOT_FOUND',
           operation: 'record memory',
@@ -311,14 +362,51 @@ describe('Continuum MCP tools', () => {
         },
       })
       expect(textContent(missing)).not.toContain(privateContent)
-      expect(JSON.stringify(missing.structuredContent)).not.toContain(
-        privateContent,
-      )
     } finally {
       await context.close()
     }
   })
 })
+
+class FailingTransport implements Transport {
+  onclose?: Transport['onclose']
+  onerror?: Transport['onerror']
+  onmessage?: Transport['onmessage']
+  startFailure: Error = new Error('transport start failed')
+  closeCount = 0
+
+  async start(): Promise<void> {
+    throw this.startFailure
+  }
+
+  async send(): Promise<void> {}
+
+  async close(): Promise<void> {
+    this.closeCount += 1
+    this.onclose?.()
+  }
+}
+
+async function expectRejected(
+  promise: Promise<unknown>,
+  messagePart: string,
+): Promise<void> {
+  let caught: unknown
+  try {
+    await promise
+  } catch (cause) {
+    caught = cause
+  }
+  expect(caught).toBeInstanceOf(Error)
+  expect((caught as Error).message).toContain(messagePart)
+}
+
+function hasSidecars(dataDirectory: string): boolean {
+  return (
+    existsSync(join(dataDirectory, 'continuum.db-wal')) ||
+    existsSync(join(dataDirectory, 'continuum.db-shm'))
+  )
+}
 
 async function mcpContext(name: string, dataMustRemainAbsent = false) {
   const root = mkdtempSync(join(tmpdir(), `continuum-mcp-${name}-`))

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
@@ -76,6 +76,43 @@ describe('CLI and MCP adapter behavior', () => {
     }
 
     expect(existsSync(dataDir)).toBe(false)
+  }, 20_000)
+
+  test('closes stdio memory storage cleanly when the client ends stdin', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'continuum-stdio-memory-'))
+    const dataDirectory = join(root, 'data')
+    const workspace = join(root, 'workspace')
+    mkdirSync(workspace)
+    temporaryRoots.push(root)
+    const transport = new StdioClientTransport({
+      command: process.execPath,
+      args: [continuumBin, 'mcp'],
+      cwd: repoRoot,
+      env: processEnvironment({ CONTINUUM_DATA_DIR: dataDirectory }),
+      stderr: 'pipe',
+    })
+    const stderrChunks: string[] = []
+    transport.stderr?.on('data', (chunk) => stderrChunks.push(String(chunk)))
+    const client = new Client({ name: 'continuum-test', version: '1.0.0' })
+
+    try {
+      await client.connect(transport)
+      const result = await client.callTool({
+        name: 'continuum_memory_record',
+        arguments: {
+          workspace,
+          content: 'Real stdio lifecycle evidence.',
+        },
+      })
+      expect(result.isError).not.toBe(true)
+    } finally {
+      await client.close()
+    }
+
+    expect(existsSync(join(dataDirectory, 'continuum.db'))).toBe(true)
+    expect(existsSync(join(dataDirectory, 'continuum.db-wal'))).toBe(false)
+    expect(existsSync(join(dataDirectory, 'continuum.db-shm'))).toBe(false)
+    expect(stderrChunks.join('')).toBe('')
   }, 20_000)
 
   test('keeps Commander help human-readable without reporting an error', async () => {

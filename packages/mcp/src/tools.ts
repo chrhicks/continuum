@@ -355,10 +355,9 @@ function errorResult(cause: unknown, toolName: string): CallToolResult {
     content: [
       {
         type: 'text',
-        text: `Continuum returned a structured ${error.code} failure for ${error.operation}.`,
+        text: JSON.stringify({ error: structuredError }),
       },
     ],
-    structuredContent: { error: structuredError },
   }
 }
 
