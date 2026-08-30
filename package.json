@@ -6,7 +6,8 @@
   "type": "module",
   "workspaces": [
     "apps/*",
-    "packages/*"
+    "packages/*",
+    "tools/*"
   ],
   "bin": {
     "continuum": "apps/cli/src/index.ts"
@@ -15,7 +16,7 @@
     "continuum": "bun run apps/cli/src/index.ts",
     "format": "prettier --write .",
     "typecheck": "tsc --noEmit",
-    "test": "bun test packages/core packages/mcp apps/cli",
+    "test": "bun test packages/core packages/mcp apps/cli tools/import-v1",
     "validate": "bun run typecheck && bun run test",
     "install:global": "bun link",
     "setup": "bun install && bun run install:global"

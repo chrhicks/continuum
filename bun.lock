@@ -38,11 +38,23 @@
         "zod": "^3.25.0",
       },
     },
+    "tools/import-v1": {
+      "name": "@continuum/import-v1",
+      "version": "0.2.0",
+      "bin": {
+        "continuum-import-v1": "src/index.ts",
+      },
+      "dependencies": {
+        "@continuum/core": "workspace:*",
+      },
+    },
   },
   "packages": {
     "@continuum/cli": ["@continuum/cli@workspace:apps/cli"],
 
     "@continuum/core": ["@continuum/core@workspace:packages/core"],
+
+    "@continuum/import-v1": ["@continuum/import-v1@workspace:tools/import-v1"],
 
     "@continuum/mcp": ["@continuum/mcp@workspace:packages/mcp"],
 
