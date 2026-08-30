@@ -10,6 +10,9 @@ bash -n \
   "$root/bin/install-user" \
   "$root/bin/validate-continuum-worktree" \
   "$root/bin/verify-continuum-runtime"
+grep -Fq 'Record every evidence-backed finding' "$root/prompts/reviewer.md"
+grep -Fq 'complete finding ledger' "$root/prompts/reviewer.md"
+! grep -Rq 'AUDIT_PROPOSAL_LIM[I]T' "$root"
 set +e
 "$root/bin/validate-continuum-worktree" >/dev/null 2>&1
 helper_status=$?
@@ -343,7 +346,7 @@ exit 0
 EOF
 chmod +x "$tmp/run/bin/pi" "$tmp/run/bin/bun" \
   "$tmp/run/bin/executor" "$tmp/run/bin/systemctl"
-printf '# Test prompt\n' > "$tmp/run/prompt.md"
+cp "$root/prompts/reviewer.md" "$tmp/run/prompt.md"
 printf '{"mcpServers":{"executor":{"command":"%s","args":["mcp"]}}}\n' \
   "$tmp/run/bin/executor" > "$tmp/run/config/mcp/mcp.json"
 cat > "$tmp/run/config/linear-agent/test.env" <<EOF
@@ -390,6 +393,12 @@ grep -q 'continuum_runtime workspace=' "$tmp/dry-run.log"
 grep -q 'database=.*/continuum/projects/test/continuum.db' "$tmp/dry-run.log"
 grep -q 'dry run: would execute' "$tmp/dry-run.log"
 grep -q -- '--model openai-codex/gpt-5.6-luna' "$tmp/dry-run.log"
+run_prompt=$(find "$tmp/run/state/linear-agent/test/runs" \
+  -type f -name '*.prompt.md' -print -quit)
+[[ -f $run_prompt ]]
+grep -Fq 'Record every evidence-backed finding' "$run_prompt"
+grep -Fq 'complete finding ledger' "$run_prompt"
+! grep -q 'Audit proposal limit' "$run_prompt"
 [[ -z $(git -C "$tmp/run/repo" status --porcelain=v1) ]]
 
 set +e

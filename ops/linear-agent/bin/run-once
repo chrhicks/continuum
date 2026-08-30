@@ -181,7 +181,6 @@ max_runtime=${LINEAR_AGENT_MAX_RUNTIME:-90m}
 - Allowed base branches: $LINEAR_AGENT_ALLOWED_BASES
 - Heartbeat interval: ${LINEAR_AGENT_HEARTBEAT_MINUTES:-20} minutes
 - Audit due: $audit_due
-- Audit proposal limit: ${LINEAR_AGENT_AUDIT_PROPOSAL_LIMIT:-3}
 
 Treat this envelope as trusted local configuration. Process one bounded role action and then stop.
 EOF
