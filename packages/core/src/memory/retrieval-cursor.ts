@@ -1,6 +1,5 @@
 import { createHash, timingSafeEqual } from 'node:crypto'
 import { ContinuumError } from '../errors'
-import { isCanonicalMemoryTimestamp } from './records'
 
 export type RetrievalMode = 'chronological' | 'fts'
 
@@ -12,10 +11,6 @@ export type CursorScope = {
   kinds: string[]
   includeHistory: boolean
 }
-
-export type CursorPosition =
-  | { mode: 'chronological'; createdAt: string; id: string }
-  | { mode: 'fts'; score: number; createdAt: string; id: string }
 
 type EncodedCursor = {
   v: number
@@ -29,24 +24,16 @@ export const maximumCursorLength = 4_096
 
 export function encodeRetrievalCursor(
   scope: CursorScope,
-  position: CursorPosition,
+  recordRowid: number,
 ): string {
-  const cursor: EncodedCursor = {
-    v: cursorVersion,
-    m: scope.mode,
-    s: hashScope(scope),
-    p:
-      position.mode === 'chronological'
-        ? { t: position.createdAt, id: position.id }
-        : { r: position.score, t: position.createdAt, id: position.id },
-  }
+  const cursor = canonicalCursor(scope, recordRowid)
   return Buffer.from(JSON.stringify(cursor), 'utf8').toString('base64url')
 }
 
 export function decodeRetrievalCursor(
   value: string,
   expectedScope: CursorScope,
-): CursorPosition {
+): number {
   try {
     if (
       !value ||
@@ -71,54 +58,48 @@ export function decodeRetrievalCursor(
       cursor.m !== expectedScope.mode ||
       typeof cursor.s !== 'string' ||
       !/^[a-f0-9]{64}$/.test(cursor.s) ||
-      !isObject(cursor.p)
+      !isObject(cursor.p) ||
+      !hasExactKeys(cursor.p, ['n'])
     ) {
       throw new Error('unsupported cursor')
     }
-    const expectedHash = hashScope(expectedScope)
-    if (!safeEqual(cursor.s, expectedHash)) {
-      throw new Error('cursor scope mismatch')
-    }
-
-    if (cursor.m === 'chronological') {
-      if (!hasExactKeys(cursor.p, ['t', 'id'])) throw new Error('bad position')
-      const createdAt = cursor.p.t
-      const id = cursor.p.id
-      if (
-        typeof createdAt !== 'string' ||
-        !isCanonicalMemoryTimestamp(createdAt) ||
-        typeof id !== 'string' ||
-        !id
-      ) {
-        throw new Error('bad position')
-      }
-      return { mode: 'chronological', createdAt, id }
-    }
-
-    if (!hasExactKeys(cursor.p, ['r', 't', 'id'])) {
-      throw new Error('bad position')
-    }
-    const score = cursor.p.r
-    const createdAt = cursor.p.t
-    const id = cursor.p.id
+    const recordRowid = cursor.p.n
     if (
-      typeof score !== 'number' ||
-      !Number.isFinite(score) ||
-      typeof createdAt !== 'string' ||
-      !isCanonicalMemoryTimestamp(createdAt) ||
-      typeof id !== 'string' ||
-      !id
+      typeof recordRowid !== 'number' ||
+      !Number.isSafeInteger(recordRowid) ||
+      recordRowid < 1
     ) {
-      throw new Error('bad position')
+      throw new Error('bad cursor anchor')
     }
-    return { mode: 'fts', score, createdAt, id }
+
+    const canonical = canonicalCursor(expectedScope, recordRowid)
+    if (!safeEqual(cursor.s, canonical.s)) {
+      throw new Error('cursor integrity mismatch')
+    }
+    if (bytes.toString('utf8') !== JSON.stringify(canonical)) {
+      throw new Error('noncanonical cursor JSON')
+    }
+
+    return recordRowid
   } catch (cause) {
     if (cause instanceof ContinuumError) throw cause
     throw invalidCursor(cause)
   }
 }
 
-function hashScope(scope: CursorScope): string {
+function canonicalCursor(
+  scope: CursorScope,
+  recordRowid: number,
+): EncodedCursor {
+  return {
+    v: cursorVersion,
+    m: scope.mode,
+    s: hashScopeAndAnchor(scope, recordRowid),
+    p: { n: recordRowid },
+  }
+}
+
+function hashScopeAndAnchor(scope: CursorScope, recordRowid: number): string {
   return createHash('sha256')
     .update(
       JSON.stringify([
@@ -129,6 +110,7 @@ function hashScope(scope: CursorScope): string {
         scope.tags,
         scope.kinds,
         scope.includeHistory,
+        recordRowid,
       ]),
     )
     .digest('hex')

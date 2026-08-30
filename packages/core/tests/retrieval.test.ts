@@ -101,8 +101,8 @@ describe('workspace memory retrieval', () => {
         context,
         { workspace: context.firstWorkspace, query: 'pagination anchor' },
         [1, 2],
-      ).sort(),
-    ).toEqual([...chronologicalIds].sort())
+      ),
+    ).toEqual(expected)
     context.close()
   })
 
@@ -172,6 +172,10 @@ describe('workspace memory retrieval', () => {
       content:
         'Keep src/foo-bar.ts, $HOME, "quoted text", alpha beta, and $(rm -rf /) literal.',
     })
+    context.continuum.record({
+      workspace: context.firstWorkspace,
+      content: 'Completely unrelated evidence must not leak into a query.',
+    })
 
     for (const query of [
       'src/foo-bar.ts',
@@ -209,12 +213,56 @@ describe('workspace memory retrieval', () => {
         query: '"quoted text"',
       }).records,
     ).toHaveLength(1)
-    expect(
-      context.continuum.search({
+    for (const query of ['***', '"', '()', '☃']) {
+      expect(
+        context.continuum.search({
+          workspace: context.firstWorkspace,
+          query,
+        }),
+      ).toEqual({ records: [], hasMore: false, nextCursor: null })
+      expect(() =>
+        context.continuum.search({
+          workspace: context.firstWorkspace,
+          query,
+          cursor: 'cannot-exist',
+        }),
+      ).toThrow(ContinuumError)
+    }
+    context.close()
+  })
+
+  test('keeps cursors bounded when imported public IDs are arbitrarily long', () => {
+    const context = testContext()
+    const importer = context.importer()
+    const lowerId = `a-${'x'.repeat(5_000)}`
+    const higherId = `z-${'x'.repeat(5_000)}`
+    for (const id of [lowerId, higherId]) {
+      importer.importRecord({
         workspace: context.firstWorkspace,
-        query: '***',
-      }).records,
-    ).toHaveLength(1)
+        id,
+        createdAt: '2026-05-10T00:00:00.000Z',
+        content: 'Bounded cursor anchor',
+        tags: ['bounded-cursor'],
+      })
+    }
+    importer.close()
+
+    for (const input of [
+      { workspace: context.firstWorkspace },
+      { workspace: context.firstWorkspace, query: 'bounded cursor anchor' },
+    ]) {
+      const first = context.continuum.search({ ...input, limit: 1 })
+      expect(first.records.map(({ id }) => id)).toEqual([higherId])
+      expect(first.nextCursor).toEqual(expect.any(String))
+      expect((first.nextCursor as string).length).toBeLessThan(4_096)
+      const second = context.continuum.search({
+        ...input,
+        limit: 100,
+        cursor: first.nextCursor as string,
+      })
+      expect(second.records.map(({ id }) => id)).toEqual([lowerId])
+      expect(second.hasMore).toBe(false)
+    }
     context.close()
   })
 
@@ -262,6 +310,7 @@ describe('workspace memory retrieval', () => {
     expect(ftsFirst.nextCursor).toEqual(expect.any(String))
 
     for (const input of [
+      { cursor: '' },
       { cursor: 'not+base64' },
       { cursor: `${cursor}=` },
       { cursor, query: 'cursor' },
@@ -285,25 +334,27 @@ describe('workspace memory retrieval', () => {
       }),
     ).toThrow(ContinuumError)
 
-    const decoded = JSON.parse(
-      Buffer.from(cursor, 'base64url').toString('utf8'),
-    ) as Record<string, unknown>
-    decoded.v = 2
-    const unsupported = Buffer.from(JSON.stringify(decoded)).toString(
-      'base64url',
-    )
-    try {
+    context.continuum.record({
+      workspace: context.firstWorkspace,
+      content: 'The cursor anchor is no longer current.',
+      tags: ['cursor'],
+      supersedes: [first.records[0]!.id],
+    })
+    expect(() =>
       context.continuum.search({
         workspace: context.firstWorkspace,
         tags: ['cursor'],
-        cursor: unsupported,
-      })
-    } catch (error) {
-      expect(error).toMatchObject({
-        code: 'VALIDATION_ERROR',
-        operation: 'search memory',
-      })
-    }
+        cursor,
+      }),
+    ).toThrow(ContinuumError)
+    expect(() =>
+      context.continuum.search({
+        workspace: context.firstWorkspace,
+        query: 'cursor anchor',
+        cursor: ftsFirst.nextCursor as string,
+      }),
+    ).toThrow(ContinuumError)
+
     context.close()
   })
 
@@ -338,6 +389,7 @@ describe('workspace memory retrieval', () => {
     expect(summary.hasMore).toBe(true)
     const continuation = context.continuum.search({
       workspace: context.firstWorkspace,
+      query: '   ',
       cursor: summary.nextCursor as string,
     })
     expect(continuation.records).toHaveLength(2)
@@ -448,6 +500,9 @@ describe('workspace memory retrieval', () => {
         cursor: firstPage.nextCursor as string,
       }),
     ).toThrow(ContinuumError)
+    expect(() =>
+      context.continuum.search({ workspace: unknown, cursor: '' }),
+    ).toThrow(ContinuumError)
     expect(context.continuum.search({ workspace: unknown })).toEqual({
       records: [],
       hasMore: false,
@@ -553,12 +608,19 @@ describe('workspace memory retrieval', () => {
     database.exec('DROP TABLE memory_fts')
     database.close()
     const reopened = createContinuum({ dataDirectory: context.dataDirectory })
-    expect(() =>
+    let searchFailure: unknown
+    try {
       reopened.search({
         workspace: context.firstWorkspace,
         query: 'canonical',
-      }),
-    ).toThrow(ContinuumError)
+      })
+    } catch (error) {
+      searchFailure = error
+    }
+    expect(searchFailure).toMatchObject({
+      code: 'DATABASE_ERROR',
+      operation: 'search memory',
+    })
     expect(
       reopened.search({ workspace: context.firstWorkspace }).records,
     ).toEqual([record])

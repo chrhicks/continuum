@@ -11,7 +11,6 @@ import {
   decodeRetrievalCursor,
   encodeRetrievalCursor,
   maximumCursorLength,
-  type CursorPosition,
   type CursorScope,
   type RetrievalMode,
 } from './retrieval-cursor'
@@ -55,6 +54,7 @@ export type WorkspaceSummaryResult = MemorySearchResult & {
 type NormalizedSearch = {
   query: string | null
   ftsExpression: string | null
+  hasTokenlessQuery: boolean
   tags: string[]
   kinds: string[]
   includeHistory: boolean
@@ -87,7 +87,7 @@ export function searchMemory(
     return database.transaction(() => {
       const workspace = lookupPreparedWorkspace(database, preparedWorkspace)
       if (!workspace) {
-        if (search.cursor) throwUnknownWorkspaceCursor(search)
+        if (search.cursor !== null) throwInvalidSearchCursor()
         return emptySearchResult()
       }
       return readSearchPage(database, workspace.id, search)
@@ -150,6 +150,7 @@ export function summarizeWorkspace(
   const search: NormalizedSearch = {
     query: null,
     ftsExpression: null,
+    hasTokenlessQuery: false,
     tags: [],
     kinds: [],
     includeHistory: false,
@@ -181,14 +182,31 @@ function readSearchPage(
   workspaceId: string,
   search: NormalizedSearch,
 ): MemorySearchResult {
+  if (search.hasTokenlessQuery) return emptySearchResult()
+
   const mode: RetrievalMode = search.ftsExpression ? 'fts' : 'chronological'
   const scope = cursorScope(workspaceId, mode, search)
-  const position = search.cursor
-    ? decodeRetrievalCursor(search.cursor, scope)
-    : null
+  const anchorRowid =
+    search.cursor !== null ? decodeRetrievalCursor(search.cursor, scope) : null
+  const position =
+    anchorRowid !== null
+      ? resolveCursorPosition(database, workspaceId, search, mode, anchorRowid)
+      : null
   const candidates = search.ftsExpression
     ? findFtsCandidates(database, workspaceId, search, position)
     : findChronologicalCandidates(database, workspaceId, search, position)
+  if (
+    mode === 'fts' &&
+    candidates.some(
+      ({ score }) => score === undefined || !Number.isFinite(score),
+    )
+  ) {
+    throw new ContinuumError({
+      code: 'DATABASE_ERROR',
+      operation: 'search memory',
+      message: 'A full-text result did not have a valid rank.',
+    })
+  }
   const hasMore = candidates.length > search.limit
   const pageCandidates = candidates.slice(0, search.limit)
   const recordsByRowid = readMemoryRecords(
@@ -212,23 +230,74 @@ function readSearchPage(
     records,
     hasMore,
     nextCursor:
-      hasMore && last
-        ? encodeRetrievalCursor(scope, candidatePosition(mode, last))
-        : null,
+      hasMore && last ? encodeRetrievalCursor(scope, last.rowid) : null,
   }
+}
+
+function resolveCursorPosition(
+  database: Database,
+  workspaceId: string,
+  search: NormalizedSearch,
+  mode: RetrievalMode,
+  recordRowid: number,
+): Candidate {
+  const { clauses, parameters } = canonicalFilters('r', search)
+  const candidate =
+    mode === 'chronological'
+      ? (database
+          .query(
+            `SELECT r.rowid, r.id, r.created_at
+             FROM memory_records r
+             WHERE r.rowid = ?
+               AND r.workspace_id = ?
+               AND ${clauses.join('\n               AND ')}`,
+          )
+          .get(recordRowid, workspaceId, ...parameters) as Candidate | null)
+      : (database
+          .query(
+            `SELECT
+               r.rowid,
+               r.id,
+               r.created_at,
+               bm25(memory_fts, 1.0, 3.0, 6.0) AS score
+             FROM memory_fts
+             JOIN memory_records r ON r.rowid = memory_fts.rowid
+             WHERE memory_fts MATCH ?
+               AND r.rowid = ?
+               AND r.workspace_id = ?
+               AND ${clauses.join('\n               AND ')}`,
+          )
+          .get(
+            search.ftsExpression,
+            recordRowid,
+            workspaceId,
+            ...parameters,
+          ) as Candidate | null)
+
+  if (!candidate) throwInvalidSearchCursor()
+  if (
+    mode === 'fts' &&
+    (candidate.score === undefined || !Number.isFinite(candidate.score))
+  ) {
+    throw new ContinuumError({
+      code: 'DATABASE_ERROR',
+      operation: 'search memory',
+      message: 'A full-text cursor anchor did not have a valid rank.',
+    })
+  }
+  return candidate
 }
 
 function findChronologicalCandidates(
   database: Database,
   workspaceId: string,
   search: NormalizedSearch,
-  position: CursorPosition | null,
+  position: Candidate | null,
 ): Candidate[] {
   const { clauses, parameters } = canonicalFilters('r', search)
-  const cursor = position?.mode === 'chronological' ? position : null
-  if (cursor) {
+  if (position) {
     clauses.push(`(r.created_at < ? OR (r.created_at = ? AND r.id < ?))`)
-    parameters.push(cursor.createdAt, cursor.createdAt, cursor.id)
+    parameters.push(position.created_at, position.created_at, position.id)
   }
 
   return database
@@ -247,25 +316,41 @@ function findFtsCandidates(
   database: Database,
   workspaceId: string,
   search: NormalizedSearch,
-  position: CursorPosition | null,
+  position: Candidate | null,
 ): Candidate[] {
   const { clauses, parameters } = canonicalFilters('r', search)
-  const cursor = position?.mode === 'fts' ? position : null
-  const cursorClause = cursor
+  const expression = search.ftsExpression
+  if (!expression) {
+    throw new ContinuumError({
+      code: 'DATABASE_ERROR',
+      operation: 'search memory',
+      message: 'A full-text search did not have a search expression.',
+    })
+  }
+  const cursorClause = position
     ? `WHERE score > ?
          OR (score = ? AND created_at < ?)
          OR (score = ? AND created_at = ? AND id < ?)`
     : ''
-  const cursorParameters = cursor
-    ? [
-        cursor.score,
-        cursor.score,
-        cursor.createdAt,
-        cursor.score,
-        cursor.createdAt,
-        cursor.id,
-      ]
-    : []
+  const cursorParameters: Array<string | number> = []
+  if (position) {
+    const score = position.score
+    if (score === undefined || !Number.isFinite(score)) {
+      throw new ContinuumError({
+        code: 'DATABASE_ERROR',
+        operation: 'search memory',
+        message: 'A full-text cursor anchor did not have a valid rank.',
+      })
+    }
+    cursorParameters.push(
+      score,
+      score,
+      position.created_at,
+      score,
+      position.created_at,
+      position.id,
+    )
+  }
 
   return database
     .query(
@@ -288,7 +373,7 @@ function findFtsCandidates(
        LIMIT ?`,
     )
     .all(
-      search.ftsExpression,
+      expression,
       workspaceId,
       ...parameters,
       ...cursorParameters,
@@ -336,6 +421,7 @@ function canonicalFilters(
 function normalizeSearch(input: SearchMemoryInput): NormalizedSearch {
   const operation = 'search memory'
   let query: string | null = null
+  let ftsExpression: string | null = null
   if (input.query !== undefined) {
     if (typeof input.query !== 'string') {
       throw validationError('Search query must be text.', operation)
@@ -344,7 +430,9 @@ function normalizeSearch(input: SearchMemoryInput): NormalizedSearch {
     if (normalized.length > maximumQueryLength) {
       throw validationError('Search query is too long.', operation)
     }
-    query = normalized && hasFtsToken(normalized) ? normalized : null
+    query = normalized || null
+    ftsExpression =
+      query && hasFtsToken(query) ? ordinaryTextFtsExpression(query) : null
   }
 
   if (
@@ -356,18 +444,25 @@ function normalizeSearch(input: SearchMemoryInput): NormalizedSearch {
   if (input.cursor !== undefined && typeof input.cursor !== 'string') {
     throw validationError('Search cursor must be text.', operation)
   }
+  if (input.cursor === '') {
+    throw validationError('Search cursor must not be empty.', operation)
+  }
   if ((input.cursor?.length ?? 0) > maximumCursorLength) {
     throw validationError('Search cursor is too long.', operation)
   }
+  const cursor = input.cursor ?? null
+  const hasTokenlessQuery = query !== null && ftsExpression === null
+  if (hasTokenlessQuery && cursor !== null) throwInvalidSearchCursor()
 
   return {
     query,
-    ftsExpression: query ? ordinaryTextFtsExpression(query) : null,
+    ftsExpression,
+    hasTokenlessQuery,
     tags: normalizeFilter(input.tags, 'tags', operation),
     kinds: normalizeFilter(input.kinds, 'kinds', operation),
     includeHistory: input.includeHistory ?? false,
     limit: normalizeLimit(input.limit, defaultSearchLimit, operation),
-    cursor: input.cursor ?? null,
+    cursor,
   }
 }
 
@@ -468,39 +563,7 @@ function cursorScope(
   }
 }
 
-function candidatePosition(
-  mode: RetrievalMode,
-  candidate: Candidate,
-): CursorPosition {
-  if (mode === 'chronological') {
-    return {
-      mode,
-      createdAt: candidate.created_at,
-      id: candidate.id,
-    }
-  }
-  if (candidate.score === undefined || !Number.isFinite(candidate.score)) {
-    throw new ContinuumError({
-      code: 'DATABASE_ERROR',
-      operation: 'search memory',
-      message: 'A full-text result did not have a valid rank.',
-    })
-  }
-  return {
-    mode,
-    score: candidate.score,
-    createdAt: candidate.created_at,
-    id: candidate.id,
-  }
-}
-
-function throwUnknownWorkspaceCursor(search: NormalizedSearch): never {
-  const scope = cursorScope(
-    'unknown-workspace',
-    search.ftsExpression ? 'fts' : 'chronological',
-    search,
-  )
-  decodeRetrievalCursor(search.cursor as string, scope)
+function throwInvalidSearchCursor(): never {
   throw validationError(
     'The search cursor is invalid or does not match this search.',
     'search memory',
