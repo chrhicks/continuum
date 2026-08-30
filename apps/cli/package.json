@@ -1,0 +1,17 @@
+{
+  "name": "@continuum/cli",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "continuum": "src/index.ts"
+  },
+  "dependencies": {
+    "@continuum/core": "workspace:*",
+    "@continuum/mcp": "workspace:*",
+    "commander": "^14.0.3"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/sdk": "1.29.0"
+  }
+}
