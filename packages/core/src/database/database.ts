@@ -86,6 +86,12 @@ export function enableWalJournalMode(
   database: SqliteExecutor,
   timeoutMs = defaultBusyTimeoutMs,
 ): void {
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    throw new Error(
+      'WAL journal mode timeout must be a positive finite number.',
+    )
+  }
+
   const deadline = performance.now() + timeoutMs
   let lastLock: unknown
 

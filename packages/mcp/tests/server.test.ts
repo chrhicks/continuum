@@ -34,16 +34,30 @@ describe('Continuum MCP tools', () => {
       expectToolShape(
         tools.get('continuum_guide'),
         [],
+        [],
+        ['version', 'purpose', 'workflow', 'operations', 'recordKinds'],
         ['version', 'purpose', 'workflow', 'operations', 'recordKinds'],
       )
       expectToolShape(
         tools.get('continuum_summary'),
         ['workspace', 'limit'],
+        ['workspace'],
+        ['workspace', 'records', 'hasMore', 'nextCursor'],
         ['workspace', 'records', 'hasMore', 'nextCursor'],
       )
       expectToolShape(
         tools.get('continuum_memory_record'),
         ['workspace', 'content', 'kind', 'tags', 'supersedes'],
+        ['workspace', 'content'],
+        [
+          'id',
+          'kind',
+          'content',
+          'tags',
+          'createdAt',
+          'supersedes',
+          'supersededBy',
+        ],
         [
           'id',
           'kind',
@@ -65,11 +79,15 @@ describe('Continuum MCP tools', () => {
           'limit',
           'cursor',
         ],
+        ['workspace'],
+        ['records', 'hasMore', 'nextCursor'],
         ['records', 'hasMore', 'nextCursor'],
       )
       expectToolShape(
         tools.get('continuum_memory_get'),
         ['workspace', 'ids'],
+        ['workspace', 'ids'],
+        ['records', 'missingIds'],
         ['records', 'missingIds'],
       )
 
@@ -83,21 +101,27 @@ describe('Continuum MCP tools', () => {
       expect(
         schemaProperties(tools.get('continuum_summary')).limit,
       ).toMatchObject({ type: 'integer', minimum: 1, maximum: 100 })
+      const recordProperties = schemaProperties(
+        tools.get('continuum_memory_record'),
+      )
+      expectTextArraySchema(recordProperties.tags)
+      expectTextArraySchema(recordProperties.supersedes)
+
       const searchProperties = schemaProperties(
         tools.get('continuum_memory_search'),
       )
       expect(searchProperties.query).not.toHaveProperty('maxLength')
-      expect(searchProperties.tags).not.toHaveProperty('maxItems')
-      expect(searchProperties.kinds).not.toHaveProperty('maxItems')
+      expectTextArraySchema(searchProperties.tags)
+      expectTextArraySchema(searchProperties.kinds)
       expect(searchProperties.limit).toMatchObject({
         type: 'integer',
         minimum: 1,
         maximum: 100,
       })
       expect(searchProperties.cursor).toMatchObject({ maxLength: 4_096 })
+
       const getIds = schemaProperties(tools.get('continuum_memory_get')).ids
-      expect(getIds).toMatchObject({ minItems: 1 })
-      expect(getIds).not.toHaveProperty('maxItems')
+      expectTextArraySchema(getIds, 1)
     } finally {
       await context.close()
     }
@@ -140,6 +164,74 @@ describe('Continuum MCP tools', () => {
       }
       expect(textContent(unknownKeyResult)).not.toContain('😀'.repeat(100))
       expect(textContent(malformedArrayResult)).not.toContain('[9999]')
+      expect(existsSync(context.dataDirectory)).toBe(false)
+    } finally {
+      await context.close()
+    }
+  })
+
+  test('rejects reserved prototype input before SDK request parsing', async () => {
+    const context = await mcpContext('reserved-prototype', true)
+    mkdirSync(context.workspace)
+    try {
+      const listed = await context.client.listTools()
+      const recordTool = listed.tools.find(
+        ({ name }) => name === 'continuum_memory_record',
+      )
+      expect(recordTool?.inputSchema.additionalProperties).toBe(false)
+
+      const content = 'Reserved prototype input must not be stored.'
+      const arguments_: Record<string, unknown> = {
+        workspace: context.workspace,
+        content,
+      }
+      Object.defineProperty(arguments_, '__proto__', {
+        value: true,
+        enumerable: true,
+        configurable: true,
+        writable: true,
+      })
+      expect(Object.hasOwn(arguments_, '__proto__')).toBe(true)
+      expect(
+        Object.getOwnPropertyDescriptor(arguments_, '__proto__')?.enumerable,
+      ).toBe(true)
+
+      const reservedResult = await call(
+        context.client,
+        'continuum_memory_record',
+        arguments_,
+      )
+      const reservedText = textContent(reservedResult)
+      expect(Object.hasOwn(arguments_, '__proto__')).toBe(true)
+      expect(arguments_['__proto__']).toBe(true)
+      expect(arguments_.content).toBe(content)
+      expect(reservedResult.isError).toBe(true)
+      expect(reservedResult.structuredContent).toBeUndefined()
+      expect(reservedText).toContain('Input validation error:')
+      expect(reservedText).not.toContain(content)
+      expect(reservedText.length).toBeLessThanOrEqual(
+        maximumSerializedErrorLength,
+      )
+      expect(Buffer.byteLength(reservedText, 'utf8')).toBeLessThanOrEqual(
+        maximumSerializedErrorLength,
+      )
+      expect(existsSync(context.dataDirectory)).toBe(false)
+
+      await expectRejected(
+        call(context.client, 'continuum_guide', { constructor: true }),
+        'expected record',
+      )
+      const prototypeResult = await call(context.client, 'continuum_guide', {
+        prototype: true,
+      })
+      expect(prototypeResult.isError).toBe(true)
+      expect(prototypeResult.structuredContent).toBeUndefined()
+      expect(textContent(prototypeResult)).toContain('Input validation error:')
+      expect(existsSync(context.dataDirectory)).toBe(false)
+
+      const guide = await call(context.client, 'continuum_guide', {})
+      expect(guide.isError).not.toBe(true)
+      expect(guide.structuredContent).toMatchObject({ version: 1 })
       expect(existsSync(context.dataDirectory)).toBe(false)
     } finally {
       await context.close()
@@ -851,19 +943,37 @@ async function record(
 function expectToolShape(
   tool: Tool | undefined,
   inputProperties: string[],
+  inputRequired: string[],
   outputProperties: string[],
+  outputRequired: string[],
 ): void {
   expect(tool).toBeDefined()
   expect(tool?.inputSchema.type).toBe('object')
   expect(tool?.inputSchema.additionalProperties).toBe(false)
   expect(Object.keys(tool?.inputSchema.properties ?? {}).sort()).toEqual(
-    inputProperties.sort(),
+    [...inputProperties].sort(),
+  )
+  expect([...(tool?.inputSchema.required ?? [])].sort()).toEqual(
+    [...inputRequired].sort(),
   )
   expect(tool?.outputSchema?.type).toBe('object')
   expect(tool?.outputSchema?.additionalProperties).toBe(false)
   expect(Object.keys(tool?.outputSchema?.properties ?? {}).sort()).toEqual(
-    outputProperties.sort(),
+    [...outputProperties].sort(),
   )
+  expect([...(tool?.outputSchema?.required ?? [])].sort()).toEqual(
+    [...outputRequired].sort(),
+  )
+}
+
+function expectTextArraySchema(
+  schema: Record<string, unknown>,
+  minimumItems?: number,
+): void {
+  expect(schema).toMatchObject({ type: 'array', items: { type: 'string' } })
+  if (minimumItems === undefined) expect(schema).not.toHaveProperty('minItems')
+  else expect(schema).toMatchObject({ minItems: minimumItems })
+  expect(schema).not.toHaveProperty('maxItems')
 }
 
 function schemaProperties(

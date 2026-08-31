@@ -8,6 +8,7 @@ import {
   type ContinuumErrorCode,
 } from '@continuum/core'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import { boundedTextArray, strictInputObject } from './input-boundary'
 
 const workspacePathSchema = z
   .string()
@@ -21,46 +22,6 @@ const kindSchema = z
   .describe(
     'Open-ended memory kind, such as observation, decision, preference, or lesson.',
   )
-
-const unknownInputKey = '__continuum_unknown_input__'
-
-function strictInputObject<Shape extends z.ZodRawShape>(shape: Shape) {
-  const knownKeys = new Set(Object.keys(shape))
-  const objectSchema = z.object(shape).strict()
-  const inputSchema = z.preprocess((value) => {
-    if (!isPlainObject(value)) return value
-    if (!Object.keys(value).some((key) => !knownKeys.has(key))) return value
-
-    const bounded: Record<string, unknown> = {}
-    for (const key of knownKeys) {
-      if (Object.hasOwn(value, key)) bounded[key] = value[key]
-    }
-    bounded[unknownInputKey] = true
-    return bounded
-  }, objectSchema)
-
-  // SDK 1.29 recognizes object schemas through this property before its JSON
-  // Schema converter unwraps the preprocessing effect using the input shape.
-  Object.defineProperty(inputSchema, 'shape', { value: objectSchema.shape })
-  return inputSchema
-}
-
-function boundedTextArray(item: z.ZodString, minimumLength?: number) {
-  let arraySchema = z.array(item)
-  if (minimumLength !== undefined) arraySchema = arraySchema.min(minimumLength)
-
-  return z.preprocess((value) => {
-    if (!Array.isArray(value)) return value
-    for (const entry of value) {
-      if (typeof entry !== 'string') return null
-    }
-    return value
-  }, arraySchema)
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
-}
 
 const memoryRecordSchema = z
   .object({

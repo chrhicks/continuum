@@ -6,6 +6,7 @@ import {
   type Continuum,
   type DataPathOptions,
 } from '@continuum/core'
+import { ContinuumInputTransport } from './input-boundary'
 import { registerContinuumTools } from './tools'
 
 class OwnedContinuumMcpServer extends McpServer {
@@ -37,10 +38,11 @@ class OwnedContinuumMcpServer extends McpServer {
       }
     }
 
+    const inputTransport = new ContinuumInputTransport(transport)
     try {
-      await super.connect(transport)
-      const protocolClose = transport.onclose
-      transport.onclose = () => {
+      await super.connect(inputTransport)
+      const protocolClose = inputTransport.onclose
+      inputTransport.onclose = () => {
         try {
           protocolClose?.()
         } finally {

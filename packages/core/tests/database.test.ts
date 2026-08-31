@@ -81,6 +81,21 @@ describe('central Continuum database', () => {
   })
 
   test('bounds WAL lock retries and immediately preserves other failures', () => {
+    let invalidTimeoutAttempts = 0
+    for (const timeout of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(() =>
+        enableWalJournalMode(
+          {
+            exec() {
+              invalidTimeoutAttempts += 1
+            },
+          },
+          timeout,
+        ),
+      ).toThrow('WAL journal mode timeout must be a positive finite number.')
+    }
+    expect(invalidTimeoutAttempts).toBe(0)
+
     const lockFailure = Object.assign(new Error('database remains locked'), {
       code: 'SQLITE_BUSY',
     })
