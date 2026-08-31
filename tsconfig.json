@@ -6,12 +6,7 @@
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "types": ["bun-types"],
-    "resolveJsonModule": true,
-    "baseUrl": ".",
-    "paths": {
-      "continuum": ["src/sdk/index.ts"]
-    }
+    "types": ["bun-types"]
   },
-  "include": ["src/**/*.ts", "bin/continuum", "tests/sdk-contract.ts"]
+  "include": ["apps/**/*.ts", "packages/**/*.ts", "tools/**/*.ts"]
 }

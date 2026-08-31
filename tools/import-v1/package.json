@@ -1,0 +1,12 @@
+{
+  "name": "@continuum/import-v1",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "continuum-import-v1": "src/index.ts"
+  },
+  "dependencies": {
+    "@continuum/core": "workspace:*"
+  }
+}

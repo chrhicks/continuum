@@ -1,113 +1,141 @@
 # Contributing to Continuum
 
-Thanks for your interest in contributing. Continuum is a local CLI and SDK that gives coding agents durable task tracking and project memory. This doc covers setup, code standards, and the validation workflow.
+Continuum is a Bun workspace for durable, workspace-scoped agent memory. This document owns contributor setup and verification. Product usage belongs in [README.md](./README.md), architectural judgment in [AGENTS.md](./AGENTS.md), and coding defaults in [CODING_STANDARDS.md](./CODING_STANDARDS.md).
 
 ## Setup
 
-Requires [Bun](https://bun.sh) and a `better-sqlite3`-compatible native toolchain.
+Install Bun 1.4 or newer and Git, then install the frozen workspace dependencies:
 
 ```sh
-bun run setup          # bun install && bun link (puts `continuum` on your PATH)
+bun install --frozen-lockfile
 ```
 
-Or manually: `bun install && bun run install:global`.
-
-Verify it works:
+For a globally linked development executable:
 
 ```sh
-continuum task list --json   # smoke-test
-bun run typecheck
+bun run setup
+continuum --help
 ```
+
+Without a global link, use `bun run continuum --help`.
+
+Do not point development commands at a live or default Continuum database. Tests isolate `CONTINUUM_DATA_DIR` or pass an explicit temporary `dataDirectory`.
+
+## Workspace layout
+
+```text
+apps/cli/          Commander CLI and executable composition
+packages/core/     workspace identity, memory behavior, retrieval, SQLite
+packages/mcp/      MCP schemas, tools, lifecycle, and stdio transport
+tools/import-v1/   one-time read-only legacy source importer
+```
+
+Runtime dependency direction is:
+
+```text
+apps/cli ───────→ packages/core
+    │
+    └───────────→ packages/mcp ───────→ packages/core
+
+tools/import-v1 ──────────────────────→ packages/core
+```
+
+Import another package through its root export. Do not reach into a sibling package's source tree. Keep SQLite and memory invariants in core, MCP concerns in the MCP package, command parsing in the CLI app, and legacy source interpretation in the importer.
 
 ## Development workflow
 
-Run these before sending changes:
+Run the narrowest useful test while changing a feature:
 
 ```sh
-bun run format       # prettier --write . (config in .prettierrc: no semi, single quotes, 2-space)
-bun run typecheck    # tsc --noEmit
-bun test             # full test suite
-bun run validate     # typecheck + bun test (quirk-tolerant) + GOAL invariant checker
+bun test packages/core/tests/records.test.ts
+bun test packages/core/tests/retrieval.test.ts
+bun test packages/mcp/tests/server.test.ts
+bun test apps/cli/tests/memory-commands.test.ts
+bun test tools/import-v1
 ```
 
-`bun run validate` is the canonical gate — it chains all three checks. See the README's Development section for what each stage does.
-
-### Tests
-
-Tests live in `tests/` (not colocated with source) and use `bun:test`. Common helpers:
-
-- `withTempMemoryDir` / `withTempCwd` — temp dirs + cwd restoration.
-- `snapshotConsolidationEnv` / `restoreConsolidationEnv` — snapshot/restore the `OPENCODE_ZEN_API_KEY` / `CONSOLIDATION_API_KEY` / `OPENAI_API_KEY` / `SUMMARY_MODEL` env vars so tests don't trigger real LLM consolidation.
-
-Imports use relative paths back into `src/`. Build fixture files (`NOW-*.md`, `MEMORY-*.md`, `MEMORY.md`, `RECENT.md`, `config.yml`) directly with `writeFileSync` and call into `src/` functions, passing the temp memory dir explicitly rather than relying on workspace resolution.
-
-### Smoke-testing
-
-Beyond `bun test`, exercise the actual CLI:
+Before committing, run the full repository gates:
 
 ```sh
-continuum task list --json
-continuum summary --no-tasks
-continuum memory recall status
+bun run typecheck
+bun run validate
+bun install --frozen-lockfile --dry-run
+bunx prettier --check package.json tsconfig.json README.md CONTRIBUTING.md \
+  AGENTS.md CODING_STANDARDS.md apps packages tools .github/workflows/ci.yml
+git diff --check
 ```
 
-These are also run by the GOAL invariant checker.
+`bun run validate` runs TypeScript and all active package, adapter, and importer tests. Use `bun run format` to apply Prettier when needed, then inspect the resulting diff rather than treating formatting as a design review.
 
-## Architecture
+Keep the worktree free of generated databases, WAL/SHM/journal sidecars, temporary reports, and staged files you did not intend to commit. Never commit `.tmp`, `.continuum`, `.agents`, private memory, credentials, or local absolute paths.
 
-```
-CLI → SDK → Task Service → Database
-```
+## Tests
 
-- **Drizzle** for ORM (`bun:sqlite` + `drizzle-orm` at runtime; `better-sqlite3` + `drizzle-kit` are dev-only).
-- **Repository per domain**: `Task` gets `task.repository.ts` and `task.service.ts`. DB models are internal; the SDK interface is public (consumed by both the SDK export and the CLI).
-- **Memory persistence is moving to SQLite**. New memory services use Effect for typed boundaries while existing Markdown behavior remains in place during the incremental cutover.
+Tests live with the package that owns the behavior:
 
-See the README's Architecture section for the memory tier model (NOW / RECENT / MEMORY) and storage layout.
+- `packages/core/tests` protects database, workspace, record, retrieval, cursor, and migration behavior.
+- `packages/mcp/tests` protects schemas, tool results, protocol behavior, and lifecycle.
+- `apps/cli/tests` protects real subprocess output, CLI parity, and MCP stdio composition.
+- `tools/import-v1/tests` protects preservation, exclusions, idempotency, collision handling, and source safety.
 
-## Code standards
+Prefer behavior through a public package interface and a real temporary SQLite database. Use mocks only for a genuinely external or timing-specific boundary. Tests should create isolated temporary directories, close every Continuum/database/server/client instance, and remove temporary files in cleanup hooks.
 
-These are enforced by `scripts/verify-goal-invariants.ts` (run via `bun run verify:goal`). A PR that fails any of them will fail `bun run validate`.
+Never use a real user database, the default XDG database, or a private reference database as a committed fixture. Importer tests must build synthetic SQLite sources containing only invented data. Private migration evidence may be inspected only under an explicitly authorized workflow, read-only and through a disposable copy; no content may enter tests, logs, snapshots, documentation, or review artifacts.
 
-**Structural limits:**
+## Database changes
 
-- No file in `src/` exceeds 300 lines.
-- No function or arrow assigned to a variable exceeds 80 lines.
-- All exported functions have explicit return-type annotations.
-- Zero `as any` casts in `src/`.
+Core migrations live in `packages/core/src/database/migrations.ts`. Add a new numbered migration rather than rewriting a released schema version. Keep SQL readable and close to the feature it supports.
 
-**Naming:**
+When changing persistence:
 
-- File names describe what the code does, not its relationship to another file. `*-helpers.ts`, `*-utils.ts`, `*-misc.ts` are dumping grounds and are rejected — prefer domain-named files (e.g. `memory-content-builders.ts`, not `consolidate-helpers.ts`).
+1. test a fresh database;
+2. test upgrade from the affected prior `PRAGMA user_version` when relevant;
+3. preserve canonical immutable records;
+4. keep canonical writes and derived FTS maintenance atomic;
+5. verify foreign keys, WAL lifecycle, and transaction rollback behavior;
+6. treat FTS as rebuildable rather than canonical evidence.
 
-**Single source of truth:**
+Do not add another ORM, database package, migration framework, or compatibility layer for speculative variation.
 
-- A constant, type, or interface is defined in exactly one place. Re-exporting from a second file is acceptable only at a public API boundary (the SDK surface). Internal barrel files that exist only to reshuffle imports are a defect.
-- Nested re-export chains (`A → re-exports B → re-exports C → definition`) are a defect. Import directly from the defining module.
-- No circular dependencies. If module A imports types from B and B imports functions from A, one of them is in the wrong file.
-- Generic utilities used in more than one domain belong in a shared module, not copy-pasted across domain files.
+## Core and adapter boundaries
 
-**Splitting discipline:**
+Core accepts plain TypeScript contracts, returns complete structured data, and never prints. It owns normalization and invariants that depend on stored state, such as workspace identity, same-workspace supersession, immutable insertion, current/history filtering, and cursor scope.
 
-- Size limits serve clarity, not compliance. Split when each part is easier to understand independently — a split that exists only to pass a line-count check, with no coherent domain boundary, is worse than the original.
-- No duplication as a side-effect of splitting. If a split requires a shared function, extract it to a single shared location and import from both. Identical private implementations in sibling files are a defect.
+MCP validates untrusted tool input with Zod and exposes strict successful output schemas. CLI parses command-line syntax and writes compact JSON. Both adapters call the same core operations and must remain semantically equivalent. A behavior change to summary, record, search, or get normally needs core tests plus affected MCP and CLI parity tests.
 
-The full principles live in `GOAL.md` ("Code Standard Principles"); `GOAL-ROADMAP.md` is the audit log of the refactor that established them.
+MCP stdout is protocol-only. CLI success is JSON on stdout; CLI failure is safe JSON on stderr. Do not log record content, causes, SQL, or stacks from transport error mapping.
 
-## Constraints
+## Legacy importer changes
 
-- New runtime dependencies require an explicit architectural decision. Effect is approved for the SQLite journal memory redesign; unrelated additions remain out of scope.
-- No behavioral changes to existing CLI outputs, SDK interfaces, or test expectations.
-- Changes are incremental: `bun test` passes after each file is modified, not just at the end.
-- `snake_case` identifiers in `src/task/` are intentionally not renamed (deferred — invasive, high regression risk).
-- Refactor `src/` only; don't touch `tests/`, `skills/`, `drizzle/`, or build config unless a `src/` change strictly requires it.
+`tools/import-v1` is intentionally separate from runtime adapters. It may depend on the public core package but must not add import fields to MCP or the main CLI.
 
-## Temporary files
+Importer changes must preserve these properties:
 
-When creating temporary files during development, use a local `.tmp/` directory — don't write outside the project directory.
+- source access is immutable and read-only;
+- the full source is validated before target construction;
+- only raw journal evidence is read;
+- content and IDs are preserved, timestamp instants are represented canonically, and tags/kinds use core normalization;
+- unrelated legacy tables and metadata remain ignored;
+- identical reruns are safe;
+- collisions never overwrite canonical evidence;
+- source and target files cannot alias, including SQLite sidecar paths;
+- failures and test evidence never reveal source content.
 
-## Sending changes
+Use synthetic fixtures and verify source hashes, mtimes, directory entries, and sidecars when changing source-safety behavior.
 
-1. Run `bun run validate` locally (it runs typecheck, tests, and the GOAL invariant checker).
-2. Keep commits focused and incremental.
-3. Don't commit secrets or keys. Memory content may record agent sessions — never log secrets into memory files; use placeholders.
+## CI
+
+`.github/workflows/ci.yml` uses Bun 1.4.0 and runs:
+
+1. frozen dependency installation;
+2. Prettier checks over active code, configuration, and documentation;
+3. `bun run validate`;
+4. `git diff --check`.
+
+Run the same commands locally before requesting review. CI is a verification boundary, not a replacement for inspecting the behavior and diff.
+
+## Change quality
+
+Follow [CODING_STANDARDS.md](./CODING_STANDARDS.md): keep the critical path direct, use abstractions only for stable concepts, keep package exports narrow, and test valuable behavior rather than implementation choreography.
+
+Do not add dependencies, public operations, compatibility surfaces, or workflow systems without a concrete product need and explicit architectural agreement. Remove stale documentation and obsolete code instead of preserving competing generations of behavior.
