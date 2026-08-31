@@ -22,6 +22,46 @@ const kindSchema = z
     'Open-ended memory kind, such as observation, decision, preference, or lesson.',
   )
 
+const unknownInputKey = '__continuum_unknown_input__'
+
+function strictInputObject<Shape extends z.ZodRawShape>(shape: Shape) {
+  const knownKeys = new Set(Object.keys(shape))
+  const objectSchema = z.object(shape).strict()
+  const inputSchema = z.preprocess((value) => {
+    if (!isPlainObject(value)) return value
+    if (!Object.keys(value).some((key) => !knownKeys.has(key))) return value
+
+    const bounded: Record<string, unknown> = {}
+    for (const key of knownKeys) {
+      if (Object.hasOwn(value, key)) bounded[key] = value[key]
+    }
+    bounded[unknownInputKey] = true
+    return bounded
+  }, objectSchema)
+
+  // SDK 1.29 recognizes object schemas through this property before its JSON
+  // Schema converter unwraps the preprocessing effect using the input shape.
+  Object.defineProperty(inputSchema, 'shape', { value: objectSchema.shape })
+  return inputSchema
+}
+
+function boundedTextArray(item: z.ZodString, minimumLength?: number) {
+  let arraySchema = z.array(item)
+  if (minimumLength !== undefined) arraySchema = arraySchema.min(minimumLength)
+
+  return z.preprocess((value) => {
+    if (!Array.isArray(value)) return value
+    for (const entry of value) {
+      if (typeof entry !== 'string') return null
+    }
+    return value
+  }, arraySchema)
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
 const memoryRecordSchema = z
   .object({
     id: recordIdSchema,
@@ -73,7 +113,7 @@ const pageFields = {
     .describe('Opaque cursor for the next search page, or null at the end.'),
 }
 
-const guideInputSchema = z.object({}).strict()
+const guideInputSchema = strictInputObject({})
 const guideOutputSchema = z
   .object({
     version: z.literal(1).describe('Guide contract version.'),
@@ -102,18 +142,16 @@ const guideOutputSchema = z
   })
   .strict()
 
-const summaryInputSchema = z
-  .object({
-    workspace: workspacePathSchema,
-    limit: z
-      .number()
-      .int()
-      .min(1)
-      .max(100)
-      .optional()
-      .describe('Maximum current records to return; defaults to 10.'),
-  })
-  .strict()
+const summaryInputSchema = strictInputObject({
+  workspace: workspacePathSchema,
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(100)
+    .optional()
+    .describe('Maximum current records to return; defaults to 10.'),
+})
 const summaryOutputSchema = z
   .object({
     workspace: workspaceInfoSchema,
@@ -121,78 +159,63 @@ const summaryOutputSchema = z
   })
   .strict()
 
-const recordInputSchema = z
-  .object({
-    workspace: workspacePathSchema,
-    content: z
-      .string()
-      .describe(
-        'Complete, self-contained durable knowledge to store unchanged.',
-      ),
-    kind: kindSchema
-      .optional()
-      .describe('Open-ended memory kind; defaults to observation.'),
-    tags: z
-      .array(tagSchema)
-      .optional()
-      .describe('Tags to normalize and store for later retrieval.'),
-    supersedes: z
-      .array(recordIdSchema)
-      .optional()
-      .describe('Same-workspace record IDs that this new record replaces.'),
-  })
-  .strict()
+const recordInputSchema = strictInputObject({
+  workspace: workspacePathSchema,
+  content: z
+    .string()
+    .describe('Complete, self-contained durable knowledge to store unchanged.'),
+  kind: kindSchema
+    .optional()
+    .describe('Open-ended memory kind; defaults to observation.'),
+  tags: boundedTextArray(tagSchema)
+    .optional()
+    .describe('Tags to normalize and store for later retrieval.'),
+  supersedes: boundedTextArray(recordIdSchema)
+    .optional()
+    .describe('Same-workspace record IDs that this new record replaces.'),
+})
 
-const searchInputSchema = z
-  .object({
-    workspace: workspacePathSchema,
-    query: z
-      .string()
-      .optional()
-      .describe(
-        'Ordinary text for relevance search; omit or leave blank to browse newest first.',
-      ),
-    tags: z
-      .array(tagSchema)
-      .optional()
-      .describe('Tags that every returned record must contain.'),
-    kinds: z
-      .array(kindSchema)
-      .optional()
-      .describe('Kinds of which a returned record may match any.'),
-    includeHistory: z
-      .boolean()
-      .optional()
-      .describe(
-        'Include superseded records; defaults to current records only.',
-      ),
-    limit: z
-      .number()
-      .int()
-      .min(1)
-      .max(100)
-      .optional()
-      .describe('Maximum records to return; defaults to 20.'),
-    cursor: z
-      .string()
-      .max(4_096)
-      .optional()
-      .describe(
-        'Opaque nextCursor from the same normalized search or summary browse.',
-      ),
-  })
-  .strict()
+const searchInputSchema = strictInputObject({
+  workspace: workspacePathSchema,
+  query: z
+    .string()
+    .optional()
+    .describe(
+      'Ordinary text for relevance search; omit or leave blank to browse newest first.',
+    ),
+  tags: boundedTextArray(tagSchema)
+    .optional()
+    .describe('Tags that every returned record must contain.'),
+  kinds: boundedTextArray(kindSchema)
+    .optional()
+    .describe('Kinds of which a returned record may match any.'),
+  includeHistory: z
+    .boolean()
+    .optional()
+    .describe('Include superseded records; defaults to current records only.'),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(100)
+    .optional()
+    .describe('Maximum records to return; defaults to 20.'),
+  cursor: z
+    .string()
+    .max(4_096)
+    .optional()
+    .describe(
+      'Opaque nextCursor from the same normalized search or summary browse.',
+    ),
+})
 const searchOutputSchema = z.object(pageFields).strict()
 
-const getInputSchema = z
-  .object({
-    workspace: workspacePathSchema,
-    ids: z
-      .array(recordIdSchema)
-      .min(1)
-      .describe('Record IDs to retrieve exactly, in request order.'),
-  })
-  .strict()
+const getInputSchema = strictInputObject({
+  workspace: workspacePathSchema,
+  ids: boundedTextArray(recordIdSchema, 1).describe(
+    'Record IDs to retrieve exactly, in request order.',
+  ),
+})
 const getOutputSchema = z
   .object({
     records: z

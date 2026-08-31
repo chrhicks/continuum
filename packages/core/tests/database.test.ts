@@ -11,6 +11,7 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { performance } from 'node:perf_hooks'
 import { pathToFileURL } from 'node:url'
 import {
   ContinuumError,
@@ -18,7 +19,10 @@ import {
   createContinuumImporter,
   resolveContinuumDataPaths,
 } from '@continuum/core'
-import { openContinuumDatabase } from '../src/database/database'
+import {
+  enableWalJournalMode,
+  openContinuumDatabase,
+} from '../src/database/database'
 import { latestSchemaVersion } from '../src/database/migrations'
 
 const temporaryRoots: string[] = []
@@ -74,6 +78,69 @@ describe('central Continuum database', () => {
     expect(existsSync(configured)).toBe(false)
     continuum.close()
     expect(existsSync(configured)).toBe(false)
+  })
+
+  test('bounds WAL lock retries and immediately preserves other failures', () => {
+    const lockFailure = Object.assign(new Error('database remains locked'), {
+      code: 'SQLITE_BUSY',
+    })
+    const configuredTimeouts: number[] = []
+    const lockedDatabase = {
+      exec(query: string) {
+        const timeout = /^PRAGMA busy_timeout = (\d+)$/.exec(query)?.[1]
+        if (timeout) configuredTimeouts.push(Number(timeout))
+        if (query === 'PRAGMA journal_mode = WAL') throw lockFailure
+      },
+    }
+
+    const startedAt = performance.now()
+    let caught: unknown
+    try {
+      enableWalJournalMode(lockedDatabase, 30)
+    } catch (cause) {
+      caught = cause
+    }
+    const elapsedMs = performance.now() - startedAt
+
+    expect(caught).toBe(lockFailure)
+    expect(elapsedMs).toBeGreaterThanOrEqual(20)
+    expect(elapsedMs).toBeLessThan(250)
+    expect(configuredTimeouts.length).toBeGreaterThan(0)
+    expect(
+      configuredTimeouts.every((timeout) => timeout >= 1 && timeout <= 30),
+    ).toBe(true)
+
+    const nonLockFailure = new Error('invalid journal mode operation')
+    let journalAttempts = 0
+    caught = undefined
+    try {
+      enableWalJournalMode(
+        {
+          exec(query: string) {
+            if (query === 'PRAGMA journal_mode = WAL') {
+              journalAttempts += 1
+              throw nonLockFailure
+            }
+          },
+        },
+        30,
+      )
+    } catch (cause) {
+      caught = cause
+    }
+    expect(caught).toBe(nonLockFailure)
+    expect(journalAttempts).toBe(1)
+
+    const successfulQueries: string[] = []
+    enableWalJournalMode(
+      {
+        exec(query: string) {
+          successfulQueries.push(query)
+        },
+      },
+      30,
+    )
+    expect(successfulQueries.at(-1)).toBe('PRAGMA busy_timeout = 5000')
   })
 
   test('keeps ordinary and importer facades terminal after close', () => {
@@ -400,13 +467,17 @@ async function openConcurrently(
   name: string,
 ): Promise<void> {
   const barrier = join(root, `${name}-migration-barrier`)
+  const readyPaths = Array.from({ length: 8 }, (_, index) =>
+    join(root, `${name}-migration-ready-${index}`),
+  )
   const coreModule = pathToFileURL(
     join(import.meta.dir, '..', 'src', 'index.ts'),
   ).href
   const script = `
-    import { existsSync } from 'node:fs'
+    import { existsSync, writeFileSync } from 'node:fs'
     import { createContinuum } from ${JSON.stringify(coreModule)}
 
+    writeFileSync(process.env.CONTINUUM_TEST_READY, '')
     while (!existsSync(process.env.CONTINUUM_TEST_BARRIER)) {
       await Bun.sleep(1)
     }
@@ -419,21 +490,26 @@ async function openConcurrently(
       continuum.close()
     }
   `
-  const environment = testProcessEnvironment({
-    CONTINUUM_TEST_BARRIER: barrier,
-    CONTINUUM_TEST_DATA: dataDirectory,
-    CONTINUUM_TEST_WORKSPACE: workspace,
-  })
-  const children = Array.from({ length: 8 }, () =>
+  const children = readyPaths.map((readyPath) =>
     Bun.spawn([process.execPath, '-e', script], {
       cwd: join(import.meta.dir, '..', '..', '..'),
-      env: environment,
+      env: testProcessEnvironment({
+        CONTINUUM_TEST_BARRIER: barrier,
+        CONTINUUM_TEST_DATA: dataDirectory,
+        CONTINUUM_TEST_READY: readyPath,
+        CONTINUUM_TEST_WORKSPACE: workspace,
+      }),
       stdout: 'pipe',
       stderr: 'pipe',
     }),
   )
 
-  await Bun.sleep(100)
+  let readinessFailure: unknown
+  try {
+    await waitForFiles(readyPaths, 5_000)
+  } catch (cause) {
+    readinessFailure = cause
+  }
   writeFileSync(barrier, '')
   const results = await Promise.all(
     children.map(async (child) => {
@@ -446,6 +522,7 @@ async function openConcurrently(
     }),
   )
 
+  if (readinessFailure) throw readinessFailure
   expect(results).toEqual(
     Array.from({ length: children.length }, () => ({
       exitCode: 0,
@@ -453,6 +530,16 @@ async function openConcurrently(
       stderr: '',
     })),
   )
+}
+
+async function waitForFiles(paths: string[], timeoutMs: number): Promise<void> {
+  const deadline = performance.now() + timeoutMs
+  while (!paths.every((path) => existsSync(path))) {
+    if (performance.now() >= deadline) {
+      throw new Error('Concurrent migration workers did not become ready.')
+    }
+    await Bun.sleep(5)
+  }
 }
 
 function testProcessEnvironment(

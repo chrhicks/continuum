@@ -103,6 +103,49 @@ describe('Continuum MCP tools', () => {
     }
   })
 
+  test('bounds standard SDK validation failures without weakening strict discovery', async () => {
+    const context = await mcpContext('bounded-validation', true)
+    try {
+      const listed = await context.client.listTools()
+      expect(
+        listed.tools.every(
+          (tool) =>
+            tool.inputSchema.type === 'object' &&
+            tool.inputSchema.additionalProperties === false,
+        ),
+      ).toBe(true)
+
+      const hugeUnknownKey = '😀'.repeat(5_000)
+      const unknownKeyResult = await call(context.client, 'continuum_guide', {
+        [hugeUnknownKey]: true,
+      })
+      const malformedArrayResult = await call(
+        context.client,
+        'continuum_memory_search',
+        {
+          workspace: context.workspace,
+          tags: Array.from({ length: 10_000 }, (_, index) => index),
+        },
+      )
+
+      for (const result of [unknownKeyResult, malformedArrayResult]) {
+        const text = textContent(result)
+        expect(result.isError).toBe(true)
+        expect(result.structuredContent).toBeUndefined()
+        expect(text).toContain('Input validation error:')
+        expect(text.length).toBeLessThanOrEqual(maximumSerializedErrorLength)
+        expect(Buffer.byteLength(text, 'utf8')).toBeLessThanOrEqual(
+          maximumSerializedErrorLength,
+        )
+      }
+      expect(textContent(unknownKeyResult)).not.toContain('😀'.repeat(100))
+      expect(textContent(malformedArrayResult)).not.toContain('[9999]')
+      expect(existsSync(context.dataDirectory)).toBe(false)
+    } finally {
+      await context.close()
+    }
+  })
+
   test('keeps guide and tool discovery lazy and closes cleanly', async () => {
     const context = await mcpContext('guide-lazy', true)
     expect(existsSync(context.dataDirectory)).toBe(false)

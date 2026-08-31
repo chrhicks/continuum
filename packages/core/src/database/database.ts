@@ -2,6 +2,7 @@ import { Database } from 'bun:sqlite'
 import { chmodSync, existsSync, mkdirSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { isAbsolute, join, resolve } from 'node:path'
+import { performance } from 'node:perf_hooks'
 import { ContinuumError } from '../errors'
 import { applyMigrations } from './migrations'
 
@@ -9,6 +10,10 @@ const databaseFileName = 'continuum.db'
 const defaultBusyTimeoutMs = 5_000
 const journalModeRetryIntervalMs = 10
 const journalModeRetryWait = new Int32Array(new SharedArrayBuffer(4))
+
+type SqliteExecutor = {
+  exec: (query: string) => unknown
+}
 
 export type ContinuumDataPaths = {
   dataDirectory: string
@@ -77,17 +82,32 @@ export function openContinuumDatabase(paths: ContinuumDataPaths): Database {
   }
 }
 
-function enableWalJournalMode(database: Database): void {
-  const deadline = Date.now() + defaultBusyTimeoutMs
+export function enableWalJournalMode(
+  database: SqliteExecutor,
+  timeoutMs = defaultBusyTimeoutMs,
+): void {
+  const deadline = performance.now() + timeoutMs
+  let lastLock: unknown
+
   while (true) {
+    const remainingMs = Math.floor(deadline - performance.now())
+    if (remainingMs <= 0) throw lastLock
+
+    database.exec(`PRAGMA busy_timeout = ${remainingMs}`)
     try {
       database.exec('PRAGMA journal_mode = WAL')
+      database.exec(`PRAGMA busy_timeout = ${defaultBusyTimeoutMs}`)
       return
     } catch (cause) {
-      if (!isSqliteLock(cause) || Date.now() >= deadline) throw cause
-      // SQLite may not honor busy_timeout while concurrent first-open clients
-      // are changing journal mode, so retry within the same bounded window.
-      Atomics.wait(journalModeRetryWait, 0, 0, journalModeRetryIntervalMs)
+      if (!isSqliteLock(cause)) throw cause
+      lastLock = cause
+
+      const waitMs = Math.min(
+        journalModeRetryIntervalMs,
+        Math.max(0, deadline - performance.now()),
+      )
+      if (waitMs <= 0) throw cause
+      Atomics.wait(journalModeRetryWait, 0, 0, waitMs)
     }
   }
 }

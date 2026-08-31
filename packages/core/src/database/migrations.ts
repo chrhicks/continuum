@@ -176,7 +176,16 @@ export function applyMigrations(database: Database): void {
         )
       }
     }
-    if (cause instanceof ContinuumError) throw cause
+    if (cause instanceof ContinuumError) {
+      if (migrationCause === cause) throw cause
+      throw new ContinuumError({
+        code: cause.code,
+        operation: cause.operation,
+        message: cause.message,
+        context: cause.context,
+        cause: migrationCause,
+      })
+    }
 
     throw new ContinuumError({
       code: 'DATABASE_ERROR',
