@@ -21,13 +21,38 @@ if [[ $role != scout && $role != worker && $role != reviewer ]]; then
   exit 64
 fi
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+service_home=$HOME
+service_state_home=${XDG_STATE_HOME:-$service_home/.local/state}
 config_home=${XDG_CONFIG_HOME:-$HOME/.config}
 data_home=${XDG_DATA_HOME:-$HOME/.local/share}
 libexec_home=$HOME/.local/libexec
 unit_home=$config_home/systemd/user
 config=$config_home/linear-agent/$profile.env
 
+normalize_absolute_path() {
+  local name=$1
+  local value=$2
+  if [[ $value != /* ]]; then
+    printf '%s must be an absolute path: %s\n' "$name" "$value" >&2
+    exit 78
+  fi
+  realpath -m -- "$value"
+}
+
+write_systemd_path() {
+  local value=${1//\\/\\\\}
+  value=${value//\"/\\\"}
+  value=${value//%/%%}
+  printf ' "%s"' "$value"
+}
+
 if [[ -e $config ]]; then
+  config_mode=$(stat -c '%a' "$config")
+  if (( (8#$config_mode & 077) != 0 )); then
+    printf 'profile config must not grant group or other access: %s has mode %s\n' \
+      "$config" "$config_mode" >&2
+    exit 78
+  fi
   existing_role=$(
     unset LINEAR_AGENT_ROLE
     # shellcheck source=/dev/null
@@ -45,13 +70,6 @@ if (( enable )) && [[ $role != scout ]]; then
   exit 64
 fi
 
-install -Dm755 "$root/bin/run-once" "$libexec_home/linear-agent/run-once"
-install -Dm644 "$root/prompts/worker.md" "$data_home/linear-agent/worker.md"
-install -Dm644 "$root/prompts/scout.md" "$data_home/linear-agent/scout.md"
-install -Dm644 "$root/prompts/reviewer.md" "$data_home/linear-agent/reviewer.md"
-install -Dm644 "$root/systemd/linear-agent-worker@.service" "$unit_home/linear-agent-worker@.service"
-install -Dm644 "$root/systemd/linear-agent-worker@.timer" "$unit_home/linear-agent-worker@.timer"
-
 case "$role" in
   scout) config_template=$root/config/scout.env.example ;;
   worker) config_template=$root/config/continuum.env.example ;;
@@ -64,6 +82,63 @@ if [[ ! -e $config ]]; then
 else
   printf 'preserved existing config: %s\n' "$config"
 fi
+
+unset LINEAR_AGENT_REPO LINEAR_AGENT_WORKTREE_ROOT LINEAR_AGENT_LOCK_GROUP
+unset LINEAR_AGENT_CONTINUUM_DATA_HOME LINEAR_AGENT_STATE_ROOT
+# shellcheck source=/dev/null
+source "$config" >/dev/null
+for name in LINEAR_AGENT_REPO LINEAR_AGENT_CONTINUUM_DATA_HOME; do
+  if [[ -z ${!name:-} ]]; then
+    printf 'missing required setting %s in %s\n' "$name" "$config" >&2
+    exit 78
+  fi
+done
+lock_group=${LINEAR_AGENT_LOCK_GROUP:-$profile}
+if [[ ! $lock_group =~ ^[a-zA-Z0-9._-]+$ ]]; then
+  printf 'invalid LINEAR_AGENT_LOCK_GROUP: %s\n' "$lock_group" >&2
+  exit 78
+fi
+
+repo=$(normalize_absolute_path LINEAR_AGENT_REPO "$LINEAR_AGENT_REPO")
+state_root=$(normalize_absolute_path LINEAR_AGENT_STATE_ROOT \
+  "${LINEAR_AGENT_STATE_ROOT:-$service_state_home/linear-agent}")
+worktree_root=$(normalize_absolute_path LINEAR_AGENT_WORKTREE_ROOT \
+  "${LINEAR_AGENT_WORKTREE_ROOT:-$repo/.linear-agent-worktrees}")
+continuum_store=$(normalize_absolute_path LINEAR_AGENT_CONTINUUM_DATA_HOME \
+  "$LINEAR_AGENT_CONTINUUM_DATA_HOME/continuum")
+profile_state=$state_root/$profile
+shared_state=$state_root/$lock_group
+if [[ ! -d $repo/.git ]]; then
+  printf 'LINEAR_AGENT_REPO is not a control checkout: %s\n' "$repo" >&2
+  exit 78
+fi
+if [[ $state_root == / || $worktree_root == / || $continuum_store == / ]]; then
+  printf 'refusing root-level writable path grant\n' >&2
+  exit 78
+fi
+
+install -Dm755 "$root/bin/run-once" "$libexec_home/linear-agent/run-once"
+install -Dm644 "$root/prompts/worker.md" "$data_home/linear-agent/worker.md"
+install -Dm644 "$root/prompts/scout.md" "$data_home/linear-agent/scout.md"
+install -Dm644 "$root/prompts/reviewer.md" "$data_home/linear-agent/reviewer.md"
+install -Dm644 "$root/systemd/linear-agent-worker@.service" "$unit_home/linear-agent-worker@.service"
+install -Dm644 "$root/systemd/linear-agent-worker@.timer" "$unit_home/linear-agent-worker@.timer"
+install -d -m700 "$profile_state" "$shared_state" "$worktree_root"
+mkdir -p "$continuum_store"
+dropin_dir=$unit_home/linear-agent-worker@$profile.service.d
+install -d -m755 "$dropin_dir"
+dropin_tmp=$(mktemp "$dropin_dir/.paths.conf.XXXXXX")
+{
+  printf '[Service]\nReadWritePaths=\nReadWritePaths='
+  write_systemd_path "$profile_state"
+  write_systemd_path "$shared_state"
+  write_systemd_path "$repo"
+  write_systemd_path "$worktree_root"
+  write_systemd_path "$continuum_store"
+  printf '\n'
+} > "$dropin_tmp"
+chmod 644 "$dropin_tmp"
+mv -f "$dropin_tmp" "$dropin_dir/paths.conf"
 
 systemctl --user daemon-reload
 printf 'installed linear-agent %s for profile %s\n' "$role" "$profile"

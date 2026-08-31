@@ -9,7 +9,11 @@ bash -n \
   "$root/bin/run-once" \
   "$root/bin/install-user" \
   "$root/bin/validate-continuum-worktree" \
-  "$root/bin/verify-continuum-runtime"
+  "$root/bin/verify-continuum-runtime" \
+  "$root/tests/systemd-sandbox.sh"
+grep -Fxq 'ProtectSystem=strict' "$root/systemd/linear-agent-worker@.service"
+grep -Fxq 'ProtectHome=read-only' "$root/systemd/linear-agent-worker@.service"
+"$root/tests/systemd-sandbox.sh"
 grep -Fq 'Record every evidence-backed finding' "$root/prompts/reviewer.md"
 grep -Fq 'complete finding ledger' "$root/prompts/reviewer.md"
 grep -Fq 'records every evidence-backed finding without a numeric cap' \
@@ -142,8 +146,45 @@ PATH="$tmp/home/bin:$PATH" \
 [[ $(stat -c '%a' "$tmp/config/linear-agent/continuum-worker.env") == 600 ]]
 [[ -x $tmp/home/.local/libexec/linear-agent/run-once ]]
 [[ -f $tmp/data/linear-agent/reviewer.md ]]
+installed_unit=$tmp/config/systemd/user/linear-agent-worker@.service
+worker_paths=$tmp/config/systemd/user/linear-agent-worker@continuum-worker.service.d/paths.conf
+[[ -f $worker_paths ]]
+grep -Fxq 'ProtectHome=read-only' "$installed_unit"
+grep -Fxq '[Service]' "$worker_paths"
+grep -Fxq 'ReadWritePaths=' "$worker_paths"
+grep -Fq "\"$tmp/home/.local/state/linear-agent/continuum-worker\"" "$worker_paths"
+grep -Fq "\"$tmp/home/.local/state/linear-agent/continuum\"" "$worker_paths"
+grep -Fq '"/home/chicks/workspaces/agents/continuum-control"' "$worker_paths"
+grep -Fq '"/home/chicks/workspaces/agents/continuum-control/.linear-agent-worktrees"' "$worker_paths"
+grep -Fq '"/home/chicks/.local/share/continuum"' "$worker_paths"
+[[ -d $tmp/home/.local/state/linear-agent/continuum-worker ]]
+[[ -d $tmp/home/.local/state/linear-agent/continuum ]]
 ! grep -q 'enable --now' "$systemctl_trace"
-rm "$systemctl_trace"
+rm "$systemctl_trace" "$tmp/home/.local/libexec/linear-agent/run-once"
+cat > "$tmp/config/linear-agent/relative-path.env" <<EOF
+LINEAR_AGENT_ROLE=worker
+LINEAR_AGENT_REPO=/home/chicks/workspaces/agents/continuum-control
+LINEAR_AGENT_CONTINUUM_DATA_HOME=/home/chicks/.local/share
+LINEAR_AGENT_WORKTREE_ROOT=relative/worktrees
+EOF
+chmod 600 "$tmp/config/linear-agent/relative-path.env"
+set +e
+SYSTEMCTL_TRACE="$systemctl_trace" \
+HOME="$tmp/home" \
+XDG_CONFIG_HOME="$tmp/config" \
+XDG_DATA_HOME="$tmp/data" \
+PATH="$tmp/home/bin:$PATH" \
+  "$root/bin/install-user" --profile=relative-path --role=worker \
+    > "$tmp/relative-path.log" 2>&1
+relative_path_status=$?
+set -e
+[[ $relative_path_status == 78 ]]
+grep -Fq 'LINEAR_AGENT_WORKTREE_ROOT must be an absolute path' \
+  "$tmp/relative-path.log"
+[[ ! -e $systemctl_trace ]]
+[[ ! -e $tmp/home/.local/libexec/linear-agent/run-once ]]
+[[ ! -e $tmp/config/systemd/user/linear-agent-worker@relative-path.service.d ]]
+
 SYSTEMCTL_TRACE="$systemctl_trace" \
 HOME="$tmp/home" \
 XDG_CONFIG_HOME="$tmp/config" \
