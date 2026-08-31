@@ -116,6 +116,25 @@ The installer preserves existing profile files. Add every runtime-contract
 setting from the matching example to an existing profile; preserved profiles
 are not migrated automatically. New files start with `LINEAR_AGENT_DRY_RUN=1`.
 
+### Writable-path sandbox
+
+The service keeps `ProtectSystem=strict` and sets `ProtectHome=read-only`.
+`install-user` reads the trusted profile and writes a profile-specific systemd
+drop-in that reopens only these normalized, absolute paths:
+
+- the profile state directory and shared lock-group state directory below
+  `LINEAR_AGENT_STATE_ROOT` or the service user's normal XDG state root;
+- `LINEAR_AGENT_REPO` and `LINEAR_AGENT_WORKTREE_ROOT` (or the nested
+  `.linear-agent-worktrees` default); and
+- the `continuum` subtree below `LINEAR_AGENT_CONTINUUM_DATA_HOME`.
+
+The installer creates those writable targets before reloading the user manager.
+Configuration, prompts, and installed executables remain read-only to the
+service. Rerun the matching `install-user` command after changing any configured
+path. `LINEAR_AGENT_STATE_ROOT`, when set, must be absolute and must be present
+when both installing and running the profile. Credentials remain outside these
+repository-managed files and are not added to the writable-path drop-in.
+
 ## Verification
 
 Run each profile in dry-run mode:
@@ -125,7 +144,12 @@ systemctl --user start linear-agent-worker@continuum-scout.service
 systemctl --user start linear-agent-worker@continuum-worker.service
 systemctl --user start linear-agent-worker@continuum-reviewer.service
 journalctl --user -u 'linear-agent-worker@continuum-*' -n 100 --no-pager
+ops/linear-agent/tests/systemd-sandbox.sh --require
 ```
+
+The sandbox probe uses an isolated transient user service to verify profile
+state, shared state, control checkout, worktree, and Continuum-store writes
+while an unrelated home path remains read-only.
 
 Then set `LINEAR_AGENT_DRY_RUN=0` in all three files and run the Scout manually. It should route the current queue without overlap.
 

@@ -3,6 +3,8 @@ set -euo pipefail
 
 umask 077
 
+service_home=$HOME
+service_state_home=${XDG_STATE_HOME:-$service_home/.local/state}
 profile=${1:-}
 if [[ ! $profile =~ ^[a-zA-Z0-9._-]+$ ]]; then
   printf 'usage: %s <profile>\n' "$0" >&2
@@ -118,12 +120,12 @@ if ! command -v flock >/dev/null 2>&1 || ! command -v timeout >/dev/null 2>&1; t
   exit 69
 fi
 
-agent_state=${XDG_STATE_HOME:-$HOME/.local/state}/linear-agent
+agent_state=$(realpath -m "${LINEAR_AGENT_STATE_ROOT:-$service_state_home/linear-agent}")
 state_root=$agent_state/$profile
 shared_state=$agent_state/${LINEAR_AGENT_LOCK_GROUP:-$profile}
-worktree_root=${LINEAR_AGENT_WORKTREE_ROOT:-$repo/.linear-agent-worktrees}
+worktree_root=$(realpath -m "${LINEAR_AGENT_WORKTREE_ROOT:-$repo/.linear-agent-worktrees}")
 mkdir -p "$state_root/runs" "$state_root/sessions" "$shared_state" "$worktree_root"
-chmod 700 "$agent_state" "$state_root" "$state_root/runs" "$state_root/sessions" "$shared_state" "$worktree_root"
+chmod 700 "$state_root" "$state_root/runs" "$state_root/sessions" "$shared_state" "$worktree_root"
 
 exclude=$repo/.git/info/exclude
 mkdir -p "$(dirname "$exclude")"
