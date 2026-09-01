@@ -5,6 +5,42 @@ root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
+assert_no_match() {
+  local status
+
+  if grep "$@"; then
+    printf 'unexpected grep match:' >&2
+    printf ' %q' "$@" >&2
+    printf '\n' >&2
+    return 1
+  else
+    status=$?
+  fi
+
+  if [[ $status == 1 ]]; then
+    return 0
+  fi
+
+  printf 'grep failed with status %s:' "$status" >&2
+  printf ' %q' "$@" >&2
+  printf '\n' >&2
+  return "$status"
+}
+
+negative_assertion_fixture=$tmp/negative-assertion
+negative_assertion_continued=$tmp/negative-assertion-continued
+printf 'forbidden\n' > "$negative_assertion_fixture"
+set +e
+(
+  set -e
+  assert_no_match -q 'forbidden' "$negative_assertion_fixture"
+  touch "$negative_assertion_continued"
+) >/dev/null 2>&1
+negative_assertion_status=$?
+set -e
+[[ $negative_assertion_status == 1 ]]
+[[ ! -e $negative_assertion_continued ]]
+
 bash -n \
   "$root/bin/run-once" \
   "$root/bin/install-user" \
@@ -19,8 +55,8 @@ grep -Fq 'complete finding ledger' "$root/prompts/reviewer.md"
 grep -Fq 'records every evidence-backed finding without a numeric cap' \
   "$root/COORDINATION.md"
 grep -Fq 'complete finding ledger' "$root/COORDINATION.md"
-! grep -Fq 'at most three Backlog proposals' "$root/COORDINATION.md"
-! grep -Rq 'AUDIT_PROPOSAL_LIM[I]T' "$root"
+assert_no_match -Fq 'at most three Backlog proposals' "$root/COORDINATION.md"
+assert_no_match -Rq 'AUDIT_PROPOSAL_LIM[I]T' "$root"
 set +e
 "$root/bin/validate-continuum-worktree" >/dev/null 2>&1
 helper_status=$?
@@ -159,7 +195,7 @@ grep -Fq '"/home/chicks/workspaces/agents/continuum-control/.linear-agent-worktr
 grep -Fq '"/home/chicks/.local/share/continuum"' "$worker_paths"
 [[ -d $tmp/home/.local/state/linear-agent/continuum-worker ]]
 [[ -d $tmp/home/.local/state/linear-agent/continuum ]]
-! grep -q 'enable --now' "$systemctl_trace"
+assert_no_match -q 'enable --now' "$systemctl_trace"
 rm "$systemctl_trace" "$tmp/home/.local/libexec/linear-agent/run-once"
 cat > "$tmp/config/linear-agent/relative-path.env" <<EOF
 LINEAR_AGENT_ROLE=worker
@@ -196,7 +232,7 @@ grep -q '^LINEAR_AGENT_MODEL=openai-codex/gpt-5.6-luna$' "$tmp/config/linear-age
 grep -q '^LINEAR_AGENT_CONTINUUM_BIN=.*/continuum-control/bin/continuum$' \
   "$tmp/config/linear-agent/continuum-scout.env"
 grep -qx -- '--user daemon-reload' "$systemctl_trace"
-! grep -q 'enable --now' "$systemctl_trace"
+assert_no_match -q 'enable --now' "$systemctl_trace"
 
 rm "$systemctl_trace"
 SYSTEMCTL_TRACE="$systemctl_trace" \
@@ -443,7 +479,7 @@ run_prompt=$(find "$tmp/run/state/linear-agent/test/runs" \
 [[ -f $run_prompt ]]
 grep -Fq 'Record every evidence-backed finding' "$run_prompt"
 grep -Fq 'complete finding ledger' "$run_prompt"
-! grep -q 'Audit proposal limit' "$run_prompt"
+assert_no_match -q 'Audit proposal limit' "$run_prompt"
 [[ -z $(git -C "$tmp/run/repo" status --porcelain=v1) ]]
 
 set +e
