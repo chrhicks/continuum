@@ -57,6 +57,12 @@ grep -Fq 'records every evidence-backed finding without a numeric cap' \
 grep -Fq 'complete finding ledger' "$root/COORDINATION.md"
 assert_no_match -Fq 'at most three Backlog proposals' "$root/COORDINATION.md"
 assert_no_match -Rq 'AUDIT_PROPOSAL_LIM[I]T' "$root"
+for profile in scout continuum reviewer; do
+  config=$root/config/$profile.env.example
+  grep -Fxq 'LINEAR_AGENT_PROJECT=Continuum' "$config"
+  [[ $(grep -c '^LINEAR_AGENT_PROJECT=' "$config") == 1 ]]
+  assert_no_match -Fq 'XDG Storage and R2 Hardening' "$config"
+done
 set +e
 "$root/bin/validate-continuum-worktree" >/dev/null 2>&1
 helper_status=$?
