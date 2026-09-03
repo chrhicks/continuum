@@ -141,6 +141,10 @@ chmod 644 "$dropin_tmp"
 mv -f "$dropin_tmp" "$dropin_dir/paths.conf"
 
 systemctl --user daemon-reload
+if [[ $role != scout ]]; then
+  systemctl --user disable --now "linear-agent-worker@$profile.timer"
+  printf 'disabled and stopped non-Scout timer for profile %s\n' "$profile"
+fi
 printf 'installed linear-agent %s for profile %s\n' "$role" "$profile"
 printf 'first run: systemctl --user start linear-agent-worker@%s.service\n' "$profile"
 printf 'logs: journalctl --user -u linear-agent-worker@%s.service\n' "$profile"
