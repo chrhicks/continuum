@@ -176,6 +176,12 @@ mkdir -p "$tmp/home/bin"
 cat > "$tmp/home/bin/systemctl" <<'EOF'
 #!/bin/sh
 printf '%s\n' "$*" >> "${SYSTEMCTL_TRACE:?}"
+if [ -n "${SYSTEMCTL_TIMER_STATE:-}" ]; then
+  case "$*" in
+    *" enable --now "*) printf 'enabled running\n' > "$SYSTEMCTL_TIMER_STATE" ;;
+    *" disable --now "*) printf 'disabled stopped\n' > "$SYSTEMCTL_TIMER_STATE" ;;
+  esac
+fi
 EOF
 chmod +x "$tmp/home/bin/systemctl"
 systemctl_trace=$tmp/systemctl.log
@@ -201,7 +207,36 @@ grep -Fq '"/home/chicks/workspaces/agents/continuum-control/.linear-agent-worktr
 grep -Fq '"/home/chicks/.local/share/continuum"' "$worker_paths"
 [[ -d $tmp/home/.local/state/linear-agent/continuum-worker ]]
 [[ -d $tmp/home/.local/state/linear-agent/continuum ]]
+grep -qx -- '--user daemon-reload' "$systemctl_trace"
+grep -qx -- \
+  '--user disable --now linear-agent-worker@continuum-worker.timer' \
+  "$systemctl_trace"
 assert_no_match -q 'enable --now' "$systemctl_trace"
+[[ $(wc -l < "$systemctl_trace") == 2 ]]
+
+legacy_timer_state=$tmp/legacy-worker-timer.state
+printf 'enabled running\n' > "$legacy_timer_state"
+rm "$systemctl_trace"
+SYSTEMCTL_TRACE="$systemctl_trace" \
+SYSTEMCTL_TIMER_STATE="$legacy_timer_state" \
+HOME="$tmp/home" \
+XDG_CONFIG_HOME="$tmp/config" \
+XDG_DATA_HOME="$tmp/data" \
+PATH="$tmp/home/bin:$PATH" \
+  "$root/bin/install-user" --profile=continuum-worker --role=worker \
+    > "$tmp/legacy-worker-reinstall.log"
+grep -Fqx -- \
+  "preserved existing config: $tmp/config/linear-agent/continuum-worker.env" \
+  "$tmp/legacy-worker-reinstall.log"
+grep -Fqx -- \
+  'disabled and stopped non-Scout timer for profile continuum-worker' \
+  "$tmp/legacy-worker-reinstall.log"
+[[ $(<"$legacy_timer_state") == 'disabled stopped' ]]
+grep -qx -- '--user daemon-reload' "$systemctl_trace"
+grep -qx -- \
+  '--user disable --now linear-agent-worker@continuum-worker.timer' \
+  "$systemctl_trace"
+[[ $(wc -l < "$systemctl_trace") == 2 ]]
 rm "$systemctl_trace" "$tmp/home/.local/libexec/linear-agent/run-once"
 cat > "$tmp/config/linear-agent/relative-path.env" <<EOF
 LINEAR_AGENT_ROLE=worker

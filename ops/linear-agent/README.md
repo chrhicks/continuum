@@ -116,6 +116,13 @@ The installer preserves existing profile files. Add every runtime-contract
 setting from the matching example to an existing profile; preserved profiles
 are not migrated automatically. New files start with `LINEAR_AGENT_DRY_RUN=1`.
 
+Every Worker or Reviewer installation disables and stops that profile's timer
+after reloading the user units. This idempotent step performs the one-time
+cleanup of non-Scout timers enabled by releases that predated the Scout-only
+guard. It does not disable the profile's service or change manual and routed
+on-demand starts. Scout timers are not affected and still require explicit
+`--enable`.
+
 ### Writable-path sandbox
 
 The service keeps `ProtectSystem=strict` and sets `ProtectHome=read-only`.
