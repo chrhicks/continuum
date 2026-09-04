@@ -28,9 +28,10 @@ export function hasCompletedRun(sqlite: Database): boolean {
   return Boolean(
     sqlite
       .query(
-        "SELECT 1 FROM memory_legacy_migration_runs WHERE status='completed' LIMIT 1",
+        `SELECT 1 FROM memory_legacy_migration_runs
+         WHERE migration_version = ? AND status = 'completed' LIMIT 1`,
       )
-      .get(),
+      .get(LEGACY_MIGRATION_VERSION),
   )
 }
 

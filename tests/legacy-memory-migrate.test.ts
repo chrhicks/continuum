@@ -13,6 +13,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Effect } from 'effect'
 import { migrateLegacyMemory } from '../src/memory/application/legacy-migrate'
+import { LEGACY_MIGRATION_VERSION } from '../src/memory/application/legacy-migrate-artifacts'
 import { consolidateMemory } from '../src/memory/application/consolidate'
 import { getDbClientByPath } from '../src/db/client'
 import { makeJournalRepository } from '../src/memory/repository/journal-repository'
@@ -96,6 +97,72 @@ describe('legacy memory migration', () => {
     expect(
       result.items.find((item) => item.kind === 'opencode-summary')?.detail,
     ).toContain('summary-only')
+  })
+
+  test('does not let an older completed version suppress current persistence', () => {
+    const paths = fixture()
+    const sourcePath = join(paths.memoryDir, 'MEMORY-2026-07-10.md')
+    const original = readFileSync(sourcePath, 'utf8')
+    const handle = getDbClientByPath(paths.dbPath)
+    handle.sqlite
+      .query(
+        `INSERT INTO memory_legacy_migration_runs
+         (migration_version, status, artifact_count, imported_count, completed_at)
+         VALUES (?, 'completed', 0, 0, ?)`,
+      )
+      .run(LEGACY_MIGRATION_VERSION - 1, '2026-09-04T00:00:00.000Z')
+
+    const preview = migrateLegacyMemory({
+      workspaceRoot: paths.root,
+      memoryDir: paths.memoryDir,
+      dbPath: paths.dbPath,
+      dryRun: true,
+    })
+    const migrated = migrateLegacyMemory({
+      workspaceRoot: paths.root,
+      memoryDir: paths.memoryDir,
+      dbPath: paths.dbPath,
+      dryRun: false,
+      handle,
+    })
+    const repeated = migrateLegacyMemory({
+      workspaceRoot: paths.root,
+      memoryDir: paths.memoryDir,
+      dbPath: paths.dbPath,
+      dryRun: false,
+      handle,
+    })
+
+    expect(preview.alreadyCompleted).toBe(false)
+    expect(preview.items).toHaveLength(9)
+    expect(migrated.alreadyCompleted).toBe(false)
+    expect(migrated.items).toHaveLength(9)
+    expect(repeated).toEqual({
+      dryRun: false,
+      alreadyCompleted: true,
+      items: [],
+    })
+    expect(readFileSync(sourcePath, 'utf8')).toBe(original)
+    expect(
+      handle.sqlite
+        .query(
+          `SELECT migration_version, status
+           FROM memory_legacy_migration_runs ORDER BY id`,
+        )
+        .all(),
+    ).toEqual([
+      { migration_version: LEGACY_MIGRATION_VERSION - 1, status: 'completed' },
+      { migration_version: LEGACY_MIGRATION_VERSION, status: 'completed' },
+    ])
+    expect(
+      (
+        handle.sqlite
+          .query(
+            'SELECT COUNT(*) AS count FROM memory_legacy_migrations WHERE migration_version = ?',
+          )
+          .get(LEGACY_MIGRATION_VERSION) as { count: number }
+      ).count,
+    ).toBe(9)
   })
 
   test('imports once, records every artifact, and preserves source files', () => {
