@@ -35,7 +35,7 @@ export async function require_task(
   task_id: string,
 ): Promise<Task> {
   const task = await get_task(db, task_id)
-  if (!task) {
+  if (!task || task.status === 'deleted') {
     throw new ContinuumError('TASK_NOT_FOUND', 'Task not found')
   }
 
@@ -146,15 +146,8 @@ export async function update_task(
   task_id: string,
   input: UpdateTaskInput,
 ): Promise<Task> {
+  const task = await require_task(db, task_id)
   const updates: Partial<typeof tasks.$inferInsert> = {}
-  let task: Task | null = null
-
-  const ensure_task = async (): Promise<Task> => {
-    if (!task) {
-      task = await require_task(db, task_id)
-    }
-    return task
-  }
 
   if (input.parent_id !== undefined) {
     await validate_parent_exists(db, input.parent_id)
@@ -175,23 +168,17 @@ export async function update_task(
   apply_core_updates(updates, input)
 
   if (input.steps) {
-    const currentTask = await ensure_task()
-    const next = build_steps_update(currentTask, input.steps)
+    const next = build_steps_update(task, input.steps)
     updates.steps = next.steps
     updates.current_step = next.current_step
   }
 
   if (input.discoveries) {
-    const currentTask = await ensure_task()
-    updates.discoveries = build_discoveries_update(
-      currentTask,
-      input.discoveries,
-    )
+    updates.discoveries = build_discoveries_update(task, input.discoveries)
   }
 
   if (input.decisions) {
-    const currentTask = await ensure_task()
-    updates.decisions = build_decisions_update(currentTask, input.decisions)
+    updates.decisions = build_decisions_update(task, input.decisions)
   }
 
   if (Object.keys(updates).length === 0) {
@@ -200,14 +187,13 @@ export async function update_task(
 
   updates.updated_at = new Date().toISOString()
 
-  await db.update(tasks).set(updates).where(eq(tasks.id, task_id)).run()
+  await db
+    .update(tasks)
+    .set(updates)
+    .where(and(eq(tasks.id, task_id), ne(tasks.status, 'deleted')))
+    .run()
 
-  const row = await db.select().from(tasks).where(eq(tasks.id, task_id)).get()
-  if (!row) {
-    throw new ContinuumError('TASK_NOT_FOUND', 'Task not found after update')
-  }
-
-  return row_to_task(row)
+  return require_task(db, task_id)
 }
 
 export async function get_task(
@@ -258,7 +244,7 @@ export async function complete_task(
       completed_at: now,
       updated_at: now,
     })
-    .where(eq(tasks.id, input.task_id))
+    .where(and(eq(tasks.id, input.task_id), ne(tasks.status, 'deleted')))
     .run()
 
   return require_task(db, input.task_id)
