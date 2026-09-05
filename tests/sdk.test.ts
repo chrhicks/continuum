@@ -18,6 +18,18 @@ async function withTempCwd(run: () => Promise<void>): Promise<void> {
   }
 }
 
+async function expectTaskNotFound(run: () => Promise<unknown>): Promise<void> {
+  try {
+    await run()
+    throw new Error('Expected TASK_NOT_FOUND')
+  } catch (error) {
+    expect(isContinuumError(error)).toBe(true)
+    if (isContinuumError(error)) {
+      expect(error.code).toBe('TASK_NOT_FOUND')
+    }
+  }
+}
+
 describe('sdk flows', () => {
   test('smoke flow: init, create, list, delete', async () => {
     await withTempCwd(async () => {
@@ -63,6 +75,48 @@ describe('sdk flows', () => {
       expect(listWithDeleted.tasks.some((task) => task.id === created.id)).toBe(
         true,
       )
+    })
+  })
+
+  test('update rejects deleted tasks without mutation', async () => {
+    await withTempCwd(async () => {
+      await continuum.task.init()
+      const task = await continuum.task.create({
+        title: 'Deleted update target',
+        type: 'bug',
+        description: 'Deletion must be terminal for updates.',
+      })
+      await continuum.task.delete(task.id)
+      const afterDelete = await continuum.task.get(task.id)
+
+      await expectTaskNotFound(() =>
+        continuum.task.update(task.id, { title: 'Mutated after deletion' }),
+      )
+
+      expect(await continuum.task.get(task.id)).toEqual(afterDelete)
+      const listed = await continuum.task.list({ includeDeleted: true })
+      expect(listed.tasks.find(({ id }) => id === task.id)).toEqual(afterDelete)
+    })
+  })
+
+  test('completion rejects deleted tasks without revival', async () => {
+    await withTempCwd(async () => {
+      await continuum.task.init()
+      const task = await continuum.task.create({
+        title: 'Deleted completion target',
+        type: 'bug',
+        description: 'Deletion must be terminal for completion.',
+      })
+      await continuum.task.delete(task.id)
+      const afterDelete = await continuum.task.get(task.id)
+
+      await expectTaskNotFound(() =>
+        continuum.task.complete(task.id, {
+          outcome: 'Revived after deletion',
+        }),
+      )
+
+      expect(await continuum.task.get(task.id)).toEqual(afterDelete)
     })
   })
 
