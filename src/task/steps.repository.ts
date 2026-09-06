@@ -1,8 +1,6 @@
-import { eq } from 'drizzle-orm'
 import type { DbClient } from '../db/client'
-import { tasks } from '../db/schema'
 import { ContinuumError } from './error'
-import { require_task } from './tasks.repository'
+import { require_task, update_live_task } from './tasks.repository'
 import type {
   AddStepsInput,
   CompleteStepInput,
@@ -40,17 +38,11 @@ export async function add_steps(
     currentStep = firstPending?.id ?? null
   }
 
-  await db
-    .update(tasks)
-    .set({
-      steps: JSON.stringify(allSteps),
-      current_step: currentStep,
-      updated_at: new Date().toISOString(),
-    })
-    .where(eq(tasks.id, input.task_id))
-    .run()
-
-  return require_task(db, input.task_id)
+  return update_live_task(db, input.task_id, {
+    steps: JSON.stringify(allSteps),
+    current_step: currentStep,
+    updated_at: new Date().toISOString(),
+  })
 }
 
 export async function complete_step(
@@ -101,17 +93,13 @@ export async function complete_step(
     }
   }
 
-  await db
-    .update(tasks)
-    .set({
-      steps: JSON.stringify(updatedSteps),
-      current_step: nextStep,
-      updated_at: new Date().toISOString(),
-    })
-    .where(eq(tasks.id, input.task_id))
-    .run()
+  const updatedTask = await update_live_task(db, input.task_id, {
+    steps: JSON.stringify(updatedSteps),
+    current_step: nextStep,
+    updated_at: new Date().toISOString(),
+  })
 
-  return { task: await require_task(db, input.task_id) }
+  return { task: updatedTask }
 }
 
 export async function update_step(
@@ -151,16 +139,10 @@ export async function update_step(
     notes: input.notes !== undefined ? input.notes : existingStep.notes,
   }
 
-  await db
-    .update(tasks)
-    .set({
-      steps: JSON.stringify(updatedSteps),
-      updated_at: new Date().toISOString(),
-    })
-    .where(eq(tasks.id, input.task_id))
-    .run()
-
-  return require_task(db, input.task_id)
+  return update_live_task(db, input.task_id, {
+    steps: JSON.stringify(updatedSteps),
+    updated_at: new Date().toISOString(),
+  })
 }
 
 function requireStep(steps: Step[], index: number, id: number): Step {
