@@ -1,7 +1,5 @@
-import { eq } from 'drizzle-orm'
 import type { DbClient } from '../db/client'
-import { tasks } from '../db/schema'
-import { require_task } from './tasks.repository'
+import { require_task, update_live_task } from './tasks.repository'
 import type {
   AddDecisionInput,
   AddDiscoveryInput,
@@ -27,16 +25,10 @@ export async function add_discovery(
 
   const discoveries = [...task.discoveries, discovery]
 
-  await db
-    .update(tasks)
-    .set({
-      discoveries: JSON.stringify(discoveries),
-      updated_at: new Date().toISOString(),
-    })
-    .where(eq(tasks.id, input.task_id))
-    .run()
-
-  return require_task(db, input.task_id)
+  return update_live_task(db, input.task_id, {
+    discoveries: JSON.stringify(discoveries),
+    updated_at: new Date().toISOString(),
+  })
 }
 
 export async function add_decision(
@@ -57,14 +49,8 @@ export async function add_decision(
 
   const decisions = [...task.decisions, decision]
 
-  await db
-    .update(tasks)
-    .set({
-      decisions: JSON.stringify(decisions),
-      updated_at: new Date().toISOString(),
-    })
-    .where(eq(tasks.id, input.task_id))
-    .run()
-
-  return require_task(db, input.task_id)
+  return update_live_task(db, input.task_id, {
+    decisions: JSON.stringify(decisions),
+    updated_at: new Date().toISOString(),
+  })
 }

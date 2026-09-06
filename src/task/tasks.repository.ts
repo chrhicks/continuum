@@ -42,6 +42,20 @@ export async function require_task(
   return task
 }
 
+export async function update_live_task(
+  db: DbClient,
+  task_id: string,
+  updates: Partial<typeof tasks.$inferInsert>,
+): Promise<Task> {
+  await db
+    .update(tasks)
+    .set(updates)
+    .where(and(eq(tasks.id, task_id), ne(tasks.status, 'deleted')))
+    .run()
+
+  return require_task(db, task_id)
+}
+
 async function validate_blockers(
   db: DbClient,
   blockers: string[],
@@ -187,13 +201,7 @@ export async function update_task(
 
   updates.updated_at = new Date().toISOString()
 
-  await db
-    .update(tasks)
-    .set(updates)
-    .where(and(eq(tasks.id, task_id), ne(tasks.status, 'deleted')))
-    .run()
-
-  return require_task(db, task_id)
+  return update_live_task(db, task_id, updates)
 }
 
 export async function get_task(
@@ -236,16 +244,10 @@ export async function complete_task(
   }
 
   const now = new Date().toISOString()
-  await db
-    .update(tasks)
-    .set({
-      status: 'completed',
-      outcome: input.outcome,
-      completed_at: now,
-      updated_at: now,
-    })
-    .where(and(eq(tasks.id, input.task_id), ne(tasks.status, 'deleted')))
-    .run()
-
-  return require_task(db, input.task_id)
+  return update_live_task(db, input.task_id, {
+    status: 'completed',
+    outcome: input.outcome,
+    completed_at: now,
+    updated_at: now,
+  })
 }
