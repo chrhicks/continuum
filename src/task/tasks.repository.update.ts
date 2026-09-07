@@ -1,5 +1,6 @@
 import { tasks } from '../db/schema'
 import { patch_collection } from './collection-patch'
+import { reconcile_current_step } from './step-cursor'
 import { normalize_priority } from './tasks.repository.parse'
 import type {
   CollectionPatch,
@@ -109,12 +110,6 @@ export function build_steps_update(
     },
   )
 
-  let currentStep = currentTask.current_step
-
-  if (currentStep !== null && collection.deleted_ids.has(currentStep)) {
-    currentStep = null
-  }
-
   const normalized = collection.items.map((step) => ({
     id: step.id,
     title: step.title,
@@ -126,14 +121,9 @@ export function build_steps_update(
     notes: step.notes ?? null,
   }))
 
-  if (currentStep === null && normalized.length > 0) {
-    const firstPending = normalized.find((step) => step.status === 'pending')
-    currentStep = firstPending?.id ?? null
-  }
-
   return {
     steps: JSON.stringify(normalized),
-    current_step: currentStep,
+    current_step: reconcile_current_step(normalized, currentTask.current_step),
   }
 }
 

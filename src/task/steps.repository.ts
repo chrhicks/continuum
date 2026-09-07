@@ -1,5 +1,6 @@
 import type { DbClient } from '../db/client'
 import { ContinuumError } from './error'
+import { reconcile_current_step } from './step-cursor'
 import { require_task, update_live_task } from './tasks.repository'
 import type {
   AddStepsInput,
@@ -32,15 +33,9 @@ export async function add_steps(
 
   const allSteps = [...existingSteps, ...newSteps]
 
-  let currentStep = task.current_step
-  if (currentStep === null && allSteps.length > 0) {
-    const firstPending = allSteps.find((s) => s.status === 'pending')
-    currentStep = firstPending?.id ?? null
-  }
-
   return update_live_task(db, input.task_id, {
     steps: JSON.stringify(allSteps),
-    current_step: currentStep,
+    current_step: reconcile_current_step(allSteps, task.current_step),
     updated_at: new Date().toISOString(),
   })
 }
@@ -85,17 +80,9 @@ export async function complete_step(
     notes: input.notes ?? existingStep.notes,
   }
 
-  let nextStep: number | null = null
-  for (const step of updatedSteps) {
-    if (step.status === 'pending') {
-      nextStep = step.id
-      break
-    }
-  }
-
   const updatedTask = await update_live_task(db, input.task_id, {
     steps: JSON.stringify(updatedSteps),
-    current_step: nextStep,
+    current_step: reconcile_current_step(updatedSteps, task.current_step),
     updated_at: new Date().toISOString(),
   })
 
@@ -141,6 +128,7 @@ export async function update_step(
 
   return update_live_task(db, input.task_id, {
     steps: JSON.stringify(updatedSteps),
+    current_step: reconcile_current_step(updatedSteps, task.current_step),
     updated_at: new Date().toISOString(),
   })
 }
