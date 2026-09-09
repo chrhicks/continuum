@@ -102,25 +102,27 @@ export function parseExpandOptions(
     children: false,
     blockers: false,
   }
+  const items = value
+    ?.split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+  const standaloneAll = items?.length === 1 && items[0] === 'all'
+  const expanded = { ...defaults }
+  for (const item of items ?? []) {
+    if (item === 'parent') expanded.parent = true
+    else if (item === 'children') expanded.children = true
+    else if (item === 'blockers') expanded.blockers = true
+    else if (!standaloneAll) {
+      throw new Error(
+        `Invalid expand item '${item}'. Use: parent, children, blockers, or standalone all.`,
+      )
+    }
+  }
   if (tree) {
     return { ...defaults, children: true }
   }
-  if (!value) return defaults
-  const items = value
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean)
-  const expanded = { ...defaults }
-  if (items.includes('all')) {
-    expanded.parent = true
-    expanded.children = true
-    expanded.blockers = true
-    return expanded
-  }
-  for (const item of items) {
-    if (item === 'parent') expanded.parent = true
-    if (item === 'children') expanded.children = true
-    if (item === 'blockers') expanded.blockers = true
+  if (standaloneAll) {
+    return { parent: true, children: true, blockers: true }
   }
   return expanded
 }
