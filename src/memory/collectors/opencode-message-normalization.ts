@@ -1,7 +1,6 @@
 import type { OpencodeMessageBlock } from '../opencode/extract'
 import {
   normalizeWhitespace,
-  renderNormalizedMessageBlock,
   toIso,
   type NormalizedOpencodeMessage,
 } from './opencode-artifacts'
@@ -32,10 +31,4 @@ export function normalizeSessionMessages(
       }
     })
     .filter((message): message is NormalizedOpencodeMessage => message !== null)
-}
-
-export function buildNormalizedTranscript(
-  messages: NormalizedOpencodeMessage[],
-): string {
-  return messages.map(renderNormalizedMessageBlock).join('\n\n')
 }
