@@ -9,6 +9,7 @@ export type ContinuumErrorCode =
   | 'INVALID_TYPE'
   | 'INVALID_TEMPLATE'
   | 'PARENT_NOT_FOUND'
+  | 'INVALID_PARENT'
   | 'ITEM_NOT_FOUND'
   | 'BLOCKER_NOT_FOUND'
   | 'INVALID_BLOCKER'
