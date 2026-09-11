@@ -72,9 +72,10 @@ async function validate_blockers(
   return unique.filter((id) => !found.has(id))
 }
 
-async function validate_parent_exists(
+async function validate_parent_assignment(
   db: DbClient,
   parent_id: string | null | undefined,
+  task_id?: string,
 ): Promise<void> {
   if (!parent_id) return
   const parentExists = await task_exists(db, parent_id)
@@ -82,6 +83,26 @@ async function validate_parent_exists(
     throw new ContinuumError('PARENT_NOT_FOUND', 'Parent task not found', [
       'Verify parent_id and try again.',
     ])
+  }
+  if (!task_id) return
+
+  const visited = new Set<string>()
+  let ancestor_id: string | null = parent_id
+  while (ancestor_id && !visited.has(ancestor_id)) {
+    if (ancestor_id === task_id) {
+      throw new ContinuumError(
+        'INVALID_PARENT',
+        'Parent assignment would create a cycle',
+        ['Choose a task that is not this task or one of its descendants.'],
+      )
+    }
+    visited.add(ancestor_id)
+    const ancestor = await db
+      .select({ parent_id: tasks.parent_id })
+      .from(tasks)
+      .where(eq(tasks.id, ancestor_id))
+      .get()
+    ancestor_id = ancestor?.parent_id ?? null
   }
 }
 
@@ -112,7 +133,7 @@ export async function create_task(
   const priority = normalize_priority(input.priority)
 
   validate_blocker_list(id, blocked_by)
-  await validate_parent_exists(db, input.parent_id)
+  await validate_parent_assignment(db, input.parent_id)
 
   const missingBlockers = await validate_blockers(db, blocked_by)
   if (missingBlockers.length > 0) {
@@ -164,7 +185,7 @@ export async function update_task(
   const updates: Partial<typeof tasks.$inferInsert> = {}
 
   if (input.parent_id !== undefined) {
-    await validate_parent_exists(db, input.parent_id)
+    await validate_parent_assignment(db, input.parent_id, task_id)
   }
 
   if (input.blocked_by !== undefined) {

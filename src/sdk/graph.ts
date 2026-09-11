@@ -37,10 +37,12 @@ function collect_descendants(tasks: SdkTask[], parentId: string): string[] {
   }
 
   const result: string[] = []
+  const visited = new Set([parentId])
   const queue = [...(byParent.get(parentId) ?? [])]
   while (queue.length > 0) {
     const current = queue.shift()
-    if (!current) continue
+    if (!current || visited.has(current.id)) continue
+    visited.add(current.id)
     result.push(current.id)
     const children = byParent.get(current.id)
     if (children) queue.push(...children)
@@ -51,8 +53,10 @@ function collect_descendants(tasks: SdkTask[], parentId: string): string[] {
 function collect_ancestors(tasks: SdkTask[], taskId: string): string[] {
   const byId = new Map(tasks.map((task) => [task.id, task]))
   const result: string[] = []
+  const visited = new Set([taskId])
   let current = byId.get(taskId)
-  while (current?.parentId) {
+  while (current?.parentId && !visited.has(current.parentId)) {
+    visited.add(current.parentId)
     result.push(current.parentId)
     current = byId.get(current.parentId)
   }
