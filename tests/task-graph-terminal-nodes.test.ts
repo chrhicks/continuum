@@ -15,16 +15,12 @@ async function withTempCwd(
   run: (root: string) => Promise<void>,
 ): Promise<void> {
   const root = mkdtempSync(join(tmpdir(), 'continuum-terminal-graph-'))
-  const previousCwd = process.cwd()
-  const previousDataHome = process.env.XDG_DATA_HOME
+  const previous = process.cwd()
   try {
-    process.env.XDG_DATA_HOME = join(root, 'xdg-data')
     process.chdir(root)
     await run(root)
   } finally {
-    process.chdir(previousCwd)
-    if (previousDataHome === undefined) delete process.env.XDG_DATA_HOME
-    else process.env.XDG_DATA_HOME = previousDataHome
+    process.chdir(previous)
     rmSync(root, { recursive: true, force: true })
   }
 }
