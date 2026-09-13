@@ -123,8 +123,12 @@ async function handleConsolidate(
       return yield* consolidateMemory(runtime, { dryRun })
     }),
     (result) => {
-      if (result.status === 'no-pending')
-        return console.log('No pending journal entries.')
+      if (result.status === 'no-pending') {
+        console.log('No pending journal entries.')
+        if ('projection' in result && result.projection.stale)
+          console.warn('Generated Markdown is still stale.')
+        return
+      }
       if (result.status === 'preview') {
         console.log(
           `Consolidation preview: sequences ${result.firstSequence}-${result.lastSequence} (${result.entryCount} entries)`,
