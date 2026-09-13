@@ -22,8 +22,15 @@ import type { MemoryResourceOwner } from './resource-owner'
 import { publishMemoryProjections } from '../projection/consolidation-projections'
 import { withProjectionPublicationLock } from '../projection/publication-lock'
 
+type ProjectionStatus = { stale: false } | { stale: true; error: unknown }
+
+type NoPendingConsolidationResult =
+  | { status: 'no-pending'; dryRun: true }
+  | { status: 'no-pending'; dryRun: false }
+  | { status: 'no-pending'; dryRun: false; projection: ProjectionStatus }
+
 export type ConsolidateMemoryResult =
-  | { status: 'no-pending'; dryRun: boolean }
+  | NoPendingConsolidationResult
   | {
       status: 'preview'
       dryRun: true
@@ -42,7 +49,7 @@ export type ConsolidateMemoryResult =
       dryRun: false
       consolidation: CompletedConsolidation
       entryCount: number
-      projection: { stale: false } | { stale: true; error: unknown }
+      projection: ProjectionStatus
     }
 
 export type ConsolidateMemoryOptions = {
@@ -63,17 +70,24 @@ export function consolidateMemory(
   const journal = makeJournalRepository(owner.handle)
   const consolidations = makeConsolidationRepository(owner.handle)
   return Effect.gen(function* () {
+    const dryRun = options.dryRun ?? false
     const boundary = (yield* journal.latestBoundary()) ?? 0
     const snapshot = yield* journal.maxSequence()
-    if (snapshot === null || snapshot <= boundary)
-      return { status: 'no-pending', dryRun: options.dryRun ?? false } as const
-    const entries = yield* journal.listPending(boundary, snapshot)
-    if (entries.length === 0)
-      return { status: 'no-pending', dryRun: options.dryRun ?? false } as const
+    const entries =
+      snapshot === null || snapshot <= boundary
+        ? []
+        : yield* journal.listPending(boundary, snapshot)
     const first = entries[0]
     const last = entries.at(-1)
     if (!first || !last)
-      return { status: 'no-pending', dryRun: options.dryRun ?? false } as const
+      return yield* finishWithoutPending({
+        journal,
+        consolidations,
+        memoryDir: owner.memoryDir,
+        boundary,
+        dryRun,
+        dependencies,
+      })
     const config =
       dependencies.config ?? (yield* loadMemoryConfig(owner.memoryDir))
     const summary = yield* Effect.tryPromise({
@@ -82,7 +96,7 @@ export function consolidateMemory(
     })
     const firstSequence = first.sequence
     const lastSequence = last.sequence
-    if (options.dryRun)
+    if (dryRun)
       return {
         status: 'preview',
         dryRun: true,
@@ -110,26 +124,64 @@ export function consolidateMemory(
       return yield* Effect.fail(completion.failure)
     }
     const consolidation = completion.success
-    const projection = yield* Effect.result(
-      regenerateProjections({
-        journal,
-        consolidations,
-        memoryDir: owner.memoryDir,
-        config,
-        publish: dependencies.publish ?? publishMemoryProjections,
-      }),
-    )
+    const projection = yield* regenerateProjectionStatus({
+      journal,
+      consolidations,
+      memoryDir: owner.memoryDir,
+      config,
+      publish: dependencies.publish ?? publishMemoryProjections,
+    })
     return {
       status: 'completed',
       dryRun: false,
       consolidation,
       entryCount: entries.length,
-      projection:
-        projection._tag === 'Success'
-          ? ({ stale: false } as const)
-          : ({ stale: true, error: projection.failure } as const),
+      projection,
     } as const
   })
+}
+
+function finishWithoutPending(options: {
+  journal: JournalRepositoryService
+  consolidations: ConsolidationRepositoryService
+  memoryDir: string
+  boundary: number
+  dryRun: boolean
+  dependencies: ConsolidateMemoryDependencies
+}): Effect.Effect<NoPendingConsolidationResult, unknown> {
+  if (options.dryRun)
+    return Effect.succeed({ status: 'no-pending', dryRun: true })
+  if (options.boundary === 0)
+    return Effect.succeed({ status: 'no-pending', dryRun: false })
+  return Effect.gen(function* () {
+    const config =
+      options.dependencies.config ??
+      (yield* loadMemoryConfig(options.memoryDir))
+    const projection = yield* regenerateProjectionStatus({
+      journal: options.journal,
+      consolidations: options.consolidations,
+      memoryDir: options.memoryDir,
+      config,
+      publish: options.dependencies.publish ?? publishMemoryProjections,
+    })
+    return { status: 'no-pending', dryRun: false, projection } as const
+  })
+}
+
+function regenerateProjectionStatus(options: {
+  journal: JournalRepositoryService
+  consolidations: ConsolidationRepositoryService
+  memoryDir: string
+  config: MemoryConfig
+  publish: typeof publishMemoryProjections
+}): Effect.Effect<ProjectionStatus> {
+  return Effect.result(regenerateProjections(options)).pipe(
+    Effect.map((result) =>
+      result._tag === 'Success'
+        ? ({ stale: false } as const)
+        : ({ stale: true, error: result.failure } as const),
+    ),
+  )
 }
 
 function defaultSummarizer(config: MemoryConfig) {

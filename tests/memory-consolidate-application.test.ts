@@ -237,6 +237,60 @@ describe('memory consolidate application', () => {
     )
   })
 
+  test('republishes a durable consolidation on a no-pending retry', async () => {
+    const paths = target()
+    let summaryCalls = 0
+    await append(paths, 'durable source')
+    const first = await Effect.runPromise(
+      consolidateMemory(
+        owner(paths),
+        {},
+        {
+          summarize: async () => {
+            summaryCalls += 1
+            return summary('saved summary')
+          },
+          publish: () => {
+            throw new Error('disk full')
+          },
+        },
+      ),
+    )
+    expect(first.status).toBe('completed')
+    rmSync(paths.memoryDir, { recursive: true, force: true })
+
+    const dryRun = await Effect.runPromise(
+      consolidateMemory(owner(paths), { dryRun: true }),
+    )
+    expect(dryRun.status).toBe('no-pending')
+    expect(existsSync(paths.memoryDir)).toBe(false)
+    expect('projection' in dryRun).toBe(false)
+
+    const retry = await Effect.runPromise(
+      consolidateMemory(
+        owner(paths),
+        {},
+        {
+          summarize: async () => {
+            summaryCalls += 1
+            throw new Error('unexpected summary')
+          },
+        },
+      ),
+    )
+    expect(retry.status).toBe('no-pending')
+    expect('projection' in retry).toBe(true)
+    if (retry.status !== 'no-pending' || !('projection' in retry)) {
+      throw new Error('Expected no-pending retry with projection result')
+    }
+    expect(retry.projection.stale).toBe(false)
+    expect(readFileSync(join(paths.memoryDir, 'MEMORY.md'), 'utf8')).toContain(
+      'saved summary',
+    )
+    expect(count(paths.dbPath, 'memory_consolidations')).toBe(1)
+    expect(summaryCalls).toBe(1)
+  })
+
   test('reports stale projection after canonical completion', async () => {
     const paths = target()
     await append(paths, 'durable')
@@ -255,6 +309,27 @@ describe('memory consolidate application', () => {
     expect(result.status).toBe('completed')
     if (result.status !== 'completed') return
     expect(result.projection.stale).toBe(true)
+
+    const retry = await Effect.runPromise(
+      consolidateMemory(
+        owner(paths),
+        {},
+        {
+          summarize: async () => {
+            throw new Error('unexpected summary')
+          },
+          publish: () => {
+            throw new Error('still full')
+          },
+        },
+      ),
+    )
+    expect(retry.status).toBe('no-pending')
+    expect('projection' in retry).toBe(true)
+    if (retry.status !== 'no-pending' || !('projection' in retry)) {
+      throw new Error('Expected stale no-pending projection result')
+    }
+    expect(retry.projection.stale).toBe(true)
     expect(count(paths.dbPath, 'memory_consolidations')).toBe(1)
   })
 })
