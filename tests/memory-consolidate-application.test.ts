@@ -279,7 +279,10 @@ describe('memory consolidate application', () => {
       ),
     )
     expect(retry.status).toBe('no-pending')
-    if (retry.status !== 'no-pending' || !('projection' in retry)) return
+    expect('projection' in retry).toBe(true)
+    if (retry.status !== 'no-pending' || !('projection' in retry)) {
+      throw new Error('Expected no-pending retry with projection result')
+    }
     expect(retry.projection.stale).toBe(false)
     expect(readFileSync(join(paths.memoryDir, 'MEMORY.md'), 'utf8')).toContain(
       'saved summary',
@@ -322,7 +325,10 @@ describe('memory consolidate application', () => {
       ),
     )
     expect(retry.status).toBe('no-pending')
-    if (retry.status !== 'no-pending' || !('projection' in retry)) return
+    expect('projection' in retry).toBe(true)
+    if (retry.status !== 'no-pending' || !('projection' in retry)) {
+      throw new Error('Expected stale no-pending projection result')
+    }
     expect(retry.projection.stale).toBe(true)
     expect(count(paths.dbPath, 'memory_consolidations')).toBe(1)
   })
