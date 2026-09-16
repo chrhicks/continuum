@@ -251,11 +251,52 @@ describe('Continuum MCP server', () => {
         arguments: { workspace, id: task.id, query: 'children' },
       })
       expect(graph.structuredContent).toMatchObject({ taskIds: [] })
+      const paginationPeer = await client.callTool({
+        name: 'continuum_task_create',
+        arguments: {
+          workspace,
+          task: {
+            title: 'MCP pagination peer',
+            type: 'chore',
+            description: 'Force a second task-list page',
+            priority: 20,
+          },
+        },
+      })
+      const peerId = (
+        paginationPeer.structuredContent as { task: { id: string } }
+      ).task.id
+      const firstPage = await client.callTool({
+        name: 'continuum_task_list',
+        arguments: {
+          workspace,
+          options: { limit: 1, sort: 'priority', order: 'asc' },
+        },
+      })
+      const firstPageData = firstPage.structuredContent as {
+        tasks: Array<{ id: string }>
+        nextCursor?: string
+      }
+      expect(firstPageData.tasks.map(({ id }) => id)).toEqual([task.id])
+      expect(firstPageData.nextCursor).toBeString()
       const listed = await client.callTool({
         name: 'continuum_task_list',
-        arguments: { workspace },
+        arguments: {
+          workspace,
+          options: {
+            cursor: firstPageData.nextCursor,
+            limit: 1,
+            sort: 'priority',
+            order: 'asc',
+          },
+        },
       })
-      expect(JSON.stringify(listed.structuredContent)).toContain(task.id)
+      expect(listed.structuredContent).toMatchObject({
+        tasks: [{ id: peerId }],
+      })
+      expect(
+        (listed.structuredContent as { nextCursor?: string }).nextCursor,
+      ).toBeUndefined()
       const fetched = await client.callTool({
         name: 'continuum_task_get',
         arguments: { workspace, id: task.id, expand: ['children'] },
