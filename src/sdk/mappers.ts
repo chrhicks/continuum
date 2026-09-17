@@ -2,6 +2,7 @@ import type {
   create_task_for_directory,
   update_task_for_directory,
 } from '../task/tasks.service'
+import { ContinuumError } from '../task/error'
 import type { Decision, Discovery, Step, Task, TaskStatus } from '../task/types'
 import type {
   CollectionPatch as SdkCollectionPatch,
@@ -98,9 +99,14 @@ export function map_task(task: Task): SdkTask {
   }
 }
 
-function map_status(value?: SdkTaskStatus): TaskStatus | undefined {
-  if (!value || value === 'deleted') return undefined
-  return value as TaskStatus
+function map_mutation_status(value?: SdkTaskStatus): TaskStatus | undefined {
+  if (value === 'deleted') {
+    throw new ContinuumError(
+      'INVALID_STATUS',
+      'deleted is not a valid mutation status',
+    )
+  }
+  return value
 }
 
 export function map_list_status(
@@ -115,7 +121,7 @@ export function map_create_input(
   return {
     title: input.title,
     type: input.type,
-    status: map_status(input.status),
+    status: map_mutation_status(input.status),
     priority: input.priority ?? null,
     intent: input.intent ?? null,
     description: input.description,
@@ -133,7 +139,7 @@ export function map_update_input(
     description: input.description,
     intent: input.intent,
     plan: input.plan,
-    status: map_status(input.status),
+    status: map_mutation_status(input.status),
     priority: input.priority === undefined ? undefined : input.priority,
     type: input.type,
     parent_id: input.parentId === undefined ? undefined : input.parentId,

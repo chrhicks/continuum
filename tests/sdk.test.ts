@@ -30,6 +30,18 @@ async function expectTaskNotFound(run: () => Promise<unknown>): Promise<void> {
   }
 }
 
+async function expectInvalidStatus(run: () => Promise<unknown>): Promise<void> {
+  try {
+    await run()
+    throw new Error('Expected INVALID_STATUS')
+  } catch (error) {
+    expect(isContinuumError(error)).toBe(true)
+    if (isContinuumError(error)) {
+      expect(error.code).toBe('INVALID_STATUS')
+    }
+  }
+}
+
 describe('sdk flows', () => {
   test('smoke flow: init, create, list, delete', async () => {
     await withTempCwd(async () => {
@@ -266,6 +278,38 @@ describe('sdk flows', () => {
       const second = await continuum.task.steps.complete(task.id, { stepId })
       expect(second.warnings?.length).toBe(1)
       expect(second.warnings?.[0]).toContain('already completed')
+    })
+  })
+
+  test('create rejects deleted as a reserved status', async () => {
+    await withTempCwd(async () => {
+      await continuum.task.init()
+      await expectInvalidStatus(() =>
+        continuum.task.create({
+          title: 'Invalid create status',
+          type: 'chore',
+          description: 'Deleted is reserved for read results.',
+          status: 'deleted',
+        }),
+      )
+
+      const listed = await continuum.task.list({ includeDeleted: true })
+      expect(listed.tasks).toHaveLength(0)
+    })
+  })
+
+  test('update rejects deleted as a reserved status without mutation', async () => {
+    await withTempCwd(async () => {
+      await continuum.task.init()
+      const task = await continuum.task.create({
+        title: 'Invalid update status',
+        type: 'chore',
+        description: 'Deleted is reserved for read results.',
+      })
+      await expectInvalidStatus(() =>
+        continuum.task.update(task.id, { status: 'deleted' }),
+      )
+      expect(await continuum.task.get(task.id)).toEqual(task)
     })
   })
 
