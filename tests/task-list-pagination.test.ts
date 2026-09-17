@@ -106,7 +106,7 @@ async function seedTasks(root: string): Promise<SeededTask[]> {
       type: 'chore',
       description: `${spec.title} pagination fixture`,
       priority: spec.priority,
-      status: spec.status,
+      status: spec.status === 'deleted' ? undefined : spec.status,
     })
     if (spec.status === 'deleted') await continuum.task.delete(task.id)
     seeded.push({ ...spec, id: task.id })
