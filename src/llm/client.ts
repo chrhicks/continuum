@@ -14,6 +14,19 @@ import {
 const DEFAULT_TOKEN_STEP = 2000
 const DEFAULT_MAX_TOKENS_CAP = 12000
 
+type LlmTransportFailure = 'network' | 'timeout'
+
+class LlmTransportError extends Error {
+  constructor(
+    readonly failure: LlmTransportFailure,
+    message: string,
+    cause: unknown,
+  ) {
+    super(message, { cause })
+    this.name = 'LlmTransportError'
+  }
+}
+
 /**
  * LlmClient is the single interface consumers use. Provider details,
  * HTTP transport, and retry behaviour are all hidden behind it.
@@ -72,15 +85,7 @@ async function callOnce<T = unknown>(
       signal: controller.signal,
     })
   } catch (error) {
-    const isTimeout =
-      error instanceof Error &&
-      (error.name === 'AbortError' ||
-        error.message.toLowerCase().includes('timed out') ||
-        error.message.toLowerCase().includes('timeout'))
-    if (isTimeout) {
-      throw new Error(`LLM request timed out after ${config.timeoutMs}ms.`)
-    }
-    throw error
+    throw classifyTransportError(error, config.timeoutMs)
   } finally {
     clearTimeout(timer)
   }
@@ -123,13 +128,10 @@ async function callWithRetry<T = unknown>(
       }
       maxTokens = next
     } catch (error) {
-      const isTimeout =
-        error instanceof Error &&
-        (error.message.toLowerCase().includes('timed out') ||
-          error.message.toLowerCase().includes('timeout'))
-      if (isTimeout && errorsRemaining > 0) {
+      if (error instanceof LlmTransportError && errorsRemaining > 0) {
+        const failure = error.failure === 'timeout' ? 'timed out' : 'failed'
         console.error(
-          `[llm] Request timed out, retrying in ${errorRetryDelayMs}ms... (${errorsRemaining} retries left)`,
+          `[llm] Request ${failure}, retrying in ${errorRetryDelayMs}ms... (${errorsRemaining} retries left)`,
         )
         errorsRemaining--
         await new Promise((resolve) => setTimeout(resolve, errorRetryDelayMs))
@@ -138,4 +140,26 @@ async function callWithRetry<T = unknown>(
       throw error
     }
   }
+}
+
+function classifyTransportError(
+  error: unknown,
+  timeoutMs: number,
+): LlmTransportError {
+  const isTimeout =
+    error instanceof Error &&
+    (error.name === 'AbortError' ||
+      error.message.toLowerCase().includes('timed out') ||
+      error.message.toLowerCase().includes('timeout'))
+
+  if (isTimeout) {
+    return new LlmTransportError(
+      'timeout',
+      `LLM request timed out after ${timeoutMs}ms.`,
+      error,
+    )
+  }
+
+  const message = error instanceof Error ? error.message : String(error)
+  return new LlmTransportError('network', message, error)
 }

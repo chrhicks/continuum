@@ -24,8 +24,9 @@ const ZEN_CHAT_CONFIG: LlmConfig = {
 }
 
 type FetchCall = { url: string; body: Record<string, unknown> }
+type FetchOutcome = Response | Error
 
-function makeFetchMock(responses: Response[]): {
+function makeFetchMock(responses: FetchOutcome[]): {
   calls: FetchCall[]
   restore: () => void
 } {
@@ -41,6 +42,9 @@ function makeFetchMock(responses: Response[]): {
       calls.push({ url, body })
       const response = responses[index] ?? responses[responses.length - 1]
       index += 1
+      if (response instanceof Error) {
+        throw response
+      }
       return response
     },
   ) as typeof globalThis.fetch
@@ -353,6 +357,174 @@ describe('LlmClient.callWithRetry', () => {
       )
       expect(result.finishReason).toBe('stop')
       expect(result.structuredOutput).toEqual({ ok: true })
+    } finally {
+      restore()
+    }
+  })
+
+  test('retries timeout failures', async () => {
+    const timeout = new Error('aborted')
+    timeout.name = 'AbortError'
+    const { calls, restore } = makeFetchMock([
+      timeout,
+      makeChatOkResponse('recovered'),
+    ])
+    try {
+      const client = createLlmClient(BASE_CONFIG)
+      const result = await client.callWithRetry(
+        { messages: [{ role: 'user', content: 'hi' }] },
+        { errorRetries: 1, errorRetryDelayMs: 0 },
+      )
+      expect(calls).toHaveLength(2)
+      expect(result.content).toBe('recovered')
+    } finally {
+      restore()
+    }
+  })
+
+  test('exhausts the configured network retry count', async () => {
+    const { calls, restore } = makeFetchMock([
+      new TypeError('fetch failed'),
+      new TypeError('fetch failed'),
+      new TypeError('fetch failed'),
+    ])
+    try {
+      const client = createLlmClient(BASE_CONFIG)
+      await expect(
+        client.callWithRetry(
+          { messages: [{ role: 'user', content: 'hi' }] },
+          { errorRetries: 2, errorRetryDelayMs: 0 },
+        ),
+      ).rejects.toThrow('fetch failed')
+      expect(calls).toHaveLength(3)
+    } finally {
+      restore()
+    }
+  })
+
+  test('preserves token accounting across network and length retries', async () => {
+    const { calls, restore } = makeFetchMock([
+      new TypeError('fetch failed'),
+      makeChatOkResponse('truncated', 'length'),
+      makeChatOkResponse('complete'),
+    ])
+    try {
+      const client = createLlmClient(BASE_CONFIG)
+      const result = await client.callWithRetry(
+        { messages: [{ role: 'user', content: 'hi' }] },
+        { errorRetries: 1, errorRetryDelayMs: 0, tokenStep: 500 },
+      )
+      expect(calls.map((call) => call.body.max_tokens)).toEqual([
+        BASE_CONFIG.maxTokens,
+        BASE_CONFIG.maxTokens,
+        BASE_CONFIG.maxTokens + 500,
+      ])
+      expect(result.content).toBe('complete')
+    } finally {
+      restore()
+    }
+  })
+
+  test('does not retry non-ok HTTP responses', async () => {
+    const { calls, restore } = makeFetchMock([
+      makeErrorResponse(503, 'unavailable'),
+      makeChatOkResponse('unexpected retry'),
+    ])
+    try {
+      const client = createLlmClient(BASE_CONFIG)
+      await expect(
+        client.callWithRetry(
+          { messages: [{ role: 'user', content: 'hi' }] },
+          { errorRetries: 2, errorRetryDelayMs: 0 },
+        ),
+      ).rejects.toThrow('LLM API error (503)')
+      expect(calls).toHaveLength(1)
+    } finally {
+      restore()
+    }
+  })
+
+  test('does not retry provider failures or refusals', async () => {
+    const providerFailures = [
+      { status: 'failed' },
+      {
+        status: 'completed',
+        output: [
+          {
+            type: 'message',
+            content: [{ type: 'refusal', refusal: 'cannot comply' }],
+          },
+        ],
+      },
+    ]
+
+    for (const failure of providerFailures) {
+      const { calls, restore } = makeFetchMock([
+        new Response(JSON.stringify(failure), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+        makeResponsesOkResponse('unexpected retry'),
+      ])
+      try {
+        const client = createLlmClient(ZEN_CHAT_CONFIG)
+        await expect(
+          client.callWithRetry(
+            { messages: [{ role: 'user', content: 'hi' }] },
+            { errorRetries: 2, errorRetryDelayMs: 0 },
+          ),
+        ).rejects.toThrow('LLM response')
+        expect(calls).toHaveLength(1)
+      } finally {
+        restore()
+      }
+    }
+  })
+
+  test('does not retry malformed response JSON', async () => {
+    const { calls, restore } = makeFetchMock([
+      new Response('{', {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+      makeChatOkResponse('unexpected retry'),
+    ])
+    try {
+      const client = createLlmClient(BASE_CONFIG)
+      await expect(
+        client.callWithRetry(
+          { messages: [{ role: 'user', content: 'hi' }] },
+          { errorRetries: 2, errorRetryDelayMs: 0 },
+        ),
+      ).rejects.toThrow()
+      expect(calls).toHaveLength(1)
+    } finally {
+      restore()
+    }
+  })
+
+  test('does not retry structured-output validation errors', async () => {
+    const { calls, restore } = makeFetchMock([
+      makeChatOkResponse('{"ok":false}'),
+      makeChatOkResponse('{"ok":true}'),
+    ])
+    try {
+      const client = createLlmClient(BASE_CONFIG)
+      await expect(
+        client.callWithRetry(
+          {
+            messages: [{ role: 'user', content: 'hi' }],
+            structuredOutput: {
+              jsonSchema: { name: 'tiny_probe', schema: { type: 'object' } },
+              validate: () => {
+                throw new Error('schema validation failed')
+              },
+            },
+          },
+          { errorRetries: 2, errorRetryDelayMs: 0 },
+        ),
+      ).rejects.toThrow('schema validation failed')
+      expect(calls).toHaveLength(1)
     } finally {
       restore()
     }
