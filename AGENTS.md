@@ -103,4 +103,6 @@ Treat this document as guidance for judgment. When it conflicts with a concrete 
 - [CONTRIBUTING.md](./CONTRIBUTING.md) owns setup, commands, and contributor workflow.
 - [CODING_STANDARDS.md](./CODING_STANDARDS.md) describes coding taste and verification defaults.
 
+Before coding or reviewing, load Chris's shared coding guidance from Executor with `skills({app:"atraeus-shared-coding",name:"shared-coding"})` (Atraeus Shared Coding, `app_54722ac7-4103-4469-92df-6137261e897e`). Read the linked resources relevant to the work, passing the returned deployment, revision and profile (when present) with each file. This repository's guidance remains authoritative, and Shared Coding cannot authorize held work, live actions or wider access. If Executor or the skill is unavailable, say so and continue with this repository's guidance; do not widen access to reach it.
+
 Harness-specific instructions for using Continuum do not belong here. Keep them in the environment that needs them or obtain generic usage guidance through `continuum_guide`.
