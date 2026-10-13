@@ -3,44 +3,50 @@ import { consolidateMemory } from '../memory/application/consolidate'
 import { importCanonicalOpencodeRecall } from '../memory/application/recall-import'
 import { getRecallStatus } from '../memory/application/recall-status'
 import { resolveMcpMemoryOwner, resolveReadOnlyMcpMemoryOwner } from './tools'
+import {
+  consolidateMemoryResultSchema,
+  type ConsolidateMemoryMcpResult,
+  type RecallImportMcpResult,
+  type RecallStatusMcpResult,
+} from './memory-schemas'
 import { runMcpEffect } from './result'
 
 export async function consolidateMcpMemory(input: {
   workspace: string
   dryRun?: boolean
-}): Promise<Record<string, unknown>> {
+}): Promise<ConsolidateMemoryMcpResult> {
   const owner = resolveMcpMemoryOwner(input.workspace)
   const result = await runMcpEffect(
     consolidateMemory(owner, { dryRun: input.dryRun }),
   )
   if (result.status === 'conflict') {
-    return {
+    return consolidateMemoryResultSchema().parse({
       workspace: owner.workspaceRoot,
       status: result.status,
       dryRun: result.dryRun,
       expectedBoundary: result.error.expectedBoundary,
       actualBoundary: result.error.actualBoundary,
-    }
+    })
   }
   if (result.status === 'completed') {
-    return {
+    return consolidateMemoryResultSchema().parse({
       workspace: owner.workspaceRoot,
       status: result.status,
       dryRun: result.dryRun,
       consolidation: result.consolidation,
       entryCount: result.entryCount,
       projectionStale: result.projection.stale,
-    }
+    })
   }
-  return { workspace: owner.workspaceRoot, ...result }
+  return consolidateMemoryResultSchema().parse({
+    workspace: owner.workspaceRoot,
+    ...result,
+  })
 }
 
-export function getMcpRecallStatus(input: { workspace: string }): {
+export function getMcpRecallStatus(input: {
   workspace: string
-  sources: number
-  rawMessages: number
-  derivedSummaries: number
-} {
+}): RecallStatusMcpResult {
   const owner = resolveReadOnlyMcpMemoryOwner(input.workspace)
   const status = getRecallStatus(owner)
   return {
@@ -59,7 +65,7 @@ export async function importMcpRecall(input: {
   after?: string
   limit?: number
   dryRun?: boolean
-}): Promise<Record<string, unknown>> {
+}): Promise<RecallImportMcpResult> {
   const owner = resolveMcpMemoryOwner(input.workspace)
   if (input.sourceDb && !isAbsolute(input.sourceDb)) {
     throw new Error('sourceDb must be an absolute path')
