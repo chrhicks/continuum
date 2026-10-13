@@ -5,6 +5,11 @@ import {
   getMcpRecallStatus,
   importMcpRecall,
 } from './memory-tools'
+import {
+  consolidateMemoryOutputSchema,
+  recallImportOutputSchema,
+  recallStatusOutputSchema,
+} from './memory-schemas'
 import { toolResult } from './result'
 import { positiveIntegerSchema, workspaceSchema } from './task-schemas'
 
@@ -18,6 +23,7 @@ export function registerMemoryTools(server: McpServer): void {
         workspace: workspaceSchema(),
         dryRun: z.boolean().optional(),
       },
+      outputSchema: consolidateMemoryOutputSchema(),
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,
@@ -32,6 +38,7 @@ export function registerMemoryTools(server: McpServer): void {
     {
       description: 'Read canonical OpenCode recall inventory counts.',
       inputSchema: { workspace: workspaceSchema() },
+      outputSchema: recallStatusOutputSchema(),
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,
@@ -58,6 +65,7 @@ export function registerMemoryTools(server: McpServer): void {
         limit: positiveIntegerSchema().max(1000).optional(),
         dryRun: z.boolean().optional(),
       },
+      outputSchema: recallImportOutputSchema(),
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,

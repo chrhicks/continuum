@@ -4,7 +4,6 @@ import { appendMemory } from '../memory/application/append'
 import {
   listMemoryEvidence,
   searchMemoryEvidence,
-  type MemoryEvidence,
 } from '../memory/application/query'
 import { getDbClientByPath, getReadOnlyDbClientByPath } from '../db/client'
 import { continuumDir } from '../db/paths'
@@ -23,6 +22,11 @@ import {
   type MemoryResourceOwner,
   type MemoryResourcePaths,
 } from '../memory/application/resource-owner'
+import type {
+  AppendMemoryMcpResult,
+  SearchMemoryMcpResult,
+  SummaryMcpResult,
+} from './memory-schemas'
 
 export type McpWorkspace = MemoryResourcePaths
 
@@ -30,7 +34,7 @@ export async function getSummary(input: {
   workspace: string
   taskLimit?: number
   memoryLimit?: number
-}): Promise<{ workspace: string; output: string }> {
+}): Promise<SummaryMcpResult> {
   const owner = resolveReadOnlyMcpMemoryOwner(input.workspace)
   const taskLimit = input.taskLimit ?? 5
   const memoryLimit = input.memoryLimit ?? 3
@@ -55,12 +59,7 @@ export async function appendMcpMemory(input: {
   kind: 'user' | 'agent' | 'tool'
   content: string
   tags?: string[]
-}): Promise<{
-  workspace: string
-  id: string
-  sequence: number
-  projectionStale: boolean
-}> {
+}): Promise<AppendMemoryMcpResult> {
   const owner = resolveMcpMemoryOwner(input.workspace)
   const result = await runMcpEffect(
     appendMemory(owner, {
@@ -83,10 +82,7 @@ export async function searchMcpMemory(input: {
   workspace: string
   query: string
   limit?: number
-}): Promise<{
-  workspace: string
-  matches: Array<MemoryEvidence & { score: number }>
-}> {
+}): Promise<SearchMemoryMcpResult> {
   const owner = resolveReadOnlyMcpMemoryOwner(input.workspace)
   const matches = await runMcpEffect(
     searchMemoryEvidence(owner, input.query, { limit: input.limit ?? 20 }),

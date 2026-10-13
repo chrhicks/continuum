@@ -1,10 +1,15 @@
 import { afterEach, describe, expect, test } from 'bun:test'
+import { Database } from 'bun:sqlite'
 import { mkdtempSync, realpathSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { resolveStorageAuthority } from '../src/db/storage-authority'
+import {
+  consolidateMemoryResultSchema,
+  recallImportOutputSchema,
+} from '../src/mcp/memory-schemas'
 
 const repoRoot = process.cwd()
 const continuumBin = join(repoRoot, 'bin', 'continuum')
@@ -76,6 +81,23 @@ describe('Continuum MCP server', () => {
         tools.tools.find((tool) => tool.name === 'continuum_summary')
           ?.inputSchema.properties?.memoryLimit,
       ).toMatchObject({ type: 'integer' })
+      for (const name of [
+        'continuum_summary',
+        'continuum_memory_append',
+        'continuum_memory_search',
+        'continuum_memory_consolidate',
+        'continuum_recall_status',
+        'continuum_recall_import',
+      ]) {
+        const schema = tools.tools.find(
+          (tool) => tool.name === name,
+        )?.outputSchema
+        expect(schema, name).toMatchObject({ type: 'object' })
+        expect(
+          Object.keys(schema?.properties ?? {}).length,
+          `${name} output properties`,
+        ).toBeGreaterThan(0)
+      }
 
       const runtime = await client.callTool({
         name: 'continuum_runtime',
@@ -102,6 +124,17 @@ describe('Continuum MCP server', () => {
         initialized: true,
       })
 
+      const emptyConsolidation = await client.callTool({
+        name: 'continuum_memory_consolidate',
+        arguments: { workspace },
+      })
+      expect(emptyConsolidation.isError).not.toBe(true)
+      expect(emptyConsolidation.structuredContent).toEqual({
+        workspace,
+        status: 'no-pending',
+        dryRun: false,
+      })
+
       const content =
         '## Durable entry\n\nUse `code`, "$HOME", $(not-run), and \'quotes\'.\n\n- item one\n- item two'
       const append = await client.callTool({
@@ -114,6 +147,11 @@ describe('Continuum MCP server', () => {
         },
       })
       expect(append.isError).not.toBe(true)
+      expect(append.structuredContent).toMatchObject({
+        workspace,
+        sequence: 1,
+        projectionStale: false,
+      })
 
       const search = await client.callTool({
         name: 'continuum_memory_search',
@@ -143,9 +181,54 @@ describe('Continuum MCP server', () => {
         name: 'continuum_memory_consolidate',
         arguments: { workspace },
       })
+      expect(consolidation.isError).not.toBe(true)
       expect(consolidation.structuredContent).toMatchObject({
         workspace,
         status: 'completed',
+      })
+
+      const regenerated = await client.callTool({
+        name: 'continuum_memory_consolidate',
+        arguments: { workspace },
+      })
+      expect(regenerated.isError).not.toBe(true)
+      expect(regenerated.structuredContent).toMatchObject({
+        workspace,
+        status: 'no-pending',
+        dryRun: false,
+        projection: { stale: false },
+      })
+
+      const dryRunEmpty = await client.callTool({
+        name: 'continuum_memory_consolidate',
+        arguments: { workspace, dryRun: true },
+      })
+      expect(dryRunEmpty.isError).not.toBe(true)
+      expect(dryRunEmpty.structuredContent).toEqual({
+        workspace,
+        status: 'no-pending',
+        dryRun: true,
+      })
+
+      await client.callTool({
+        name: 'continuum_memory_append',
+        arguments: {
+          workspace,
+          kind: 'agent',
+          content: 'Preview this pending entry.',
+          tags: ['mcp'],
+        },
+      })
+      const preview = await client.callTool({
+        name: 'continuum_memory_consolidate',
+        arguments: { workspace, dryRun: true },
+      })
+      expect(preview.isError).not.toBe(true)
+      expect(preview.structuredContent).toMatchObject({
+        workspace,
+        status: 'preview',
+        dryRun: true,
+        entryCount: 1,
       })
 
       const recallStatus = await client.callTool({
@@ -158,16 +241,35 @@ describe('Continuum MCP server', () => {
         rawMessages: 0,
         derivedSummaries: 0,
       })
-      const recallImport = await client.callTool({
+      const missingRecallImport = await client.callTool({
         name: 'continuum_recall_import',
         arguments: { workspace, dryRun: true, limit: 1 },
       })
-      expect(recallImport.isError).toBe(true)
-      expect(recallImport.content[0]).toMatchObject({
+      expect(missingRecallImport.isError).toBe(true)
+      expect(missingRecallImport.content[0]).toMatchObject({
         type: 'text',
         text: expect.stringMatching(
           /No OpenCode project found for repo:|OpenCode sqlite database not found:/,
         ),
+      })
+
+      const sourceDb = join(workspace, 'opencode.db')
+      seedOpencodeDb(sourceDb, workspace)
+      const recallImport = await client.callTool({
+        name: 'continuum_recall_import',
+        arguments: { workspace, sourceDb, dryRun: true },
+      })
+      expect(recallImport.isError).not.toBe(true)
+      expect(recallImport.structuredContent).toMatchObject({
+        workspace,
+        sourceDbPath: sourceDb,
+        dryRun: true,
+        totalSessions: 1,
+        imported: 1,
+        changed: 0,
+        skippedExisting: 0,
+        importedSessions: ['session-1'],
+        sessionOutcomes: [{ sessionId: 'session-1', status: 'would-import' }],
       })
 
       const created = await client.callTool({
@@ -321,4 +423,137 @@ describe('Continuum MCP server', () => {
       await client.close()
     }
   }, 20_000)
+
+  test('models every consolidation and recall-import result variant', () => {
+    const workspace = '/workspace'
+    const summary = {
+      narrative: 'Summary',
+      decisions: [],
+      discoveries: [],
+      patterns: [],
+      whatWorked: [],
+      whatFailed: [],
+      blockers: [],
+      openQuestions: [],
+      nextSteps: [],
+      tasks: [],
+      files: [],
+      confidence: null,
+    }
+    const variants = [
+      { workspace, status: 'no-pending', dryRun: true },
+      { workspace, status: 'no-pending', dryRun: false },
+      {
+        workspace,
+        status: 'no-pending',
+        dryRun: false,
+        projection: { stale: false },
+      },
+      {
+        workspace,
+        status: 'no-pending',
+        dryRun: false,
+        projection: { stale: true, error: { reason: 'write failed' } },
+      },
+      {
+        workspace,
+        status: 'preview',
+        dryRun: true,
+        firstSequence: 1,
+        lastSequence: 2,
+        entryCount: 2,
+        summary,
+      },
+      {
+        workspace,
+        status: 'conflict',
+        dryRun: false,
+        expectedBoundary: 1,
+        actualBoundary: 2,
+      },
+      {
+        workspace,
+        status: 'completed',
+        dryRun: false,
+        consolidation: {
+          id: 'consolidation-1',
+          firstSequence: 1,
+          lastSequence: 2,
+          summary,
+          summaryVersion: 1,
+          model: null,
+          createdAt: '2026-10-13T00:00:00.000Z',
+          completedAt: '2026-10-13T00:00:00.000Z',
+        },
+        entryCount: 2,
+        projectionStale: false,
+      },
+    ]
+    for (const variant of variants) {
+      expect(
+        consolidateMemoryResultSchema().safeParse(variant).success,
+        JSON.stringify(variant),
+      ).toBe(true)
+    }
+
+    const recallImport = {
+      workspace,
+      sourceDbPath: '/data/opencode.db',
+      dryRun: false,
+      totalSessions: 5,
+      imported: 1,
+      changed: 1,
+      skippedExisting: 1,
+      importedSessions: [
+        'would-import',
+        'would-refresh',
+        'imported',
+        'refreshed',
+      ],
+      sessionOutcomes: [
+        { sessionId: 'current', status: 'current' },
+        { sessionId: 'would-import', status: 'would-import' },
+        { sessionId: 'would-refresh', status: 'would-refresh' },
+        { sessionId: 'imported', status: 'imported' },
+        { sessionId: 'refreshed', status: 'refreshed' },
+      ],
+    }
+    expect(recallImportOutputSchema().safeParse(recallImport).success).toBe(
+      true,
+    )
+  })
 })
+
+function seedOpencodeDb(dbPath: string, workspace: string): void {
+  const db = new Database(dbPath)
+  db.exec(`
+    CREATE TABLE project (id TEXT PRIMARY KEY, worktree TEXT);
+    CREATE TABLE session (
+      id TEXT PRIMARY KEY, project_id TEXT, parent_id TEXT, slug TEXT,
+      directory TEXT, title TEXT, version TEXT, summary_additions INTEGER,
+      summary_deletions INTEGER, summary_files INTEGER, time_created INTEGER,
+      time_updated INTEGER
+    );
+    CREATE TABLE message (
+      id TEXT PRIMARY KEY, session_id TEXT, time_created INTEGER,
+      time_updated INTEGER, data TEXT
+    );
+    CREATE TABLE part (
+      id TEXT PRIMARY KEY, message_id TEXT, session_id TEXT,
+      time_created INTEGER, time_updated INTEGER, data TEXT
+    );
+  `)
+  db.query('INSERT INTO project (id, worktree) VALUES (?, ?)').run(
+    'project-1',
+    workspace,
+  )
+  const timestamp = Date.parse('2026-10-13T00:00:00.000Z')
+  db.query(
+    `INSERT INTO session
+     (id, project_id, slug, directory, title, version, summary_additions,
+      summary_deletions, summary_files, time_created, time_updated)
+     VALUES ('session-1', 'project-1', 'session-1', ?, 'Session 1', '1',
+             0, 0, 0, ?, ?)`,
+  ).run(workspace, timestamp, timestamp)
+  db.close()
+}

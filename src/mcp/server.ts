@@ -5,6 +5,11 @@ import { appendMcpMemory, getSummary, searchMcpMemory } from './tools'
 import { registerTaskTools } from './register-task-tools'
 import { registerMemoryTools } from './register-memory-tools'
 import { registerRuntimeTool } from './register-runtime-tool'
+import {
+  appendMemoryOutputSchema,
+  searchMemoryOutputSchema,
+  summaryOutputSchema,
+} from './memory-schemas'
 import { toolResult } from './result'
 
 const workspaceSchema = () =>
@@ -30,6 +35,7 @@ export function createContinuumMcpServer(): McpServer {
         taskLimit: positiveIntegerSchema().optional(),
         memoryLimit: positiveIntegerSchema().optional(),
       },
+      outputSchema: summaryOutputSchema(),
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,
@@ -54,6 +60,7 @@ export function createContinuumMcpServer(): McpServer {
           .describe('Full entry text; Markdown is allowed'),
         tags: z.array(z.string().min(1)).optional(),
       },
+      outputSchema: appendMemoryOutputSchema(),
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,
@@ -78,6 +85,7 @@ export function createContinuumMcpServer(): McpServer {
         query: z.string().min(1),
         limit: positiveIntegerSchema().max(100).optional(),
       },
+      outputSchema: searchMemoryOutputSchema(),
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,
