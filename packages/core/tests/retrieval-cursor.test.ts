@@ -7,7 +7,7 @@ import {
 } from '../src/memory/retrieval-cursor'
 
 const chronologicalScope: CursorScope = {
-  workspaceId: 'workspace-one',
+  scopeKey: 'workspace-one',
   mode: 'chronological',
   query: null,
   tags: [],
@@ -16,7 +16,7 @@ const chronologicalScope: CursorScope = {
 }
 
 const ftsScope: CursorScope = {
-  workspaceId: 'workspace-one',
+  scopeKey: 'workspace-one',
   mode: 'fts',
   query: 'cursor anchor',
   tags: ['cursor'],
@@ -76,7 +76,7 @@ describe('retrieval cursor encoding', () => {
     }
     expectInvalid(cursor, { ...ftsScope, query: 'different' })
     expectInvalid(cursor, { ...ftsScope, mode: 'chronological' })
-    expectInvalid(cursor, { ...ftsScope, workspaceId: 'workspace-two' })
+    expectInvalid(cursor, { ...ftsScope, scopeKey: 'workspace-two' })
   })
 })
 

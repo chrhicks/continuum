@@ -1,7 +1,6 @@
 import type { Database } from 'bun:sqlite'
 import { ContinuumError } from '../errors'
 import {
-  lookupPreparedWorkspace,
   prepareWorkspaceResolution,
   registerWorkspaceInTransaction,
   type ResolvedWorkspace,
@@ -15,9 +14,15 @@ import {
   type RetrievalMode,
 } from './retrieval-cursor'
 import { readMemoryRecords, type MemoryRecord } from './records'
+import {
+  prepareRetrievalScope,
+  resolveRetrievalScope,
+  scopeClause,
+  type RetrievalScope,
+  type RetrievalScopeInput,
+} from './retrieval-scope'
 
-export type SearchMemoryInput = {
-  workspace: string
+export type SearchMemoryInput = RetrievalScopeInput & {
   query?: string
   tags?: string[]
   kinds?: string[]
@@ -32,8 +37,7 @@ export type MemorySearchResult = {
   nextCursor: string | null
 }
 
-export type GetMemoryInput = {
-  workspace: string
+export type GetMemoryInput = RetrievalScopeInput & {
   ids: string[]
 }
 
@@ -81,16 +85,20 @@ export function searchMemory(
   input: SearchMemoryInput,
 ): MemorySearchResult {
   const search = normalizeSearch(input)
-  const preparedWorkspace = prepareWorkspaceResolution(input.workspace)
+  const preparedScope = prepareRetrievalScope(input, 'search memory')
 
   try {
     return database.transaction(() => {
-      const workspace = lookupPreparedWorkspace(database, preparedWorkspace)
-      if (!workspace) {
+      const scope = resolveRetrievalScope(
+        database,
+        preparedScope,
+        'search memory',
+      )
+      if (!scope) {
         if (search.cursor !== null) throwInvalidSearchCursor()
         return emptySearchResult()
       }
-      return readSearchPage(database, workspace.id, search)
+      return readSearchPage(database, scope, search)
     })()
   } catch (cause) {
     throwRetrievalError(cause, 'search memory', input.workspace)
@@ -102,21 +110,26 @@ export function getMemory(
   input: GetMemoryInput,
 ): GetMemoryResult {
   const ids = normalizeIds(input.ids)
-  const preparedWorkspace = prepareWorkspaceResolution(input.workspace)
+  const preparedScope = prepareRetrievalScope(input, 'get memory')
 
   try {
     return database.transaction(() => {
-      const workspace = lookupPreparedWorkspace(database, preparedWorkspace)
-      if (!workspace) return { records: [], missingIds: ids }
+      const scope = resolveRetrievalScope(database, preparedScope, 'get memory')
+      if (!scope) return { records: [], missingIds: ids }
 
       const placeholders = ids.map(() => '?').join(', ')
+      const inScope = scopeClause('memory_records', scope)
       const rows = database
         .query(
           `SELECT rowid, id
            FROM memory_records
-           WHERE workspace_id = ? AND id IN (${placeholders})`,
+           WHERE id IN (${placeholders})
+             AND ${inScope.clause}`,
         )
-        .all(workspace.id, ...ids) as Array<{ rowid: number; id: string }>
+        .all(...ids, ...inScope.parameters) as Array<{
+        rowid: number
+        id: string
+      }>
       const rowById = new Map(rows.map((row) => [row.id, row.rowid]))
       const hydrated = readMemoryRecords(
         database,
@@ -165,7 +178,11 @@ export function summarizeWorkspace(
           database,
           preparedWorkspace,
         )
-        const page = readSearchPage(database, workspace.id, search)
+        const page = readSearchPage(
+          database,
+          { key: workspace.id, workspaceIds: [workspace.id] },
+          search,
+        )
         return {
           workspace: publicWorkspaceInfo(workspace),
           ...page,
@@ -179,22 +196,22 @@ export function summarizeWorkspace(
 
 function readSearchPage(
   database: Database,
-  workspaceId: string,
+  scope: RetrievalScope,
   search: NormalizedSearch,
 ): MemorySearchResult {
   if (search.hasTokenlessQuery) return emptySearchResult()
 
   const mode: RetrievalMode = search.ftsExpression ? 'fts' : 'chronological'
-  const scope = cursorScope(workspaceId, mode, search)
+  const cursor = cursorScope(scope, mode, search)
   const anchorRowid =
-    search.cursor !== null ? decodeRetrievalCursor(search.cursor, scope) : null
+    search.cursor !== null ? decodeRetrievalCursor(search.cursor, cursor) : null
   const position =
     anchorRowid !== null
-      ? resolveCursorPosition(database, workspaceId, search, mode, anchorRowid)
+      ? resolveCursorPosition(database, scope, search, mode, anchorRowid)
       : null
   const candidates = search.ftsExpression
-    ? findFtsCandidates(database, workspaceId, search, position)
-    : findChronologicalCandidates(database, workspaceId, search, position)
+    ? findFtsCandidates(database, scope, search, position)
+    : findChronologicalCandidates(database, scope, search, position)
   if (
     mode === 'fts' &&
     candidates.some(
@@ -230,18 +247,18 @@ function readSearchPage(
     records,
     hasMore,
     nextCursor:
-      hasMore && last ? encodeRetrievalCursor(scope, last.rowid) : null,
+      hasMore && last ? encodeRetrievalCursor(cursor, last.rowid) : null,
   }
 }
 
 function resolveCursorPosition(
   database: Database,
-  workspaceId: string,
+  scope: RetrievalScope,
   search: NormalizedSearch,
   mode: RetrievalMode,
   recordRowid: number,
 ): Candidate {
-  const { clauses, parameters } = canonicalFilters('r', search)
+  const { clauses, parameters } = canonicalFilters('r', scope, search)
   const candidate =
     mode === 'chronological'
       ? (database
@@ -249,10 +266,9 @@ function resolveCursorPosition(
             `SELECT r.rowid, r.id, r.created_at
              FROM memory_records r
              WHERE r.rowid = ?
-               AND r.workspace_id = ?
                AND ${clauses.join('\n               AND ')}`,
           )
-          .get(recordRowid, workspaceId, ...parameters) as Candidate | null)
+          .get(recordRowid, ...parameters) as Candidate | null)
       : (database
           .query(
             `SELECT
@@ -264,13 +280,11 @@ function resolveCursorPosition(
              JOIN memory_records r ON r.rowid = memory_fts.rowid
              WHERE memory_fts MATCH ?
                AND r.rowid = ?
-               AND r.workspace_id = ?
                AND ${clauses.join('\n               AND ')}`,
           )
           .get(
             search.ftsExpression,
             recordRowid,
-            workspaceId,
             ...parameters,
           ) as Candidate | null)
 
@@ -290,11 +304,11 @@ function resolveCursorPosition(
 
 function findChronologicalCandidates(
   database: Database,
-  workspaceId: string,
+  scope: RetrievalScope,
   search: NormalizedSearch,
   position: Candidate | null,
 ): Candidate[] {
-  const { clauses, parameters } = canonicalFilters('r', search)
+  const { clauses, parameters } = canonicalFilters('r', scope, search)
   if (position) {
     clauses.push(`(r.created_at < ? OR (r.created_at = ? AND r.id < ?))`)
     parameters.push(position.created_at, position.created_at, position.id)
@@ -304,21 +318,20 @@ function findChronologicalCandidates(
     .query(
       `SELECT r.rowid, r.id, r.created_at
        FROM memory_records r
-       WHERE r.workspace_id = ?
-         AND ${clauses.join('\n         AND ')}
+       WHERE ${clauses.join('\n         AND ')}
        ORDER BY r.created_at DESC, r.id DESC
        LIMIT ?`,
     )
-    .all(workspaceId, ...parameters, search.limit + 1) as Candidate[]
+    .all(...parameters, search.limit + 1) as Candidate[]
 }
 
 function findFtsCandidates(
   database: Database,
-  workspaceId: string,
+  scope: RetrievalScope,
   search: NormalizedSearch,
   position: Candidate | null,
 ): Candidate[] {
-  const { clauses, parameters } = canonicalFilters('r', search)
+  const { clauses, parameters } = canonicalFilters('r', scope, search)
   const expression = search.ftsExpression
   if (!expression) {
     throw new ContinuumError({
@@ -363,7 +376,6 @@ function findFtsCandidates(
          FROM memory_fts
          JOIN memory_records r ON r.rowid = memory_fts.rowid
          WHERE memory_fts MATCH ?
-           AND r.workspace_id = ?
            AND ${clauses.join('\n           AND ')}
        )
        SELECT rowid, id, created_at, score
@@ -374,7 +386,6 @@ function findFtsCandidates(
     )
     .all(
       expression,
-      workspaceId,
       ...parameters,
       ...cursorParameters,
       search.limit + 1,
@@ -383,10 +394,12 @@ function findFtsCandidates(
 
 function canonicalFilters(
   recordAlias: string,
+  scope: RetrievalScope,
   search: NormalizedSearch,
 ): { clauses: string[]; parameters: Array<string | number> } {
-  const clauses = ['1 = 1']
-  const parameters: Array<string | number> = []
+  const inScope = scopeClause(recordAlias, scope)
+  const clauses = [inScope.clause]
+  const parameters: Array<string | number> = [...inScope.parameters]
 
   if (!search.includeHistory) {
     clauses.push(
@@ -549,12 +562,12 @@ function hasFtsToken(query: string): boolean {
 }
 
 function cursorScope(
-  workspaceId: string,
+  scope: RetrievalScope,
   mode: RetrievalMode,
   search: NormalizedSearch,
 ): CursorScope {
   return {
-    workspaceId,
+    scopeKey: scope.key,
     mode,
     query: search.query,
     tags: search.tags,
@@ -581,14 +594,14 @@ function emptySearchResult(): MemorySearchResult {
 function throwRetrievalError(
   cause: unknown,
   operation: string,
-  workspacePath: string,
+  workspacePath: string | undefined,
 ): never {
   if (cause instanceof ContinuumError) throw cause
   throw new ContinuumError({
     code: 'DATABASE_ERROR',
     operation,
     message: `Failed to ${operation}.`,
-    context: { workspacePath },
+    context: workspacePath === undefined ? undefined : { workspacePath },
     cause,
   })
 }

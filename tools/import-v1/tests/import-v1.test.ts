@@ -88,6 +88,7 @@ describe('legacy v1 importer', () => {
     expect(exact.records).toEqual([
       {
         id: 'legacy-first',
+        workspaceId: expect.any(String),
         kind: 'agent',
         content: exactContent,
         tags: ['alpha', 'beta'],
@@ -97,6 +98,7 @@ describe('legacy v1 importer', () => {
       },
       {
         id: 'legacy-second',
+        workspaceId: expect.any(String),
         kind: 'user',
         content: 'Second sequence evidence.',
         tags: [],

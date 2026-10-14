@@ -53,6 +53,7 @@ describe('CLI and MCP adapter behavior', () => {
       const tools = await client.listTools()
       expect(tools.tools.map((tool) => tool.name)).toEqual([
         'continuum_guide',
+        'continuum_workspace_list',
         'continuum_summary',
         'continuum_memory_record',
         'continuum_memory_search',

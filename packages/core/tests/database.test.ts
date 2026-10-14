@@ -216,7 +216,7 @@ describe('central Continuum database', () => {
     const dataPaths = resolveContinuumDataPaths({ dataDirectory })
     const databasePath = dataPaths.databasePath
     const database = openContinuumDatabase(dataPaths)
-    expect(pragmaNumber(database, 'user_version')).toBe(3)
+    expect(pragmaNumber(database, 'user_version')).toBe(latestSchemaVersion)
     expect(pragmaNumber(database, 'foreign_keys')).toBe(1)
     expect(pragmaNumber(database, 'busy_timeout', 'timeout')).toBe(5_000)
     expect(pragmaText(database, 'journal_mode')).toBe('wal')
@@ -373,6 +373,7 @@ describe('central Continuum database', () => {
         '2026-01-01T00:00:00.000Z',
       )
     versionOne.exec('DROP TABLE memory_fts')
+    versionOne.exec('DROP INDEX memory_records_created_idx')
     versionOne.exec('PRAGMA user_version = 1')
     versionOne.close()
 
@@ -396,6 +397,38 @@ describe('central Continuum database', () => {
       content: 'Concurrent migration backfills searchable evidence.',
       kind: 'decision',
     })
+    upgraded.close()
+  })
+
+  test('upgrades a version-three database with the cross-workspace browse index', () => {
+    const root = temporaryRoot()
+    const workspace = makeDirectory(root, 'workspace')
+    const dataDirectory = join(root, 'data')
+    const dataPaths = resolveContinuumDataPaths({ dataDirectory })
+
+    const setup = createContinuum({ dataDirectory })
+    setup.record({ workspace, content: 'Survives the index migration.' })
+    setup.close()
+
+    const versionThree = new Database(dataPaths.databasePath)
+    versionThree.exec('DROP INDEX memory_records_created_idx')
+    versionThree.exec('PRAGMA user_version = 3')
+    versionThree.close()
+
+    const upgraded = openContinuumDatabase(dataPaths)
+    expect(pragmaNumber(upgraded, 'user_version')).toBe(4)
+    expect(
+      upgraded
+        .query(
+          `EXPLAIN QUERY PLAN
+           SELECT rowid FROM memory_records
+           ORDER BY created_at DESC, id DESC LIMIT 5`,
+        )
+        .all()
+        .map((row) => (row as { detail: string }).detail)
+        .join('\n'),
+    ).toContain('memory_records_created_idx')
+    expect(countRows(upgraded, 'memory_records')).toBe(1)
     upgraded.close()
   })
 
@@ -433,11 +466,12 @@ describe('central Continuum database', () => {
       .query('INSERT INTO memory_record_tags (record_rowid, tag) VALUES (?, ?)')
       .run(record.rowid, 'migration-anchor')
     versionOne.exec('DROP TABLE memory_fts')
+    versionOne.exec('DROP INDEX memory_records_created_idx')
     versionOne.exec('PRAGMA user_version = 1')
     versionOne.close()
 
     const migrated = openContinuumDatabase(dataPaths)
-    expect(pragmaNumber(migrated, 'user_version')).toBe(3)
+    expect(pragmaNumber(migrated, 'user_version')).toBe(latestSchemaVersion)
     expect(
       migrated
         .query(
@@ -463,6 +497,7 @@ describe('central Continuum database', () => {
     ).toEqual([
       {
         id: 'pre-fts-record',
+        workspaceId: expect.any(String),
         kind: 'decision',
         content: 'Backfill preserves a concrete migration anchor.',
         tags: ['migration-anchor'],

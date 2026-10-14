@@ -4,7 +4,7 @@ import { ContinuumError } from '../errors'
 export type RetrievalMode = 'chronological' | 'fts'
 
 export type CursorScope = {
-  workspaceId: string
+  scopeKey: string
   mode: RetrievalMode
   query: string | null
   tags: string[]
@@ -104,7 +104,7 @@ function hashScopeAndAnchor(scope: CursorScope, recordRowid: number): string {
     .update(
       JSON.stringify([
         cursorVersion,
-        scope.workspaceId,
+        scope.scopeKey,
         scope.mode,
         scope.query,
         scope.tags,

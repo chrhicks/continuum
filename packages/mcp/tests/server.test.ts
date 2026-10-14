@@ -18,12 +18,13 @@ afterEach(() => {
 })
 
 describe('Continuum MCP tools', () => {
-  test('advertises exactly the five strict structured tools with correct annotations', async () => {
+  test('advertises exactly the six strict structured tools with correct annotations', async () => {
     const context = await mcpContext('schemas')
     try {
       const listed = await context.client.listTools()
       expect(listed.tools.map(({ name }) => name)).toEqual([
         'continuum_guide',
+        'continuum_workspace_list',
         'continuum_summary',
         'continuum_memory_record',
         'continuum_memory_search',
@@ -39,6 +40,13 @@ describe('Continuum MCP tools', () => {
         ['version', 'purpose', 'workflow', 'operations', 'recordKinds'],
       )
       expectToolShape(
+        tools.get('continuum_workspace_list'),
+        [],
+        [],
+        ['workspaces'],
+        ['workspaces'],
+      )
+      expectToolShape(
         tools.get('continuum_summary'),
         ['workspace', 'limit'],
         ['workspace'],
@@ -51,6 +59,7 @@ describe('Continuum MCP tools', () => {
         ['workspace', 'content'],
         [
           'id',
+          'workspaceId',
           'kind',
           'content',
           'tags',
@@ -60,6 +69,7 @@ describe('Continuum MCP tools', () => {
         ],
         [
           'id',
+          'workspaceId',
           'kind',
           'content',
           'tags',
@@ -72,6 +82,8 @@ describe('Continuum MCP tools', () => {
         tools.get('continuum_memory_search'),
         [
           'workspace',
+          'workspaceIds',
+          'allWorkspaces',
           'query',
           'tags',
           'kinds',
@@ -79,19 +91,20 @@ describe('Continuum MCP tools', () => {
           'limit',
           'cursor',
         ],
-        ['workspace'],
+        [],
         ['records', 'hasMore', 'nextCursor'],
         ['records', 'hasMore', 'nextCursor'],
       )
       expectToolShape(
         tools.get('continuum_memory_get'),
-        ['workspace', 'ids'],
-        ['workspace', 'ids'],
+        ['workspace', 'workspaceIds', 'allWorkspaces', 'ids'],
+        ['ids'],
         ['records', 'missingIds'],
         ['records', 'missingIds'],
       )
 
       expectAnnotations(tools.get('continuum_guide'), true, true)
+      expectAnnotations(tools.get('continuum_workspace_list'), true, true)
       expectAnnotations(tools.get('continuum_summary'), false, true)
       expectAnnotations(tools.get('continuum_memory_record'), false, false)
       expectAnnotations(tools.get('continuum_memory_search'), true, true)
@@ -120,8 +133,11 @@ describe('Continuum MCP tools', () => {
       })
       expect(searchProperties.cursor).toMatchObject({ maxLength: 4_096 })
 
-      const getIds = schemaProperties(tools.get('continuum_memory_get')).ids
-      expectTextArraySchema(getIds, 1)
+      const getProperties = schemaProperties(tools.get('continuum_memory_get'))
+      expectTextArraySchema(getProperties.ids, 1)
+      expectTextArraySchema(getProperties.workspaceIds, 1)
+      expect(getProperties.allWorkspaces).toMatchObject({ const: true })
+      expectTextArraySchema(searchProperties.workspaceIds, 1)
     } finally {
       await context.close()
     }
@@ -441,6 +457,85 @@ describe('Continuum MCP tools', () => {
         context.server.connect(new FailingTransport()),
         'closed',
       )
+    } finally {
+      await context.close()
+    }
+  })
+
+  test('lists workspaces and reads across them without registering or writing', async () => {
+    const context = await mcpContext('cross-workspace')
+    const second = join(context.root, 'second')
+    mkdirSync(second)
+    try {
+      const first = await record(context, {
+        workspace: context.workspace,
+        content: 'First workspace telescope note.',
+      })
+      const other = await record(context, {
+        workspace: second,
+        content: 'Second workspace telescope note.',
+      })
+      expect(first.workspaceId).not.toBe(other.workspaceId)
+
+      const listed = await call(context.client, 'continuum_workspace_list', {})
+      expect(listed.isError).not.toBe(true)
+      const workspaces = (
+        listed.structuredContent as {
+          workspaces: Array<{ id: string; recordCount: number }>
+        }
+      ).workspaces
+      expect(workspaces.map(({ id }) => id).sort()).toEqual(
+        [first.workspaceId, other.workspaceId].sort(),
+      )
+      expect(workspaces.every(({ recordCount }) => recordCount === 1)).toBe(
+        true,
+      )
+
+      const everywhere = await call(context.client, 'continuum_memory_search', {
+        allWorkspaces: true,
+        query: 'telescope',
+      })
+      expect(everywhere.isError).not.toBe(true)
+      expect(
+        (
+          everywhere.structuredContent as {
+            records: Array<{ id: string; workspaceId: string }>
+          }
+        ).records
+          .map(({ id, workspaceId }) => [id, workspaceId])
+          .sort(),
+      ).toEqual(
+        [
+          [first.id, first.workspaceId],
+          [other.id, other.workspaceId],
+        ].sort(),
+      )
+
+      const byId = await call(context.client, 'continuum_memory_get', {
+        workspaceIds: [other.workspaceId],
+        ids: [first.id, other.id],
+      })
+      expect(byId.isError).not.toBe(true)
+      expect(byId.structuredContent).toMatchObject({
+        records: [{ id: other.id }],
+        missingIds: [first.id],
+      })
+
+      for (const scope of [
+        {},
+        { workspace: context.workspace, allWorkspaces: true },
+        { allWorkspaces: false },
+      ]) {
+        const rejected = await call(context.client, 'continuum_memory_search', {
+          ...scope,
+        })
+        expect(rejected.isError).toBe(true)
+      }
+      const unknown = await call(context.client, 'continuum_memory_search', {
+        workspaceIds: ['no-such-workspace'],
+      })
+      expect(unknown.isError).toBe(true)
+      expect(JSON.stringify(unknown.content)).toContain('NOT_FOUND')
     } finally {
       await context.close()
     }
@@ -918,6 +1013,7 @@ async function record(
   arguments_: Record<string, unknown>,
 ): Promise<{
   id: string
+  workspaceId: string
   kind: string
   content: string
   tags: string[]
@@ -932,6 +1028,7 @@ async function record(
   expect(result.isError).not.toBe(true)
   return result.structuredContent as {
     id: string
+    workspaceId: string
     kind: string
     content: string
     tags: string[]

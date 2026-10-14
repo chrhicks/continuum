@@ -26,8 +26,13 @@ const guide: ContinuumGuide = {
     'When knowledge changes, record the current truth and reference the old record with supersedes.',
     'Browse chronologically when targeted search does not find enough context.',
     'Use continuum_memory_get to follow exact records and supersession history.',
+    'When another project may hold the answer, call continuum_workspace_list, then search or get with allWorkspaces or workspaceIds; each record names its workspaceId.',
   ],
   operations: [
+    {
+      name: 'continuum_workspace_list',
+      use: 'List every logical workspace with its ID, aliases, record counts, and activity range, without registering anything.',
+    },
     {
       name: 'continuum_summary',
       use: 'Read a mechanical briefing of the newest current records for one workspace.',
@@ -38,11 +43,11 @@ const guide: ContinuumGuide = {
     },
     {
       name: 'continuum_memory_search',
-      use: 'Search relevant records or browse them chronologically with filters and pagination.',
+      use: 'Search relevant records or browse them chronologically with filters and pagination, in one workspace, chosen workspaces, or all of them.',
     },
     {
       name: 'continuum_memory_get',
-      use: 'Retrieve complete records by ID, including superseded history.',
+      use: 'Retrieve complete records by ID, including superseded history, from one workspace, chosen workspaces, or all of them.',
     },
   ],
   recordKinds: {

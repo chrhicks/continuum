@@ -7,6 +7,7 @@ import {
   getGuide,
   serializeSafeError,
   type Continuum,
+  type RetrievalScopeInput,
 } from '@continuum/core'
 import { serveContinuumMcp } from '@continuum/mcp'
 
@@ -25,7 +26,12 @@ type RecordOptions = WorkspaceOptions & {
   supersedes: string[]
 }
 
-type SearchOptions = WorkspaceOptions & {
+type ReadScopeOptions = WorkspaceOptions & {
+  all?: boolean
+  workspaceId: string[]
+}
+
+type SearchOptions = ReadScopeOptions & {
   query?: string
   tag: string[]
   kind: string[]
@@ -59,6 +65,14 @@ export function createProgram(
     .command('guide')
     .description('Return version-matched Continuum usage guidance')
     .action(() => writeJson(output, getGuide()))
+
+  program
+    .command('workspaces')
+    .description('List every workspace with its ID, aliases, and record counts')
+    .action(() => {
+      const result = useContinuum((continuum) => continuum.listWorkspaces())
+      return writeJson(output, result)
+    })
 
   program
     .command('summary')
@@ -113,6 +127,8 @@ export function createProgram(
     .command('search')
     .description('Search memory or browse it chronologically')
     .option('--cwd <path>', 'Workspace path; defaults to the current directory')
+    .option('--workspace-id <id>', readScopeIdHelp, collect, [])
+    .option('--all', 'Search every workspace instead of one')
     .option('--query <text>', 'Ordinary relevance-search text; omit to browse')
     .option('--tag <tag>', 'Required record tag; repeatable', collect, [])
     .option('--kind <kind>', 'Accepted record kind; repeatable', collect, [])
@@ -122,7 +138,7 @@ export function createProgram(
     .action((options: SearchOptions) => {
       const result = useContinuum((continuum) =>
         continuum.search({
-          workspace: workspacePath(options.cwd),
+          ...readScope(options),
           query: options.query,
           tags: options.tag,
           kinds: options.kind,
@@ -139,10 +155,12 @@ export function createProgram(
     .description('Retrieve complete memory records by exact ID')
     .argument('<ids...>', 'One or more memory record IDs in caller order')
     .option('--cwd <path>', 'Workspace path; defaults to the current directory')
-    .action((ids: string[], options: WorkspaceOptions) => {
+    .option('--workspace-id <id>', readScopeIdHelp, collect, [])
+    .option('--all', 'Look in every workspace instead of one')
+    .action((ids: string[], options: ReadScopeOptions) => {
       const result = useContinuum((continuum) =>
         continuum.get({
-          workspace: workspacePath(options.cwd),
+          ...readScope(options),
           ids,
         }),
       )
@@ -230,6 +248,25 @@ function useContinuum<T>(operation: (continuum: Continuum) => T): T {
 
 function workspacePath(cwd: string | undefined): string {
   return resolve(process.cwd(), cwd ?? '.')
+}
+
+const readScopeIdHelp =
+  'Workspace ID from the workspaces command; repeatable, replaces --cwd'
+
+// The current directory is the default scope only when no other scope is
+// chosen; an explicit --cwd alongside --all or --workspace-id is passed on so
+// core rejects the ambiguous request.
+function readScope(options: ReadScopeOptions): RetrievalScopeInput {
+  const hasWorkspaceIds = options.workspaceId.length > 0
+  const crossWorkspace = options.all === true || hasWorkspaceIds
+  return {
+    workspace:
+      crossWorkspace && options.cwd === undefined
+        ? undefined
+        : workspacePath(options.cwd),
+    workspaceIds: hasWorkspaceIds ? options.workspaceId : undefined,
+    allWorkspaces: options.all === true ? true : undefined,
+  }
 }
 
 function parseNumber(value: string): number {

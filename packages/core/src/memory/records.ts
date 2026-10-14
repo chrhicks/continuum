@@ -7,6 +7,7 @@ import {
 
 export type MemoryRecord = {
   id: string
+  workspaceId: string
   kind: string
   content: string
   tags: string[]
@@ -286,6 +287,7 @@ export function readMemoryRecords(
   for (const row of rows) {
     records.set(row.rowid, {
       id: row.id,
+      workspaceId: row.workspace_id,
       kind: row.kind,
       content: row.content,
       tags: [],
