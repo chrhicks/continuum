@@ -33,6 +33,7 @@ describe('immutable memory records', () => {
 
     expect(record).toEqual({
       id: expect.any(String),
+      workspaceId: expect.any(String),
       kind: 'architecture decision',
       content,
       tags: ['agent-memory', 'decision', 'sqlite'],
@@ -335,6 +336,7 @@ describe('immutable memory records', () => {
 
     expect(firstImport).toEqual({
       id: importedInput.id,
+      workspaceId: expect.any(String),
       kind: 'user preference',
       content: importedInput.content,
       tags: ['legacy', 'preference'],

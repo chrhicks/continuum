@@ -134,6 +134,14 @@ const migrations = [
       );
     `,
   },
+  {
+    version: 4,
+    name: 'cross-workspace chronological browsing',
+    sql: `
+      CREATE INDEX memory_records_created_idx
+        ON memory_records(created_at DESC, id DESC);
+    `,
+  },
 ] as const
 
 export const latestSchemaVersion = migrations.at(-1)?.version ?? 0

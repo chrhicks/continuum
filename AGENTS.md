@@ -24,7 +24,7 @@ Agents are good at reading and synthesizing a useful set of records. Prefer givi
 
 Continuum is normally used through code-mode MCP clients such as Executor. Small data-oriented operations compose better there than workflow-oriented tools.
 
-The intended surface is a guide, a recent workspace briefing, immutable recording, search or browsing, and exact retrieval. A new operation should answer a demonstrated need that cannot be expressed clearly by composing those primitives.
+The intended surface is a guide, a workspace listing, a recent workspace briefing, immutable recording, search or browsing, and exact retrieval. A new operation should answer a demonstrated need that cannot be expressed clearly by composing those primitives.
 
 The CLI should expose the same product behavior and structured results. Avoid creating separate human and agent implementations.
 
@@ -32,7 +32,7 @@ The CLI should expose the same product behavior and structured results. Avoid cr
 
 Memory should survive deleted checkouts and fresh clones. A central local database owns records for many isolated workspaces; repository remotes and filesystem paths help resolve a checkout to its logical identity.
 
-Cross-workspace retrieval, network hosting, and synchronization are plausible futures, not current requirements. Keep the present design honest while leaving those changes possible through clear boundaries.
+Reads may also span workspaces: a caller can list workspaces and search or get across chosen workspaces or all of them, with every record naming its workspace. Writes stay scoped to one workspace, and supersession stays within one. Network hosting and synchronization are plausible futures, not current requirements. Keep the present design honest while leaving those changes possible through clear boundaries.
 
 ### 5. Understandability is an architectural requirement
 

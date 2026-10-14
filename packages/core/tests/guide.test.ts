@@ -7,6 +7,7 @@ describe('Continuum guide', () => {
 
     expect(guide.version).toBe(1)
     expect(guide.operations.map((operation) => operation.name)).toEqual([
+      'continuum_workspace_list',
       'continuum_summary',
       'continuum_memory_record',
       'continuum_memory_search',
@@ -14,6 +15,7 @@ describe('Continuum guide', () => {
     ])
     expect(guide.workflow.join('\n')).toContain('before and during work')
     expect(guide.workflow.join('\n')).toContain('supersedes')
+    expect(guide.workflow.join('\n')).toContain('allWorkspaces')
     expect(guide.recordKinds.conventional).toContain('decision')
     expect(guide.recordKinds.guidance).toContain('not an enum')
   })

@@ -15,6 +15,7 @@ const maximumErrorContextValueLength = 512
 const safeContextKeys = new Set([
   'workspacePath',
   'recordId',
+  'workspaceId',
   'conflictingAlias',
   'databasePath',
   'dataDirectory',

@@ -4,7 +4,7 @@ Continuum gives coding agents durable, workspace-scoped memory. It stores comple
 
 MCP is the primary interface. The CLI exposes the same product behavior for scripting, testing, and recovery.
 
-Continuum is intentionally not a task manager, session archive, generated Markdown memory system, summarization pipeline, embedding service, deletion interface, or cross-workspace search service.
+Continuum is intentionally not a task manager, session archive, generated Markdown memory system, summarization pipeline, embedding service, or deletion interface. Reads can span workspaces, but writes and supersession stay within one.
 
 ## Requirements and installation
 
@@ -43,23 +43,25 @@ A typical MCP client configuration is:
 }
 ```
 
-The server exposes exactly five tools:
+The server exposes exactly six tools:
 
-| Tool                      | Purpose                                                                        | Key annotations                                                           |
-| ------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
-| `continuum_guide`         | Return version-matched usage guidance.                                         | `readOnlyHint: true`, `idempotentHint: true`                              |
-| `continuum_summary`       | Return the newest current records and logical workspace metadata.              | `readOnlyHint: false`, `idempotentHint: true`; may register the workspace |
-| `continuum_memory_record` | Store one complete immutable record, optionally superseding older records.     | `readOnlyHint: false`, `idempotentHint: false`                            |
-| `continuum_memory_search` | Search by ordinary text or browse chronologically with filters and pagination. | `readOnlyHint: true`, `idempotentHint: true`                              |
-| `continuum_memory_get`    | Retrieve several exact record IDs and report missing IDs.                      | `readOnlyHint: true`, `idempotentHint: true`                              |
+| Tool                       | Purpose                                                                               | Key annotations                                                           |
+| -------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| `continuum_guide`          | Return version-matched usage guidance.                                                | `readOnlyHint: true`, `idempotentHint: true`                              |
+| `continuum_workspace_list` | List every logical workspace with its ID, aliases, record counts, and activity range. | `readOnlyHint: true`, `idempotentHint: true`; never registers a workspace |
+| `continuum_summary`        | Return the newest current records and logical workspace metadata.                     | `readOnlyHint: false`, `idempotentHint: true`; may register the workspace |
+| `continuum_memory_record`  | Store one complete immutable record, optionally superseding older records.            | `readOnlyHint: false`, `idempotentHint: false`                            |
+| `continuum_memory_search`  | Search by ordinary text or browse chronologically with filters and pagination.        | `readOnlyHint: true`, `idempotentHint: true`                              |
+| `continuum_memory_get`     | Retrieve several exact record IDs and report missing IDs.                             | `readOnlyHint: true`, `idempotentHint: true`                              |
 
 All tools have `destructiveHint: false` and `openWorldHint: false`. Inputs and successful structured outputs have strict schemas. The memory inputs are:
 
 ```ts
+continuum_workspace_list({})
 continuum_summary({ workspace, limit? })
 continuum_memory_record({ workspace, content, kind?, tags?, supersedes? })
 continuum_memory_search({
-  workspace,
+  workspace? | workspaceIds? | allWorkspaces?, // exactly one
   query?,
   tags?,
   kinds?,
@@ -67,10 +69,10 @@ continuum_memory_search({
   limit?,
   cursor?,
 })
-continuum_memory_get({ workspace, ids })
+continuum_memory_get({ workspace? | workspaceIds? | allWorkspaces?, ids }) // exactly one scope
 ```
 
-MCP `workspace` is an absolute existing directory path. Successful calls return their data in `structuredContent`. Application failures set `isError: true` and return a compact safe JSON error envelope in text content; this avoids the pinned MCP SDK validating an error against the tool's success-only output schema. Invalid tool arguments use the MCP SDK's standard validation error result.
+MCP `workspace` is an absolute existing directory path. Search and get instead accept `workspaceIds` (logical IDs from `continuum_workspace_list`, which need no checkout on disk) or `allWorkspaces: true`; provide exactly one of the three. Every record carries `workspaceId`. Successful calls return their data in `structuredContent`. Application failures set `isError: true` and return a compact safe JSON error envelope in text content; this avoids the pinned MCP SDK validating an error against the tool's success-only output schema. Invalid tool arguments use the MCP SDK's standard validation error result.
 
 ### Practical workflow
 
@@ -80,6 +82,7 @@ MCP `workspace` is an absolute existing directory path. Successful calls return 
 4. Record concise, self-contained durable knowledge at useful checkpoints.
 5. When knowledge changes, record the replacement with the old IDs in `supersedes`.
 6. Browse chronologically when targeted search is insufficient, and use `continuum_memory_get` to follow exact historical references.
+7. When the answer may live in another project, call `continuum_workspace_list`, then search with `allWorkspaces: true` or chosen `workspaceIds`.
 
 ## CLI
 
@@ -118,7 +121,7 @@ continuum search --cwd /work/project --include-history --limit 20
 continuum get --cwd /work/project <record-id> <older-record-id>
 ```
 
-CLI results use the same core shapes as MCP: complete records contain `id`, `kind`, `content`, `tags`, `createdAt`, `supersedes`, and `supersededBy`; paged results contain `records`, `hasMore`, and `nextCursor`; exact retrieval also contains `missingIds`.
+CLI results use the same core shapes as MCP: complete records contain `id`, `workspaceId`, `kind`, `content`, `tags`, `createdAt`, `supersedes`, and `supersededBy`; paged results contain `records`, `hasMore`, and `nextCursor`; exact retrieval also contains `missingIds`.
 
 ## Memory behavior
 
@@ -127,6 +130,8 @@ CLI results use the same core shapes as MCP: complete records contain `id`, `kin
 Every memory operation identifies a workspace by path. Core normalizes the path and resolves it to one logical workspace in a central database.
 
 An already registered path keeps its identity. Otherwise Continuum inspects Git remotes, prefers normalized `origin`, records other remotes as aliases, and falls back to the canonical path when no Git identity exists. Equivalent common SSH and HTTPS remote forms share identity. Re-clones and Git worktrees for the same remote therefore recover the same memory.
+
+Reads may instead name workspaces by logical ID or cover all of them. Cross-workspace results use the same chronology (`createdAt DESC, id DESC`) and BM25 ranking over the whole corpus, and a cursor is bound to its scope (a single workspace has the same scope whether addressed by path or ID). Unknown workspace IDs fail with `NOT_FOUND`. `continuum workspaces` and `continuum_workspace_list` are read-only and never register a workspace.
 
 Continuum never silently merges or reassigns workspaces when path, descendant, or remote ownership conflicts. It returns a structured `WORKSPACE_ERROR` instead.
 

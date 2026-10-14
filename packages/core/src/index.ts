@@ -24,4 +24,9 @@ export type {
   MemoryRecord,
   RecordMemoryInput,
 } from './memory/records'
+export type { RetrievalScopeInput } from './memory/retrieval-scope'
 export type { WorkspaceAlias, WorkspaceInfo } from './workspaces/workspaces'
+export type {
+  WorkspaceListing,
+  WorkspaceListResult,
+} from './workspaces/workspace-list'

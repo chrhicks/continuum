@@ -15,6 +15,9 @@ const workspacePathSchema = z
   .describe(
     'Absolute path to the workspace whose logical memory should be used.',
   )
+const workspaceIdSchema = z
+  .string()
+  .describe('Logical workspace ID from continuum_workspace_list.')
 const recordIdSchema = z.string().describe('Public ID of a memory record.')
 const tagSchema = z.string().describe('Tag used to retrieve related memory.')
 const kindSchema = z
@@ -26,6 +29,9 @@ const kindSchema = z
 const memoryRecordSchema = z
   .object({
     id: recordIdSchema,
+    workspaceId: workspaceIdSchema.describe(
+      'Logical workspace that owns this record.',
+    ),
     kind: kindSchema,
     content: z.string().describe('Complete immutable memory content.'),
     tags: z
@@ -60,6 +66,53 @@ const workspaceInfoSchema = z
       .describe('Known paths and Git remotes for the logical workspace.'),
   })
   .strict()
+
+const workspaceListingSchema = workspaceInfoSchema
+  .extend({
+    id: workspaceIdSchema,
+    currentRecordCount: z
+      .number()
+      .int()
+      .describe('Records not superseded by a newer record.'),
+    recordCount: z.number().int().describe('All records, including history.'),
+    oldestCreatedAt: z
+      .string()
+      .nullable()
+      .describe('Timestamp of the oldest record, or null when empty.'),
+    newestCreatedAt: z
+      .string()
+      .nullable()
+      .describe('Timestamp of the newest record, or null when empty.'),
+  })
+  .strict()
+
+const workspaceListInputSchema = strictInputObject({})
+const workspaceListOutputSchema = z
+  .object({
+    workspaces: z
+      .array(workspaceListingSchema)
+      .describe('Every logical workspace, most recently active first.'),
+  })
+  .strict()
+
+// Reads may cover one checkout, several workspaces by ID, or every workspace.
+// Exactly one of these must be provided; core enforces that.
+const readScopeShape = {
+  workspace: workspacePathSchema
+    .optional()
+    .describe(
+      'Absolute path to one existing workspace checkout. Provide exactly one of workspace, workspaceIds, or allWorkspaces.',
+    ),
+  workspaceIds: boundedTextArray(workspaceIdSchema, 1)
+    .optional()
+    .describe(
+      'Logical workspace IDs to read, such as from continuum_workspace_list; needs no checkout on disk.',
+    ),
+  allWorkspaces: z
+    .literal(true)
+    .optional()
+    .describe('Read across every workspace in one chronology and ranking.'),
+}
 
 const pageFields = {
   records: z
@@ -137,7 +190,7 @@ const recordInputSchema = strictInputObject({
 })
 
 const searchInputSchema = strictInputObject({
-  workspace: workspacePathSchema,
+  ...readScopeShape,
   query: z
     .string()
     .optional()
@@ -172,7 +225,7 @@ const searchInputSchema = strictInputObject({
 const searchOutputSchema = z.object(pageFields).strict()
 
 const getInputSchema = strictInputObject({
-  workspace: workspacePathSchema,
+  ...readScopeShape,
   ids: boundedTextArray(recordIdSchema, 1).describe(
     'Record IDs to retrieve exactly, in request order.',
   ),
@@ -184,7 +237,7 @@ const getOutputSchema = z
       .describe('Found complete records in request order.'),
     missingIds: z
       .array(recordIdSchema)
-      .describe('Requested IDs not found in this logical workspace.'),
+      .describe('Requested IDs not found in the requested scope.'),
   })
   .strict()
 
@@ -211,6 +264,21 @@ export function registerContinuumTools(
     () =>
       callCoreTool('continuum_guide', 'Continuum usage guidance', () =>
         getGuide(),
+      ),
+  )
+
+  server.registerTool(
+    'continuum_workspace_list',
+    {
+      description:
+        'List every logical workspace with its ID, aliases, record counts, and activity range; use the IDs or allWorkspaces to read across workspaces. Never registers a workspace.',
+      inputSchema: workspaceListInputSchema,
+      outputSchema: workspaceListOutputSchema,
+      annotations: readOnlyAnnotations,
+    },
+    () =>
+      callCoreTool('continuum_workspace_list', 'Continuum workspace list', () =>
+        continuum.listWorkspaces(),
       ),
   )
 
@@ -258,7 +326,7 @@ export function registerContinuumTools(
     'continuum_memory_search',
     {
       description:
-        'Search complete current records by ordinary text and filters, browse newest-first with an empty query, paginate with nextCursor, or include superseded history explicitly.',
+        'Search complete current records by ordinary text and filters, browse newest-first with an empty query, paginate with nextCursor, or include superseded history explicitly. Covers one workspace path, several workspace IDs, or all workspaces; every record names its workspaceId.',
       inputSchema: searchInputSchema,
       outputSchema: searchOutputSchema,
       annotations: readOnlyAnnotations,
@@ -273,7 +341,7 @@ export function registerContinuumTools(
     'continuum_memory_get',
     {
       description:
-        'Retrieve several exact memory IDs from one workspace, including superseded records and both replacement relationship directions.',
+        'Retrieve several exact memory IDs from one workspace path, several workspace IDs, or all workspaces, including superseded records and both replacement relationship directions.',
       inputSchema: getInputSchema,
       outputSchema: getOutputSchema,
       annotations: readOnlyAnnotations,

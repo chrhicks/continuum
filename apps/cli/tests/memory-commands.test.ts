@@ -30,6 +30,7 @@ describe('CLI memory command parity', () => {
     expect(result.stderr).toBe('')
     expect(commandNames(result.stdout)).toEqual([
       'guide',
+      'workspaces',
       'summary',
       'record',
       'search',
@@ -355,6 +356,82 @@ describe('CLI memory command parity', () => {
     expect(hasSidecars(context.dataDirectory)).toBe(false)
   })
 
+  test('lists workspaces and reads across them with the same results as MCP', async () => {
+    const context = cliContext('cross-workspace')
+    const second = join(context.root, 'second')
+    mkdirSync(second)
+    const firstRecord = JSON.parse(
+      (
+        await executeCli(
+          [
+            'record',
+            '--cwd',
+            context.workspace,
+            '--content',
+            'First telescope',
+          ],
+          context,
+        )
+      ).stdout,
+    ) as MemoryRecord
+    const secondRecord = JSON.parse(
+      (
+        await executeCli(
+          ['record', '--cwd', second, '--content', 'Second telescope'],
+          context,
+        )
+      ).stdout,
+    ) as MemoryRecord
+
+    const listed = await executeCli(['workspaces'], context)
+    expectSuccess(listed)
+    expect(
+      (
+        JSON.parse(listed.stdout) as { workspaces: Array<{ id: string }> }
+      ).workspaces
+        .map(({ id }) => id)
+        .sort(),
+    ).toEqual([firstRecord.workspaceId, secondRecord.workspaceId].sort())
+
+    const everywhere = await executeCli(
+      ['search', '--all', '--query', 'telescope'],
+      context,
+    )
+    expectSuccess(everywhere)
+    expect(recordIds(everywhere).sort()).toEqual(
+      [firstRecord.id, secondRecord.id].sort(),
+    )
+
+    const byId = await executeCli(
+      ['search', '--workspace-id', secondRecord.workspaceId],
+      context,
+    )
+    expectSuccess(byId)
+    expect(recordIds(byId)).toEqual([secondRecord.id])
+
+    const exact = await executeCli(
+      ['get', '--all', secondRecord.id, 'missing-id', firstRecord.id],
+      context,
+    )
+    expectSuccess(exact)
+    expect(JSON.parse(exact.stdout)).toMatchObject({
+      records: [{ id: secondRecord.id }, { id: firstRecord.id }],
+      missingIds: ['missing-id'],
+    })
+
+    const ambiguous = await executeCli(
+      ['search', '--all', '--cwd', context.workspace],
+      context,
+    )
+    expectFailure(ambiguous, {
+      code: 'VALIDATION_ERROR',
+      operation: 'search memory',
+      message:
+        'Provide exactly one of workspace, workspaceIds, or allWorkspaces.',
+    })
+    expect(hasSidecars(context.dataDirectory)).toBe(false)
+  })
+
   test('applies normalized core limits consistently through CLI arguments', async () => {
     const context = cliContext('normalized-limits')
     const storedResult = await executeCli(
@@ -595,6 +672,7 @@ type CliExecution = {
 
 type MemoryRecord = {
   id: string
+  workspaceId: string
   kind: string
   content: string
   tags: string[]
