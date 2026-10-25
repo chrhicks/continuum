@@ -43,31 +43,31 @@ Repository history establishes that guide and summary were introduced together i
 
 ## 3. Command, option, and output matrix
 
-| Surface/case                                                  | Observed result at pinned commit                                                                                                       | Contract conclusion                                                                |
-| ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `continuum`                                                   | Prints root discovery help; exit `0`.                                                                                                  | Reproducible success.                                                              |
-| `continuum --help` / `continuum help`                         | Prints the same root help; exit `1`.                                                                                                   | Defect CLI-005.                                                                    |
-| `continuum --version`                                         | Prints `0.1.1`; exit `1`.                                                                                                              | Defect CLI-005.                                                                    |
-| `continuum guide`                                             | Prints overview Markdown; exit `0`; no workspace access.                                                                               | Human success is reproducible.                                                     |
-| `continuum guide <topic>`                                     | Optional topic accepts overview/task/memory/recall/summary; normalization is case-insensitive; exit `0`.                               | Reproducible; optional argument matches help.                                      |
-| `continuum guide bogus`                                       | Stderr human sentence; exit `1`; no stable error code.                                                                                 | Defect CLI-003.                                                                    |
-| `continuum --json guide summary`                              | Raw Markdown, not `{ ok, data, meta }`; exit `0`.                                                                                      | Defect CLI-003.                                                                    |
-| `continuum --quiet guide summary`                             | Raw Markdown still printed; exit `0`.                                                                                                  | Defect CLI-003.                                                                    |
-| Guide task-create recipe with one pipe                        | Exit `0`, no stdout/stderr, no task created.                                                                                           | Defect CLI-002.                                                                    |
-| `continuum summary --help`                                    | Lists `--limit`, `--memory-lines`, `--no-tasks`, and `--no-memory`; exit `0`.                                                          | Reproducible discovery.                                                            |
-| Initialized empty `continuum summary`                         | Markdown with workspace, zero task/memory counts, and suggested commands; exit `0`.                                                    | Reproducible success and empty state.                                              |
-| Initialized populated summary                                 | Shows status-grouped tasks, canonical evidence, and next-task command; exit `0`.                                                       | Reproducible success.                                                              |
-| `--json ... summary` on success                               | `{ ok: true, data: { output: <Markdown> }, meta: { cwd, durationMs } }`; exit `0`.                                                     | Intentional machine wrapper around deterministic Markdown.                         |
-| `--quiet ... summary` on success                              | No stdout/stderr; exit `0`.                                                                                                            | Matches documented global quiet behavior.                                          |
-| `summary --no-tasks` / `--no-memory`                          | Omits only the named section; still emits header/workspace/suggestions.                                                                | Intentional presentation difference.                                               |
-| Both `--no-tasks --no-memory`                                 | Emits header/workspace/suggestions only.                                                                                               | Reproducible; options say “omit,” not “disable command.”                           |
-| `continuum --json --cwd <initialized> summary --limit nope`   | Human message on stderr; exit `1`; JSON request does not produce JSON.                                                                 | Defect CLI-004.                                                                    |
-| `summary --memory-lines -2`                                   | Human message on stderr; exit `1`; JSON request does not produce JSON.                                                                 | Defect CLI-004.                                                                    |
-| JSON summary with absent/file `--cwd`                         | Human `stat`/directory error on stderr; exit `1`; no envelope.                                                                         | Defect CLI-004.                                                                    |
-| Initialized explicit nested `--cwd`                           | Resolves upward to the workspace marker; JSON `meta.cwd` and body workspace are the root; ambient cwd is unchanged in in-process test. | Workspace selection confirmed.                                                     |
-| Missing database under an empty workspace marker              | First summary creates identity/database files, exits `1` with JSON code `UNKNOWN_ERROR`; retry reports `STORAGE_MIGRATION_CONFLICT`.   | Defect CLI-001; storage internals excluded.                                        |
-| Global options after the subcommand                           | Commander currently accepts tested root options after `summary`/`guide`, although README says they must precede.                       | Benign permissiveness, not a defect. Canonical documented form was used elsewhere. |
-| Summary storage/application failure inside `runMemoryCommand` | Shared boundary emits JSON code/message/meta or human `CODE: message`; exit `1`.                                                       | Stable once execution has entered the boundary.                                    |
+| Surface/case                                                     | Observed result at pinned commit                                                                                                       | Contract conclusion                                                                |
+| ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `continuum`                                                      | Prints root discovery help; exit `0`.                                                                                                  | Reproducible success.                                                              |
+| `continuum --help` / `continuum help`                            | Prints the same root help; exit `1`.                                                                                                   | Defect CLI-005.                                                                    |
+| `continuum --version`                                            | Prints `0.1.1`; exit `1`.                                                                                                              | Defect CLI-005.                                                                    |
+| `continuum guide`                                                | Prints overview Markdown; exit `0`; no workspace access.                                                                               | Human success is reproducible.                                                     |
+| `continuum guide <topic>`                                        | Optional topic accepts overview/task/memory/recall/summary; normalization is case-insensitive; exit `0`.                               | Reproducible; optional argument matches help.                                      |
+| `continuum guide bogus`                                          | Stderr human sentence; exit `1`; no stable error code.                                                                                 | Defect CLI-003.                                                                    |
+| `continuum --json guide summary`                                 | Raw Markdown, not `{ ok, data, meta }`; exit `0`.                                                                                      | Defect CLI-003.                                                                    |
+| `continuum --quiet guide summary`                                | Raw Markdown still printed; exit `0`.                                                                                                  | Defect CLI-003.                                                                    |
+| Guide task-create recipe with one pipe                           | Exit `0`, no stdout/stderr, no task created.                                                                                           | Defect CLI-002.                                                                    |
+| `continuum summary --help`                                       | Lists `--limit`, `--memory-lines`, `--no-tasks`, and `--no-memory`; exit `0`.                                                          | Reproducible discovery.                                                            |
+| Initialized empty `continuum summary`                            | Markdown with workspace, zero task/memory counts, and suggested commands; exit `0`.                                                    | Reproducible success and empty state.                                              |
+| Initialized populated summary                                    | Shows status-grouped tasks, canonical evidence, and next-task command; exit `0`.                                                       | Reproducible success.                                                              |
+| `--json ... summary` on success                                  | `{ ok: true, data: { output: <Markdown> }, meta: { cwd, durationMs } }`; exit `0`.                                                     | Intentional machine wrapper around deterministic Markdown.                         |
+| `--quiet ... summary` on success                                 | No stdout/stderr; exit `0`.                                                                                                            | Matches documented global quiet behavior.                                          |
+| `summary --no-tasks` / `--no-memory`                             | Omits only the named section; still emits header/workspace/suggestions.                                                                | Intentional presentation difference.                                               |
+| Both `--no-tasks --no-memory`                                    | Emits header/workspace/suggestions only.                                                                                               | Reproducible; options say “omit,” not “disable command.”                           |
+| `continuum --json --cwd <initialized> summary --limit nope`      | Human message on stderr; exit `1`; JSON request does not produce JSON.                                                                 | Defect CLI-004.                                                                    |
+| `continuum --json --cwd <initialized> summary --memory-lines -2` | Human message on stderr; exit `1`; JSON request does not produce JSON.                                                                 | Defect CLI-004.                                                                    |
+| JSON summary with absent/file `--cwd`                            | Human `stat`/directory error on stderr; exit `1`; no envelope.                                                                         | Defect CLI-004.                                                                    |
+| Initialized explicit nested `--cwd`                              | Resolves upward to the workspace marker; JSON `meta.cwd` and body workspace are the root; ambient cwd is unchanged in in-process test. | Workspace selection confirmed.                                                     |
+| Missing database under an empty workspace marker                 | First summary creates identity/database files, exits `1` with JSON code `UNKNOWN_ERROR`; retry reports `STORAGE_MIGRATION_CONFLICT`.   | Defect CLI-001; storage internals excluded.                                        |
+| Global options after the subcommand                              | Commander currently accepts tested root options after `summary`/`guide`, although README says they must precede.                       | Benign permissiveness, not a defect. Canonical documented form was used elsewhere. |
+| Summary storage/application failure inside `runMemoryCommand`    | Shared boundary emits JSON code/message/meta or human `CODE: message`; exit `1`.                                                       | Stable once execution has entered the boundary.                                    |
 
 Representative successful JSON shape:
 
@@ -90,6 +90,10 @@ Representative boundary failures:
 $ continuum --json --cwd <initialized> summary --limit nope
 status 1; stdout empty
 stderr: Limit must be a positive integer.
+
+$ continuum --json --cwd <initialized> summary --memory-lines -2
+status 1; stdout empty
+stderr: Memory lines must be a positive integer.
 
 $ continuum --json guide bogus
 status 1; stdout empty
@@ -283,21 +287,23 @@ bun bin/continuum --json --cwd <initialized> summary
 bun bin/continuum --quiet --cwd <initialized> summary
 bun bin/continuum --cwd <initialized> summary --no-tasks --no-memory
 bun bin/continuum --json --cwd <initialized> summary --limit nope
+bun bin/continuum --json --cwd <initialized> summary --memory-lines -2
 bun bin/continuum --json --cwd <missing> summary
 printf 'one shared stdin\n' | bun bin/continuum --cwd <initialized> task create \
   --title x --type chore --description @- --plan @-
 ```
 
-Validation results:
+Validation results on Bun 1.4.2:
 
+- the exact malformed-input command `continuum --json --cwd <initialized> summary --memory-lines -2` — **reproduced**: exit `1`, empty stdout, and `Memory lines must be a positive integer.` on stderr;
 - `bun test tests/memory-cli-cutover.test.ts tests/workspace.test.ts tests/task-cli-parse.test.ts` — **18 passed, 0 failed**;
-- `bun run validate` — **passed**: typecheck, **181 tests / 933 expectations**, and all GOAL invariants;
-- `/home/chicks/workspaces/agents/continuum-control/ops/linear-agent/bin/validate-continuum-worktree <worktree>` — **passed** in its isolated HOME/XDG/workspace fixture with **181 tests / 935 expectations** and all invariants;
+- `bun run validate` — **passed**: typecheck, all **181 tests**, and all GOAL invariants;
+- `/home/chicks/workspaces/agents/continuum-control/ops/linear-agent/bin/validate-continuum-worktree <worktree>` — the first correction run passed its initial 181-test suite but failed when the GOAL checker repeated `bun test`; an immediate helper rerun exposed the known nondeterministic ordering assertion in `tests/task-parent-cycles.test.ts` (**180 passed, 1 failed**); five focused reruns of that file passed; a final isolated helper rerun passed the full validation gate;
 - `prettier --check` for this report — **passed**;
 - `git diff --check` — **passed**; and
 - pinned-link validation — **28 links** resolved to existing files and in-range lines at the pinned checkout.
 
-The artifact was also checked for complete coverage, seven finding headings, seven report-only finding dispositions, and internal consistency. No prohibited product change or follow-up issue was made.
+Aggregate `expect()` totals are intentionally omitted: repeated full-suite runs against unchanged product code and tests reported different totals, so they are not reproducible validation evidence. The artifact was also checked for complete coverage, seven finding headings, seven report-only finding dispositions, and internal consistency. No prohibited product change or follow-up issue was made.
 
 ## 8. Disposition ledger
 
