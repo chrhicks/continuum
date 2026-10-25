@@ -44,7 +44,7 @@ Repository history establishes that guide and summary were introduced together i
 ## 3. Command, option, and output matrix
 
 | Surface/case                                                  | Observed result at pinned commit                                                                                                       | Contract conclusion                                                                |
-| ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | --------------- |
+| ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
 | `continuum`                                                   | Prints root discovery help; exit `0`.                                                                                                  | Reproducible success.                                                              |
 | `continuum --help` / `continuum help`                         | Prints the same root help; exit `1`.                                                                                                   | Defect CLI-005.                                                                    |
 | `continuum --version`                                         | Prints `0.1.1`; exit `1`.                                                                                                              | Defect CLI-005.                                                                    |
@@ -61,7 +61,7 @@ Repository history establishes that guide and summary were introduced together i
 | `--quiet ... summary` on success                              | No stdout/stderr; exit `0`.                                                                                                            | Matches documented global quiet behavior.                                          |
 | `summary --no-tasks` / `--no-memory`                          | Omits only the named section; still emits header/workspace/suggestions.                                                                | Intentional presentation difference.                                               |
 | Both `--no-tasks --no-memory`                                 | Emits header/workspace/suggestions only.                                                                                               | Reproducible; options say “omit,” not “disable command.”                           |
-| `summary --limit 0                                            | nope`                                                                                                                                  | Human message on stderr; exit `1`; JSON request does not produce JSON.             | Defect CLI-004. |
+| `continuum --json --cwd <initialized> summary --limit nope`   | Human message on stderr; exit `1`; JSON request does not produce JSON.                                                                 | Defect CLI-004.                                                                    |
 | `summary --memory-lines -2`                                   | Human message on stderr; exit `1`; JSON request does not produce JSON.                                                                 | Defect CLI-004.                                                                    |
 | JSON summary with absent/file `--cwd`                         | Human `stat`/directory error on stderr; exit `1`; no envelope.                                                                         | Defect CLI-004.                                                                    |
 | Initialized explicit nested `--cwd`                           | Resolves upward to the workspace marker; JSON `meta.cwd` and body workspace are the root; ambient cwd is unchanged in in-process test. | Workspace selection confirmed.                                                     |
@@ -291,8 +291,8 @@ printf 'one shared stdin\n' | bun bin/continuum --cwd <initialized> task create 
 Validation results:
 
 - `bun test tests/memory-cli-cutover.test.ts tests/workspace.test.ts tests/task-cli-parse.test.ts` — **18 passed, 0 failed**;
-- `bun run validate` — **passed**: typecheck, **181 tests / 930 expectations**, and all GOAL invariants;
-- `/home/chicks/workspaces/agents/continuum-control/ops/linear-agent/bin/validate-continuum-worktree <worktree>` — **passed** in its isolated HOME/XDG/workspace fixture, again with **181 tests / 930 expectations** and all invariants;
+- `bun run validate` — **passed**: typecheck, **181 tests / 933 expectations**, and all GOAL invariants;
+- `/home/chicks/workspaces/agents/continuum-control/ops/linear-agent/bin/validate-continuum-worktree <worktree>` — **passed** in its isolated HOME/XDG/workspace fixture with **181 tests / 935 expectations** and all invariants;
 - `prettier --check` for this report — **passed**;
 - `git diff --check` — **passed**; and
 - pinned-link validation — **28 links** resolved to existing files and in-range lines at the pinned checkout.
