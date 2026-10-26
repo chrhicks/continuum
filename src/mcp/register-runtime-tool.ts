@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import { resolveRuntimeContract } from '../runtime/contract'
 import { toolResult } from './result'
+import { runtimeOutputSchema } from './task-output-schemas'
 import { resolveInitWorkspace } from './tools'
 
 export function registerRuntimeTool(server: McpServer): void {
@@ -16,6 +17,7 @@ export function registerRuntimeTool(server: McpServer): void {
           .min(1)
           .describe('Absolute path inside the target Continuum workspace'),
       },
+      outputSchema: runtimeOutputSchema(),
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,

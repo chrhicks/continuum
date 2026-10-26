@@ -5,11 +5,24 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
+import type { ZodTypeAny } from 'zod'
 import { resolveStorageAuthority } from '../src/db/storage-authority'
 import {
   consolidateMemoryResultSchema,
   recallImportOutputSchema,
 } from '../src/mcp/memory-schemas'
+import {
+  initOutputSchema,
+  runtimeOutputSchema,
+  taskDeleteOutputSchema,
+  taskGetOutputSchema,
+  taskGraphOutputSchema,
+  taskListOutputSchema,
+  taskMutationOutputSchema,
+  taskStepCompleteOutputSchema,
+  taskStepsListOutputSchema,
+  taskValidationOutputSchema,
+} from '../src/mcp/task-output-schemas'
 
 const repoRoot = process.cwd()
 const continuumBin = join(repoRoot, 'bin', 'continuum')
@@ -17,6 +30,10 @@ const roots: string[] = []
 
 function canonicalDbFilePath(workspace: string): string {
   return resolveStorageAuthority(workspace, 'read-write').dbPath
+}
+
+function assertSchemaMatches(schema: ZodTypeAny, value: unknown): void {
+  schema.parse(value)
 }
 
 afterEach(() => {
@@ -98,12 +115,39 @@ describe('Continuum MCP server', () => {
           `${name} output properties`,
         ).toBeGreaterThan(0)
       }
+      for (const name of [
+        'continuum_task_list',
+        'continuum_task_get',
+        'continuum_task_validate',
+        'continuum_task_graph',
+        'continuum_task_create',
+        'continuum_task_update',
+        'continuum_task_complete',
+        'continuum_task_delete',
+        'continuum_task_steps_list',
+        'continuum_task_steps_add',
+        'continuum_task_steps_update',
+        'continuum_task_steps_complete',
+        'continuum_task_note_add',
+        'continuum_init',
+        'continuum_runtime',
+      ]) {
+        const schema = tools.tools.find(
+          (tool) => tool.name === name,
+        )?.outputSchema
+        expect(schema, name).toMatchObject({ type: 'object' })
+        expect(
+          Object.keys(schema?.properties ?? {}).length,
+          `${name} output properties`,
+        ).toBeGreaterThan(0)
+      }
 
       const runtime = await client.callTool({
         name: 'continuum_runtime',
         arguments: { workspace },
       })
       expect(runtime.isError).not.toBe(true)
+      assertSchemaMatches(runtimeOutputSchema(), runtime.structuredContent)
       expect(runtime.structuredContent).toMatchObject({
         storageGeneration: 'xdg-project-sha256-v1',
         workspace,
@@ -118,6 +162,7 @@ describe('Continuum MCP server', () => {
         arguments: { workspace },
       })
       expect(init.isError).not.toBe(true)
+      assertSchemaMatches(initOutputSchema(), init.structuredContent)
       expect(init.structuredContent).toMatchObject({
         workspace,
         created: true,
@@ -283,6 +328,7 @@ describe('Continuum MCP server', () => {
           },
         },
       })
+      assertSchemaMatches(taskMutationOutputSchema(), created.structuredContent)
       const task = (created.structuredContent as { task: { id: string } }).task
       expect(task.id).toStartWith('tkt-')
 
@@ -294,13 +340,25 @@ describe('Continuum MCP server', () => {
           steps: [{ title: 'Verify', description: 'Run MCP checks' }],
         },
       })
+      assertSchemaMatches(
+        taskMutationOutputSchema(),
+        stepsAdded.structuredContent,
+      )
       const firstStep = (
         stepsAdded.structuredContent as {
           task: { steps: Array<{ id: string }> }
         }
       ).task.steps[0]
       if (!firstStep) throw new Error('Expected MCP step')
-      await client.callTool({
+      const stepsListed = await client.callTool({
+        name: 'continuum_task_steps_list',
+        arguments: { workspace, id: task.id },
+      })
+      assertSchemaMatches(
+        taskStepsListOutputSchema(),
+        stepsListed.structuredContent,
+      )
+      const stepUpdated = await client.callTool({
         name: 'continuum_task_steps_update',
         arguments: {
           workspace,
@@ -309,7 +367,11 @@ describe('Continuum MCP server', () => {
           patch: { status: 'in_progress' },
         },
       })
-      await client.callTool({
+      assertSchemaMatches(
+        taskMutationOutputSchema(),
+        stepUpdated.structuredContent,
+      )
+      const noteAdded = await client.callTool({
         name: 'continuum_task_note_add',
         arguments: {
           workspace,
@@ -318,7 +380,11 @@ describe('Continuum MCP server', () => {
           content: 'MCP task notes work.',
         },
       })
-      await client.callTool({
+      assertSchemaMatches(
+        taskMutationOutputSchema(),
+        noteAdded.structuredContent,
+      )
+      const stepCompleted = await client.callTool({
         name: 'continuum_task_steps_complete',
         arguments: {
           workspace,
@@ -327,15 +393,34 @@ describe('Continuum MCP server', () => {
           notes: 'Verified',
         },
       })
+      assertSchemaMatches(
+        taskStepCompleteOutputSchema(),
+        stepCompleted.structuredContent,
+      )
+      const duplicateStepCompletion = await client.callTool({
+        name: 'continuum_task_steps_complete',
+        arguments: { workspace, id: task.id, stepId: firstStep.id },
+      })
+      assertSchemaMatches(
+        taskStepCompleteOutputSchema(),
+        duplicateStepCompletion.structuredContent,
+      )
+      expect(duplicateStepCompletion.structuredContent).toMatchObject({
+        warnings: [expect.stringContaining('already completed')],
+      })
       const validation = await client.callTool({
         name: 'continuum_task_validate',
         arguments: { workspace, id: task.id, transition: 'completed' },
       })
+      assertSchemaMatches(
+        taskValidationOutputSchema(),
+        validation.structuredContent,
+      )
       expect(validation.structuredContent).toMatchObject({
         valid: false,
         missingFields: ['plan'],
       })
-      await client.callTool({
+      const taskUpdated = await client.callTool({
         name: 'continuum_task_update',
         arguments: {
           workspace,
@@ -343,15 +428,24 @@ describe('Continuum MCP server', () => {
           patch: { priority: 10, plan: 'Run all MCP operations.' },
         },
       })
+      assertSchemaMatches(
+        taskMutationOutputSchema(),
+        taskUpdated.structuredContent,
+      )
       const revalidation = await client.callTool({
         name: 'continuum_task_validate',
         arguments: { workspace, id: task.id, transition: 'completed' },
       })
+      assertSchemaMatches(
+        taskValidationOutputSchema(),
+        revalidation.structuredContent,
+      )
       expect(revalidation.structuredContent).toMatchObject({ valid: true })
       const graph = await client.callTool({
         name: 'continuum_task_graph',
         arguments: { workspace, id: task.id, query: 'children' },
       })
+      assertSchemaMatches(taskGraphOutputSchema(), graph.structuredContent)
       expect(graph.structuredContent).toMatchObject({ taskIds: [] })
       const paginationPeer = await client.callTool({
         name: 'continuum_task_create',
@@ -365,6 +459,10 @@ describe('Continuum MCP server', () => {
           },
         },
       })
+      assertSchemaMatches(
+        taskMutationOutputSchema(),
+        paginationPeer.structuredContent,
+      )
       const peerId = (
         paginationPeer.structuredContent as { task: { id: string } }
       ).task.id
@@ -375,6 +473,7 @@ describe('Continuum MCP server', () => {
           options: { limit: 1, sort: 'priority', order: 'asc' },
         },
       })
+      assertSchemaMatches(taskListOutputSchema(), firstPage.structuredContent)
       const firstPageData = firstPage.structuredContent as {
         tasks: Array<{ id: string }>
         nextCursor?: string
@@ -393,6 +492,7 @@ describe('Continuum MCP server', () => {
           },
         },
       })
+      assertSchemaMatches(taskListOutputSchema(), listed.structuredContent)
       expect(listed.structuredContent).toMatchObject({
         tasks: [{ id: peerId }],
       })
@@ -401,23 +501,36 @@ describe('Continuum MCP server', () => {
       ).toBeUndefined()
       const fetched = await client.callTool({
         name: 'continuum_task_get',
-        arguments: { workspace, id: task.id, expand: ['children'] },
+        arguments: {
+          workspace,
+          id: task.id,
+          expand: ['parent', 'children', 'blockers'],
+        },
       })
-      expect(fetched.structuredContent).toMatchObject({ children: [] })
+      assertSchemaMatches(taskGetOutputSchema(), fetched.structuredContent)
+      expect(fetched.structuredContent).toMatchObject({
+        children: [],
+        blockers: [],
+      })
       expect(fetched.content).toEqual([
         {
           type: 'text',
           text: 'Structured data returned: workspace, task, parent, children, blockers.',
         },
       ])
-      await client.callTool({
+      const completed = await client.callTool({
         name: 'continuum_task_complete',
         arguments: { workspace, id: task.id, outcome: 'All MCP calls passed.' },
       })
+      assertSchemaMatches(
+        taskMutationOutputSchema(),
+        completed.structuredContent,
+      )
       const deleted = await client.callTool({
         name: 'continuum_task_delete',
         arguments: { workspace, id: task.id },
       })
+      assertSchemaMatches(taskDeleteOutputSchema(), deleted.structuredContent)
       expect(deleted.structuredContent).toMatchObject({ deleted: true })
     } finally {
       await client.close()
